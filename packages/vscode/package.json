@@ -3,20 +3,57 @@
   "displayName": "LPG Modeler",
   "description": "Visual modeling for labeled property graphs, with Ladybug, Neo4j, SHACL and OWL generation.",
   "version": "0.1.0",
-  "publisher": "lpg",
+  "publisher": "volland",
+  "license": "MIT",
+  "icon": "icon.png",
+  "homepage": "https://volland.github.io/lpg-modeler/",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Volland/lpg-modeler.git",
+    "directory": "packages/vscode"
+  },
+  "bugs": {
+    "url": "https://github.com/Volland/lpg-modeler/issues"
+  },
+  "qna": "https://github.com/Volland/lpg-modeler/issues",
+  "galleryBanner": {
+    "color": "#2f5fe0",
+    "theme": "dark"
+  },
   "engines": {
     "vscode": "^1.90.0"
   },
   "categories": [
     "Visualization",
-    "Programming Languages"
+    "Programming Languages",
+    "Linters"
+  ],
+  "keywords": [
+    "graph",
+    "property graph",
+    "labeled property graph",
+    "lpg",
+    "schema",
+    "neo4j",
+    "cypher",
+    "ladybugdb",
+    "kuzu",
+    "rdf",
+    "shacl",
+    "owl",
+    "ontology",
+    "erd",
+    "data modeling",
+    "knowledge graph"
   ],
   "main": "./out/extension.js",
   "activationEvents": [
     "onLanguage:yaml"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.json && node scripts/build-webview.mjs"
+    "build": "tsc -p tsconfig.json && node scripts/build-webview.mjs",
+    "package": "npm run build && vsce package --no-dependencies",
+    "publish": "npm run build && vsce publish --no-dependencies"
   },
   "contributes": {
     "commands": [
@@ -63,7 +100,8 @@
   "devDependencies": {
     "@types/react": "^18.3.31",
     "@types/react-dom": "^18.3.7",
-    "@types/vscode": "^1.134.0",
-    "esbuild": "^0.24.2"
+    "@types/vscode": "^1.90.0",
+    "esbuild": "^0.24.2",
+    "@vscode/vsce": "^3.2.1"
   }
 }

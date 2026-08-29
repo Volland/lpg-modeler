@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Getting started — LPG Modeler</title>
+<meta name="description" content="Install LPG Modeler, write your first labeled property graph model, open the canvas, generate a schema, and check the model in CI.">
+<link rel="icon" href="assets/icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;650&family=Instrument+Serif&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/site.css">
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="index.html"><img src="assets/icon.png" alt=""> LPG Modeler</a>
+    <nav class="links">
+      <a href="index.html">Overview</a>
+      <a href="getting-started.html">Getting started</a>
+      <a href="model-format.html">Model format</a>
+      <a href="targets.html">Targets</a>
+      <a href="cli.html">CLI</a>
+      <a href="architecture.html">Architecture</a>
+      <a href="https://github.com/Volland/lpg-modeler">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+<div class="wrap hero">
+  <span class="eyebrow">Getting started</span>
+  <h1>From an empty file to generated DDL</h1>
+  <p class="lede">
+    Install the extension, write eight lines of YAML, open the canvas beside it, and generate
+    a schema. Nothing here needs a running database.
+  </p>
+</div>
+
+<section class="wrap narrow">
+  <ol class="steps">
+
+    <li>
+      <h3>Install the extension</h3>
+      <p>From the Extensions view in VS Code, search for <strong>LPG Modeler</strong>. Or from
+      the command line:</p>
+<pre><code>code --install-extension volland.lpg-modeler</code></pre>
+      <p>To build it yourself instead, clone the repository and package it:</p>
+<pre><code>git clone https://github.com/Volland/lpg-modeler
+cd lpg-modeler
+npm install
+npm run build
+npx @vscode/vsce package --no-dependencies <span class="c-com"># run inside packages/vscode</span></code></pre>
+      <p>Then install the resulting <code>.vsix</code> with
+      <em>Extensions: Install from VSIX…</em> in the command palette.</p>
+    </li>
+
+    <li>
+      <h3>Create a model file</h3>
+      <p>The file name matters: the extension activates on <code>*.lpg.yaml</code> and
+      <code>*.lpg.yml</code>. Create <code>catalog.lpg.yaml</code> with a namespace and one
+      node type.</p>
+<pre><code><span class="c-key">namespace</span>:
+  prefix: catalog
+  iri: https://example.org/vocab/catalog#
+
+<span class="c-key">nodes</span>:
+  Product:
+    key: [sku]
+    props:
+      sku: { type: string, required: true }
+      title: { type: string, required: true }
+      price: { type: float }</code></pre>
+      <p>Completion and hover work immediately — the model format ships as a JSON Schema the
+      extension contributes to the YAML tooling, so you get structural errors as you type.</p>
+      <div class="note">
+        <p><strong>Every concrete node type needs a key.</strong> Validation fails without one,
+        because LadybugDB refuses to create a node table with no primary key. A key declared
+        once on an abstract parent covers every subtype.</p>
+      </div>
+    </li>
+
+    <li>
+      <h3>Open the canvas</h3>
+      <p>Run <strong>LPG: Open Canvas</strong> from the command palette. The diagram opens
+      beside the file, with an ERD box per node type and one row per property.</p>
+      <p>From there you can add a node type, add a property, rename in place, draw an edge by
+      dragging from one box to another, set an abstract parent, and choose which key a type
+      uses. Each of those becomes a targeted edit to the YAML — you will see the file change
+      under the diagram.</p>
+      <p>Typing in the YAML works the same way in reverse: the canvas redraws from the file on
+      every keystroke. If the file stops being valid YAML mid-edit, the last good diagram stays
+      on screen with a notice rather than blanking.</p>
+    </li>
+
+    <li>
+      <h3>Generate a schema</h3>
+      <p>Run <strong>LPG: Generate Schema</strong> and pick a target. The artifact is written
+      next to the model and opened beside it:</p>
+<pre><code>catalog.lpg.yaml       <span class="c-com"># yours</span>
+catalog.ladybug.cypher <span class="c-com"># generated</span>
+catalog.neo4j.cypher   <span class="c-com"># generated</span>
+catalog.shacl.ttl      <span class="c-com"># generated</span>
+catalog.owl.ttl        <span class="c-com"># generated</span></code></pre>
+      <p>If the target cannot enforce something the model asks for, you get a warning telling
+      you how many downgrades occurred, a diagnostic per downgrade in the Problems panel, and a
+      comment at the exact line of the artifact where the loss happens.</p>
+      <p>A model with errors never produces an artifact at all.</p>
+    </li>
+
+    <li>
+      <h3>Split the diagram into views</h3>
+      <p>One diagram of a whole model stops being readable somewhere past a few dozen types.
+      Create a view from the canvas, or write the sidecar by hand as
+      <code>catalog.views.yaml</code>:</p>
+<pre><code><span class="c-key">views</span>:
+  overview:
+    include: ["*"]
+  pricing:
+    include: ["Product", "PriceBand"]
+    expand: 1   <span class="c-com"># also pull in immediate neighbours</span></code></pre>
+      <p>Validation reports any type that has fallen out of every view, so diagrams do not
+      quietly stop covering the model as it grows.</p>
+    </li>
+
+    <li>
+      <h3>Check it in CI</h3>
+      <p>The command line tool runs the same resolution and validation as the editor, with no
+      editor present:</p>
+<pre><code>npx @lpg/cli check catalog.lpg.yaml
+npx @lpg/cli emit  catalog.lpg.yaml --target ladybug --out ./schema</code></pre>
+      <p><code>check</code> exits non-zero when the model has errors, so a pull request can be
+      gated on schema validity. See the <a href="cli.html">CLI reference</a> for every flag.</p>
+    </li>
+
+  </ol>
+</section>
+
+<hr class="rule">
+
+<section class="wrap">
+  <h2>Commands and settings</h2>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Command</th><th>What it does</th></tr></thead>
+      <tbody>
+        <tr><td><code>LPG: Open Canvas</code></td><td>Opens the diagram beside the active model file. Requires a <code>.lpg.yaml</code> file in the active editor.</td></tr>
+        <tr><td><code>LPG: Generate Schema</code></td><td>Prompts for a target and writes the artifact next to the model.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Setting</th><th>Default</th><th>Effect</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><code>lpg.targets.neo4j.edition</code></td>
+          <td><code>community</code></td>
+          <td>Community cannot enforce existence or node key constraints, so under it those are reported as downgrades and emitted as comments. Set to <code>enterprise</code> to emit them for real.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="wrap">
+  <h2>Where to go next</h2>
+  <div class="next">
+    <a href="model-format.html"><div class="k">Model format</div><div class="v">Everything a model may legally say.</div></a>
+    <a href="targets.html"><div class="k">Targets</div><div class="v">What each generator emits and refuses to promise.</div></a>
+    <a href="architecture.html"><div class="k">Architecture</div><div class="v">Why the file, not the canvas, is the source of truth.</div></a>
+  </div>
+</section>
+</main>
+
+<footer class="site">
+  <div class="wrap">
+    <span>LPG Modeler — MIT licensed</span>
+    <span class="spacer"><a href="https://github.com/Volland/lpg-modeler">Source</a></span>
+    <span><a href="https://github.com/Volland/lpg-modeler/issues">Report an issue</a></span>
+    <span><a href="https://github.com/Volland/lpg-modeler/blob/main/CHANGELOG.md">Changelog</a></span>
+  </div>
+</footer>
+
+</body>
+</html>

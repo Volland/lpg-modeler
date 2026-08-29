@@ -1,0 +1,72 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1040 400" width="1040" height="400" font-family="ui-sans-serif, -apple-system, Segoe UI, Inter, Helvetica, Arial, sans-serif" role="img" aria-label="Package architecture: core holds the pipeline, cli and vscode both depend on core, and core never imports the vscode API.">
+  <rect width="1040" height="400" rx="14" fill="#fcfbf9"/>
+  <defs>
+    <marker id="a2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#8a94a6"/>
+    </marker>
+  </defs>
+
+  <text x="40" y="46" font-size="19" font-weight="700" fill="#101318">The boundary that keeps it testable</text>
+  <text x="40" y="70" font-size="13.5" fill="#5b6472">Every rule about the model lives in one package that knows nothing about an editor.</text>
+
+  <!-- vscode -->
+  <rect x="40" y="102" width="292" height="180" rx="11" fill="#ffffff" stroke="#dfe2e7" stroke-width="1.4"/>
+  <text x="62" y="130" font-size="14" font-weight="700" fill="#101318">packages/vscode</text>
+  <text x="62" y="150" font-size="11.5" fill="#5b6472">webview, diagnostics, commands</text>
+  <g font-size="11.5" fill="#3c4653">
+    <rect x="62" y="164" width="120" height="28" rx="6" fill="#eef2fb" stroke="#c9d6f5"/>
+    <text x="122" y="182" fill="#2f5fe0" text-anchor="middle" font-weight="600">canvas</text>
+    <rect x="192" y="164" width="118" height="28" rx="6" fill="#eef2fb" stroke="#c9d6f5"/>
+    <text x="251" y="182" fill="#2f5fe0" text-anchor="middle" font-weight="600">intents</text>
+    <rect x="62" y="200" width="248" height="28" rx="6" fill="#eef2fb" stroke="#c9d6f5"/>
+    <text x="186" y="218" fill="#2f5fe0" text-anchor="middle" font-weight="600">diagnostics + generate command</text>
+  </g>
+  <text x="62" y="252" font-size="11" fill="#5b6472">Intent translation imports no editor API,</text>
+  <text x="62" y="268" font-size="11" fill="#5b6472">so the authoring surface is unit-tested.</text>
+
+  <!-- cli -->
+  <rect x="40" y="298" width="292" height="72" rx="11" fill="#ffffff" stroke="#dfe2e7" stroke-width="1.4"/>
+  <text x="62" y="326" font-size="14" font-weight="700" fill="#101318">packages/cli</text>
+  <text x="62" y="348" font-size="11.5" fill="#5b6472">the same checks, runnable in CI</text>
+
+  <!-- core -->
+  <rect x="416" y="102" width="300" height="268" rx="11" fill="#ffffff" stroke="#2f5fe0" stroke-width="1.8"/>
+  <text x="440" y="130" font-size="14" font-weight="700" fill="#2f5fe0">packages/core</text>
+  <text x="440" y="150" font-size="11.5" fill="#5b6472">parse · IR · resolve · validate · emit</text>
+  <g font-size="11.5">
+    <rect x="440" y="166" width="120" height="28" rx="6" fill="#f4f6fa" stroke="#dfe2e7"/>
+    <text x="500" y="184" text-anchor="middle" fill="#101318">metamodel</text>
+    <rect x="572" y="166" width="120" height="28" rx="6" fill="#f4f6fa" stroke="#dfe2e7"/>
+    <text x="632" y="184" text-anchor="middle" fill="#101318">validation</text>
+    <rect x="440" y="202" width="120" height="28" rx="6" fill="#f4f6fa" stroke="#dfe2e7"/>
+    <text x="500" y="220" text-anchor="middle" fill="#101318">targeted edits</text>
+    <rect x="572" y="202" width="120" height="28" rx="6" fill="#f4f6fa" stroke="#dfe2e7"/>
+    <text x="632" y="220" text-anchor="middle" fill="#101318">emitters</text>
+  </g>
+  <rect x="440" y="248" width="252" height="100" rx="8" fill="#f8f9fb" stroke="#e6e9ee" stroke-dasharray="4 3"/>
+  <text x="458" y="272" font-size="12" font-weight="700" fill="#101318">Emitter registry</text>
+  <text x="458" y="292" font-size="11" fill="#5b6472">Each target declares a typed capability</text>
+  <text x="458" y="308" font-size="11" fill="#5b6472">set. Adding one is a file plus an entry.</text>
+  <text x="458" y="332" font-size="11" fill="#5b6472">ladybug · neo4j · shacl · owl</text>
+
+  <g stroke="#8a94a6" stroke-width="1.5" marker-end="url(#a2)" fill="none">
+    <path d="M336 192 H410"/>
+    <path d="M336 334 H380 V236 H410"/>
+  </g>
+
+  <!-- rule -->
+  <rect x="756" y="102" width="244" height="128" rx="11" fill="#fdf6ec" stroke="#eccfa4"/>
+  <text x="778" y="130" font-size="13" font-weight="700" fill="#8a5a13">core never imports vscode</text>
+  <text x="778" y="153" font-size="11.5" fill="#7a6547">Enforced by an ESLint rule and by a</text>
+  <text x="778" y="170" font-size="11.5" fill="#7a6547">test that scans the source.</text>
+  <text x="778" y="196" font-size="11.5" fill="#7a6547">So emitter tests run in plain Node,</text>
+  <text x="778" y="213" font-size="11.5" fill="#7a6547">and a pull request can be gated on</text>
+  <text x="778" y="230" font-size="11.5" fill="#7a6547">schema validity.</text>
+
+  <rect x="756" y="246" width="244" height="124" rx="11" fill="#ffffff" stroke="#dfe2e7"/>
+  <text x="778" y="274" font-size="13" font-weight="700" fill="#101318">Verified against a real engine</text>
+  <text x="778" y="297" font-size="11.5" fill="#5b6472">Ladybug DDL is executed against an</text>
+  <text x="778" y="314" font-size="11.5" fill="#5b6472">embedded instance, then the declared</text>
+  <text x="778" y="331" font-size="11.5" fill="#5b6472">constraints are asserted to actually</text>
+  <text x="778" y="348" font-size="11.5" fill="#5b6472">reject invalid data.</text>
+</svg>

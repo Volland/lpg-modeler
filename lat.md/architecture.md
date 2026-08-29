@@ -73,3 +73,21 @@ Nothing in the implementation assumes a lockfile exists. The IR serializer never
 Three packages: `core` holds the pipeline, `cli` wraps it for continuous integration, and `vscode` adds the webview and diagnostics.
 
 `core` never imports `vscode`, enforced by an ESLint rule and by a test that scans the source. The intent translation used by the canvas lives in the extension package but imports no editor API, so the whole authoring surface is tested without a running VS Code.
+
+## Distribution
+
+The extension is published to the Visual Studio Marketplace as a self-contained bundle, and the documentation site is published to GitHub Pages from `docs/`.
+
+A published `.vsix` carries no `node_modules`, so a bare `require('@lpg/core')` would not resolve inside it. The extension host entry is therefore bundled by esbuild over the `tsc` output, inlining `core` and leaving only `vscode` external — which is what makes `vsce package --no-dependencies` correct rather than a shortcut.
+
+### Documentation site
+
+`docs/` is a hand-written static site deployed verbatim by a Pages workflow. It is the public face of the same material this knowledge graph holds, aimed at someone deciding whether to install rather than at someone changing the code.
+
+Diagrams are authored as SVG and exported to PNG beside them. Both formats are kept because the Marketplace rejects SVG in a README, while the site prefers it. Neither is generated at build time: the site has no build step at all, so a broken toolchain can never take the documentation down.
+
+### Marketplace page
+
+The Marketplace page renders `packages/vscode/README.md`, which is a separate document from the repository README rather than a copy of it.
+
+The two have different readers. The repository README explains the monorepo to someone about to change it; the Marketplace README sells the extension to someone deciding whether to install it, and so leads with the problem, the generated artifacts, and the capability reporting. Images there use absolute `raw.githubusercontent.com` URLs, because relative paths do not resolve on the Marketplace.

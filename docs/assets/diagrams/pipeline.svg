@@ -1,0 +1,83 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1040 400" width="1040" height="400" font-family="ui-sans-serif, -apple-system, Segoe UI, Inter, Helvetica, Arial, sans-serif" role="img" aria-label="Compile pipeline: a YAML model is parsed into an intermediate representation, resolved across imports, validated, then emitted to four targets.">
+  <rect width="1040" height="400" rx="14" fill="#fcfbf9"/>
+  <defs>
+    <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#8a94a6"/>
+    </marker>
+    <marker id="arw" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#c2761b"/>
+    </marker>
+  </defs>
+
+  <text x="40" y="46" font-size="19" font-weight="700" fill="#101318">One model, four artifacts</text>
+  <text x="40" y="70" font-size="13.5" fill="#5b6472">The YAML file is the only thing you edit. Everything downstream is generated.</text>
+
+  <!-- source -->
+  <rect x="40" y="106" width="176" height="96" rx="10" fill="#ffffff" stroke="#2f5fe0" stroke-width="1.6"/>
+  <text x="128" y="140" font-size="13.5" font-weight="700" fill="#2f5fe0" text-anchor="middle">model.lpg.yaml</text>
+  <text x="128" y="162" font-size="12" fill="#5b6472" text-anchor="middle">semantics only</text>
+  <text x="128" y="181" font-size="12" fill="#5b6472" text-anchor="middle">hand-edited, reviewable</text>
+
+  <!-- stages -->
+  <g font-size="12.5" fill="#101318" text-anchor="middle">
+    <rect x="262" y="118" width="104" height="72" rx="9" fill="#eef2fb" stroke="#c9d6f5"/>
+    <text x="314" y="149" font-weight="600">parse</text>
+    <text x="314" y="168" font-size="11" fill="#5b6472">YAML → IR</text>
+
+    <rect x="396" y="118" width="104" height="72" rx="9" fill="#eef2fb" stroke="#c9d6f5"/>
+    <text x="448" y="149" font-weight="600">resolve</text>
+    <text x="448" y="168" font-size="11" fill="#5b6472">imports, mixins</text>
+
+    <rect x="530" y="118" width="104" height="72" rx="9" fill="#eef2fb" stroke="#c9d6f5"/>
+    <text x="582" y="149" font-weight="600">validate</text>
+    <text x="582" y="168" font-size="11" fill="#5b6472">keys, endpoints</text>
+
+    <rect x="664" y="118" width="104" height="72" rx="9" fill="#eef2fb" stroke="#c9d6f5"/>
+    <text x="716" y="149" font-weight="600">emit</text>
+    <text x="716" y="168" font-size="11" fill="#5b6472">per target</text>
+  </g>
+
+  <g stroke="#8a94a6" stroke-width="1.5" marker-end="url(#ar)" fill="none">
+    <path d="M220 154 H256"/>
+    <path d="M370 154 H390"/>
+    <path d="M504 154 H524"/>
+    <path d="M638 154 H658"/>
+    <path d="M772 154 H816"/>
+  </g>
+
+  <!-- artifacts -->
+  <g text-anchor="start">
+    <rect x="820" y="94" width="180" height="42" rx="8" fill="#ffffff" stroke="#dfe2e7"/>
+    <text x="838" y="113" font-size="12.5" font-weight="700" fill="#101318">Ladybug DDL</text>
+    <text x="838" y="128" font-size="11" fill="#5b6472">node + rel tables</text>
+
+    <rect x="820" y="144" width="180" height="42" rx="8" fill="#ffffff" stroke="#dfe2e7"/>
+    <text x="838" y="163" font-size="12.5" font-weight="700" fill="#101318">Neo4j constraints</text>
+    <text x="838" y="178" font-size="11" fill="#5b6472">keys, unique, indexes</text>
+
+    <rect x="820" y="194" width="180" height="42" rx="8" fill="#ffffff" stroke="#dfe2e7"/>
+    <text x="838" y="213" font-size="12.5" font-weight="700" fill="#7a4de0">SHACL shapes</text>
+    <text x="838" y="228" font-size="11" fill="#5b6472">closed-world validation</text>
+
+    <rect x="820" y="244" width="180" height="42" rx="8" fill="#ffffff" stroke="#dfe2e7"/>
+    <text x="838" y="263" font-size="12.5" font-weight="700" fill="#7a4de0">OWL ontology</text>
+    <text x="838" y="278" font-size="11" fill="#5b6472">safe assertional subset</text>
+  </g>
+  <g stroke="#8a94a6" stroke-width="1.3" fill="none" opacity="0.55">
+    <path d="M800 154 V115 H816"/>
+    <path d="M800 154 V215 H816"/>
+    <path d="M800 154 V265 H816"/>
+  </g>
+
+  <!-- diagnostics branch -->
+  <path d="M582 194 V262" stroke="#c2761b" stroke-width="1.5" fill="none" marker-end="url(#arw)" stroke-dasharray="5 4"/>
+  <rect x="404" y="270" width="356" height="80" rx="9" fill="#fdf6ec" stroke="#eccfa4"/>
+  <text x="424" y="296" font-size="12.5" font-weight="700" fill="#8a5a13">Diagnostics, not silence</text>
+  <text x="424" y="316" font-size="11.5" fill="#7a6547">Anything a target cannot enforce becomes an editor</text>
+  <text x="424" y="332" font-size="11.5" fill="#7a6547">warning and a comment at the exact line of the artifact.</text>
+
+  <text x="40" y="300" font-size="11.5" fill="#5b6472">A model with errors</text>
+  <text x="40" y="318" font-size="11.5" fill="#5b6472">never produces an</text>
+  <text x="40" y="336" font-size="11.5" fill="#5b6472">artifact at all.</text>
+  <path d="M40 254 H360" stroke="#dfe2e7" stroke-width="1"/>
+</svg>

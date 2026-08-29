@@ -1,0 +1,17 @@
+# Sources and build inputs: out/ is bundled and self-contained.
+src/**
+test/**
+scripts/**
+tsconfig.json
+node_modules/**
+
+# tsc leaves unbundled emit beside the bundle; only the bundles ship.
+out/**/*.map
+out/**/*.d.ts
+out/protocol.*
+out/intents.*
+out/webview/**
+
+# Repository noise.
+.eslintrc.json
+**/.DS_Store

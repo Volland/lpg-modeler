@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Architecture — LPG Modeler</title>
+<meta name="description" content="The design decisions behind LPG Modeler: why the YAML file is the source of truth, why the canvas is a companion view, targeted edits, the package boundary, and what is deliberately out of scope.">
+<link rel="icon" href="assets/icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;650&family=Instrument+Serif&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/site.css">
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="index.html"><img src="assets/icon.png" alt=""> LPG Modeler</a>
+    <nav class="links">
+      <a href="index.html">Overview</a>
+      <a href="getting-started.html">Getting started</a>
+      <a href="model-format.html">Model format</a>
+      <a href="targets.html">Targets</a>
+      <a href="cli.html">CLI</a>
+      <a href="architecture.html">Architecture</a>
+      <a href="https://github.com/Volland/lpg-modeler">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+<div class="wrap hero">
+  <span class="eyebrow">Design</span>
+  <h1>Why the file is the source of truth</h1>
+  <p class="lede">
+    The decisions behind LPG Modeler, including the ones that were rejected. If you are
+    considering contributing a generator, or wondering why the metamodel stops where it does,
+    start here.
+  </p>
+</div>
+
+<div class="wrap">
+  <figure>
+    <img src="assets/diagrams/architecture.svg" alt="Three packages: core holds the pipeline, cli and vscode both depend on core, and core never imports the VS Code API.">
+    <figcaption>Three packages. The durable asset is the intermediate representation and the generators that consume it; the surface syntax stays swappable.</figcaption>
+  </figure>
+</div>
+
+<section class="wrap narrow">
+
+  <h2>The canonical artifact is text</h2>
+  <p>
+    The model is a hand-editable YAML file holding semantics only. Diagram coordinates live in
+    a separate sidecar, so rearranging a diagram never dirties the semantic diff, and layout is
+    keyed by stable element id rather than by type name — so renaming a type preserves its
+    position on every diagram.
+  </p>
+  <p>
+    Owning no parser is a deliberate trade. YAML validated by a contributed JSON Schema means
+    completion, hover and structural errors come from VS Code's existing tooling at no cost. A
+    concise custom DSL with a real language server remains a later option rather than a
+    prerequisite, because the durable asset was never the syntax.
+  </p>
+
+  <h2>The canvas is a companion, not a replacement editor</h2>
+  <p>
+    Registering the canvas as a <code>CustomTextEditorProvider</code> was rejected: it would
+    have become the default editor for model files and hidden the YAML, forfeiting exactly the
+    schema-driven completion that motivated choosing YAML in the first place. Instead it opens
+    beside the file, in the manner of Markdown preview.
+  </p>
+  <p>
+    Canvas edits reach the file as workspace edits, so VS Code owns undo and dirty state. The
+    webview holds no model state at all: it posts a named intent, the extension host turns that
+    into edits, and a fresh projection comes back — so nothing on screen can diverge from the
+    file.
+  </p>
+</section>
+
+<div class="wrap">
+  <figure>
+    <img src="assets/diagrams/intent-loop.svg" alt="The canvas posts an intent to the extension host, which splices the YAML file, which is re-resolved into a fresh projection sent back to the canvas.">
+    <figcaption>The intent translation lives in the extension package but imports no editor API, so the whole authoring surface is tested without a running VS Code.</figcaption>
+  </figure>
+</div>
+
+<section class="wrap narrow">
+  <h2>Targeted edits, never re-serialization</h2>
+  <p>
+    Every canvas action becomes a set of targeted text splices computed from the YAML syntax
+    tree. This is not an optimization — it is the difference between a reviewable diff and an
+    unreviewable one.
+  </p>
+  <p>
+    <code>Document.toString()</code> normalizes flow-collection padding across the whole file,
+    so re-serializing would turn a one-property change into a whole-file diff. Splicing keeps
+    the change minimal: renaming a type alters exactly the lines that name it. A block's extent
+    is found by indentation rather than by node range, because a YAML node's own range can run
+    past its block into whatever follows.
+  </p>
+  <p>
+    Two consequences fall out of this design. Deleting a node type also deletes the edge types
+    that reference it, because leaving the reference behind would produce a model that cannot
+    resolve. And renaming a type first records its previous IRI, so the ontology can assert
+    equivalence to the identity consumers already have.
+  </p>
+
+  <h2>The package boundary</h2>
+  <p>
+    <code>core</code> holds parsing, the intermediate representation, validation and every
+    generator. <code>cli</code> wraps it for continuous integration. <code>vscode</code> adds
+    only webview and diagnostics plumbing.
+  </p>
+  <p>
+    <code>core</code> must never import <code>vscode</code>, enforced by an ESLint rule and by a
+    test that scans the source. That single rule is what keeps generator tests runnable in plain
+    Node with no editor harness — and it is what makes gating a pull request on schema validity
+    possible at all.
+  </p>
+
+  <h2>Views cap what any one diagram shows</h2>
+  <p>
+    A view names a subset of types plus an optional neighbourhood expansion, and layout nests
+    under the view. One model can therefore carry an overview diagram beside several focused
+    ones.
+  </p>
+  <p>
+    The alternative — welding diagram scope to module boundaries — was rejected because it would
+    make people split modules for presentation reasons. Views drift as a model grows, so
+    validation reports types that appear in no view.
+  </p>
+  <p>
+    This also sets the rendering budget. The canvas is built on React Flow with ELK for
+    automatic layout; React Flow is DOM-based and degrades past a few hundred nodes, which is
+    acceptable precisely because views cap how much any one diagram shows.
+  </p>
+</section>
+
+<div class="wrap">
+  <figure>
+    <img src="assets/diagrams/files.svg" alt="Three files: the model holds semantics, a views sidecar holds diagram scope, and a layout sidecar holds coordinates keyed by stable element ids.">
+    <figcaption>Sidecar entries nest under a named view, not under the model as a whole.</figcaption>
+  </figure>
+</div>
+
+<section class="wrap narrow">
+  <h2>Modularity means two separate things</h2>
+  <p>
+    Models compose across files, and generators sit behind a registry. Only the first of those
+    is a public feature today.
+  </p>
+  <p>
+    Model composition is a metamodel feature and cannot be retrofitted once models exist in the
+    wild, so it landed first. A public plugin API is deliberately deferred until three real
+    generators have shown where the seam actually falls — the capability matrix is what that API
+    will eventually expose.
+  </p>
+
+  <h2>Verification</h2>
+  <p>
+    Every generator has golden-file tests for output stability. The Ladybug target additionally
+    executes its generated DDL against an in-process LadybugDB instance, then asserts that the
+    declared constraints actually reject invalid data.
+  </p>
+  <p>
+    Real execution is affordable here because the database is embedded — no container is
+    required. Neo4j and Memgraph have no embedded mode, so they keep golden coverage with
+    containerised tests gated behind an opt-in flag. A golden file alone only proves that output
+    has not changed, not that it is valid: the <code>//</code> versus <code>--</code> comment
+    syntax bug in the Ladybug output was caught by execution and would have been invisible to a
+    golden test.
+  </p>
+
+  <h2>What is deliberately out of scope</h2>
+  <ul class="plain">
+    <li><strong>Nested edges.</strong> Edges that are themselves endpoints of other edges — the metagraph case — sit outside the core metamodel. Neo4j cannot represent them natively, so admitting them would force every generator to grow a silent reification path.</li>
+    <li><strong>Migrations and the lockfile diff.</strong> The intended design is a canonical, stable-ordered snapshot committed beside the model, diffed to produce an ordered migration script with renames detected through stable ids rather than guessed from structural similarity. Not in this release — but nothing in the implementation assumes a lockfile is absent, and the serializer already orders keys stably.</li>
+    <li><strong>The Memgraph target and user-supplied template targets.</strong> Both wait on the plugin seam described above.</li>
+    <li><strong>A generic Cypher target.</strong> Rejected outright rather than deferred: there is no reference implementation to test it against.</li>
+  </ul>
+
+  <h2>One amendment worth recording</h2>
+  <p>
+    The original plan deferred interactive editing to a second release and shipped a read-only
+    canvas first. That was amended. Building the compiler first would have left the tool unusable
+    for its stated purpose until v2, and the intermediate representation is exercised by every
+    canvas action anyway — so real use validates the metamodel in a way that tests alone cannot.
+  </p>
+</section>
+
+<section class="wrap">
+  <h2>Where to go next</h2>
+  <div class="next">
+    <a href="https://github.com/Volland/lpg-modeler"><div class="k">Source</div><div class="v">The repository, including the design notes this page summarises.</div></a>
+    <a href="targets.html"><div class="k">Targets</div><div class="v">The capability set a new generator would declare.</div></a>
+    <a href="model-format.html"><div class="k">Model format</div><div class="v">The metamodel these decisions shape.</div></a>
+  </div>
+</section>
+</main>
+
+<footer class="site">
+  <div class="wrap">
+    <span>LPG Modeler — MIT licensed</span>
+    <span class="spacer"><a href="https://github.com/Volland/lpg-modeler">Source</a></span>
+    <span><a href="https://github.com/Volland/lpg-modeler/issues">Report an issue</a></span>
+    <span><a href="https://github.com/Volland/lpg-modeler/blob/main/CHANGELOG.md">Changelog</a></span>
+  </div>
+</footer>
+
+</body>
+</html>

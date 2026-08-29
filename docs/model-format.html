@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Model format — LPG Modeler</title>
+<meta name="description" content="Reference for the LPG model format: node types, mixins, keys, edge types, imports, stable element ids, views and validation codes.">
+<link rel="icon" href="assets/icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;650&family=Instrument+Serif&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/site.css">
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="index.html"><img src="assets/icon.png" alt=""> LPG Modeler</a>
+    <nav class="links">
+      <a href="index.html">Overview</a>
+      <a href="getting-started.html">Getting started</a>
+      <a href="model-format.html">Model format</a>
+      <a href="targets.html">Targets</a>
+      <a href="cli.html">CLI</a>
+      <a href="architecture.html">Architecture</a>
+      <a href="https://github.com/Volland/lpg-modeler">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+<div class="wrap hero">
+  <span class="eyebrow">Reference</span>
+  <h1>What a model may legally say</h1>
+  <p class="lede">
+    A labeled property graph core, extended with an abstract label hierarchy, mixins,
+    first-class identity, and stable element identifiers. This page is the whole surface.
+  </p>
+</div>
+
+<section class="wrap narrow">
+  <h2>File shape</h2>
+  <p>
+    A model is a YAML file named <code>*.lpg.yaml</code> or <code>*.lpg.yml</code>, validated
+    against a JSON Schema the extension contributes. Only <code>namespace</code> is required.
+  </p>
+<pre><code><span class="c-key">namespace</span>: { prefix: …, iri: … }   <span class="c-com"># required</span>
+<span class="c-key">imports</span>:   [ { path: …, as: … } ]  <span class="c-com"># optional</span>
+<span class="c-key">mixins</span>:    { Name: { props: … } }   <span class="c-com"># optional</span>
+<span class="c-key">nodes</span>:     { Name: { … } }          <span class="c-com"># optional</span>
+<span class="c-key">edges</span>:     { NAME: { from: …, to: … } }</code></pre>
+
+  <h2>Namespace</h2>
+  <p>
+    Each model declares a prefix and a base IRI. The IRI is the global identity of every type
+    the model defines — an import alias is only a local binding.
+  </p>
+<pre><code><span class="c-key">namespace</span>:
+  prefix: social
+  iri: https://example.org/vocab/social#</code></pre>
+  <p>
+    Identity by IRI rather than by file path is what makes the diamond case resolve correctly
+    when the same vocabulary is vendored at two different paths. It also means renaming a type
+    changes its identity for RDF consumers, which is why a rename records the previous IRI —
+    see <a href="#rename">renames</a>.
+  </p>
+
+  <h2>Node types</h2>
+<pre><code><span class="c-key">nodes</span>:
+  Person:
+    id: n_person            <span class="c-com"># stable element id, written by the tool</span>
+    abstract: false         <span class="c-com"># abstract types get no table and no instances</span>
+    extends: Party          <span class="c-com"># single abstract parent</span>
+    mixins: [Timestamped]   <span class="c-com"># shared property sets</span>
+    key: [email]            <span class="c-com"># inherited when omitted</span>
+    props:
+      email: { type: string, required: true, unique: true }
+      born:  { type: date }</code></pre>
+
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Field</th><th>Meaning</th></tr></thead>
+      <tbody>
+        <tr><td><code>id</code></td><td>Stable element identifier. Assigned by the tool; never edit or copy it.</td></tr>
+        <tr><td><code>abstract</code></td><td>An abstract type contributes properties and a key to its descendants but is never instantiated. It produces no Ladybug table.</td></tr>
+        <tr><td><code>extends</code></td><td>A single abstract parent, optionally alias-qualified as <code>alias:Type</code>. Inheritance is single-parent; multi-label membership is expressed by the targets that support it.</td></tr>
+        <tr><td><code>mixins</code></td><td>Trait-style shared property sets, applied by name. Use these instead of copy-pasting a property block across sibling types.</td></tr>
+        <tr><td><code>key</code></td><td>The property names forming this type's key, single or composite. Inherited from the parent when omitted.</td></tr>
+        <tr><td><code>props</code></td><td>The type's own properties. Inherited properties are shown on the canvas but are not repeated in the file.</td></tr>
+        <tr><td><code>previousIri</code></td><td>Written on rename so ontology consumers keep resolving the old identity.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2>Properties</h2>
+<pre><code>email: { type: string, required: true, unique: true }</code></pre>
+  <p>Eight scalar types, chosen because every target can carry all of them:</p>
+  <p>
+    <span class="pill pill-off">string</span> <span class="pill pill-off">int</span>
+    <span class="pill pill-off">float</span> <span class="pill pill-off">boolean</span>
+    <span class="pill pill-off">date</span> <span class="pill pill-off">datetime</span>
+    <span class="pill pill-off">uuid</span> <span class="pill pill-off">json</span>
+  </p>
+  <p>
+    <code>required</code> and <code>unique</code> both default to false. Whether they are
+    actually enforced depends on the target, and any target that cannot enforce one says so —
+    see <a href="targets.html">Targets</a>.
+  </p>
+
+  <h2>Identity</h2>
+  <p>
+    Every concrete node type declares exactly one key; validation fails without one. One
+    concept pays off three times: a Ladybug <code>PRIMARY KEY</code>, a Neo4j
+    <code>NODE KEY</code> constraint, and <code>owl:hasKey</code> in the ontology.
+  </p>
+  <div class="note">
+    <p><strong>Two caveats worth knowing before you model.</strong> Ladybug primary keys are
+    single-column, so a composite key is emitted as a synthesized concatenated column. And
+    because Ladybug flattens a hierarchy to one table per concrete type, key uniqueness is
+    enforced per table — two subtypes of the same abstract parent can hold the same key value.</p>
+  </div>
+
+  <h2>Edge types</h2>
+<pre><code><span class="c-key">edges</span>:
+  OWNS:
+    id: e_owns
+    from: Party      <span class="c-com"># an abstract endpoint expands per concrete subtype</span>
+    to: Car
+    props:
+      since: { type: date }</code></pre>
+  <p>
+    Edges are binary, typed, directed, and may carry properties. An endpoint may be an
+    abstract type, in which case targets without inheritance expand it to a cross-product of
+    concrete endpoint pairs.
+  </p>
+  <p>
+    Edges that are themselves endpoints of other edges — the metagraph case — are deliberately
+    outside the core. Neo4j cannot represent them natively, so admitting them would force every
+    generator to grow a silent reification path.
+  </p>
+
+  <h2>Mixins</h2>
+<pre><code><span class="c-key">mixins</span>:
+  Timestamped:
+    id: m_stamp
+    props:
+      createdAt: { type: datetime, required: true }</code></pre>
+  <p>
+    A mixin is a named property set with no identity of its own. It contributes properties to
+    every type that applies it, and contributes nothing to the type hierarchy — use
+    <code>extends</code> when you want <code>subClassOf</code> in the ontology.
+  </p>
+
+  <h2>Composition across files</h2>
+<pre><code><span class="c-key">imports</span>:
+  - { path: ./common/party.lpg.yaml, as: common }
+
+<span class="c-key">nodes</span>:
+  Employee:
+    extends: common:Party
+    props:
+      badge: { type: string, required: true }</code></pre>
+  <p>
+    An importing model may subtype an imported label, apply an imported mixin, and declare
+    edges touching imported types. It may never mutate an imported definition — that is
+    reported as a <code>sealed-import</code> error.
+  </p>
+  <p>
+    Sealing keeps imports referentially transparent: a shared type means the same thing to
+    every consumer, so generated output is deterministic. The diamond case — two modules
+    importing a common vocabulary into a third — resolves by IRI identity rather than by merge.
+  </p>
+
+  <h2 id="ids">Stable element ids</h2>
+  <p>
+    Every node type, edge type, property and mixin carries a short generated identifier,
+    written once by the tool and never edited by hand. Ids appear as <code>n_</code>,
+    <code>e_</code>, <code>p_</code> and <code>m_</code> prefixed strings.
+  </p>
+  <p>They do two jobs:</p>
+  <ul class="plain">
+    <li>They make a rename distinguishable from a delete plus an add, which a structural diff alone cannot do.</li>
+    <li>They give diagram layout a stable anchor, so renaming a type moves nothing on screen.</li>
+  </ul>
+  <p>
+    Because ids travel with the text, copy-pasting a block duplicates one — validation rejects
+    that. Run <code>lpg ids</code> to backfill any element that is missing one.
+  </p>
+
+  <h2 id="rename">Renames</h2>
+  <p>
+    Renaming a type through the canvas first records its pre-rename IRI as
+    <code>previousIri</code>, so the ontology can assert equivalence to the identity consumers
+    already hold. Deleting a node type also deletes the edge types that reference it: leaving
+    the reference behind would produce a model that cannot resolve.
+  </p>
+
+  <h2>Views and layout</h2>
+  <p>
+    Two sidecars sit beside the model. Neither carries semantics, so neither one dirties a
+    semantic diff.
+  </p>
+<pre><code><span class="c-com"># model.views.yaml — which types each diagram shows</span>
+<span class="c-key">views</span>:
+  overview:
+    include: ["*"]
+  billing:
+    include: ["Invoice", "Account"]
+    expand: 1</code></pre>
+<pre><code><span class="c-com">// model.layout.json — coordinates, keyed by stable id</span>
+{ "billing": { "n_inv": { "x": 120, "y": 40 } } }</code></pre>
+  <p>
+    <code>include</code> takes type names or <code>"*"</code> for everything;
+    <code>expand</code> pulls in that many further hops of neighbouring types. Layout is
+    pruned on save, so positions for deleted elements do not accumulate.
+  </p>
+
+  <h2>Validation</h2>
+  <p>Errors block generation. Warnings do not.</p>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Code</th><th>Severity</th><th>Meaning</th></tr></thead>
+      <tbody>
+        <tr><td><code>missing-namespace</code></td><td><span class="pill pill-warn">error</span></td><td>The model declares no prefix and base IRI.</td></tr>
+        <tr><td><code>missing-key</code></td><td><span class="pill pill-warn">error</span></td><td>A concrete node type has no key, inherited or declared.</td></tr>
+        <tr><td><code>key-unknown-property</code></td><td><span class="pill pill-warn">error</span></td><td>A key names a property the type does not have.</td></tr>
+        <tr><td><code>unresolved-parent</code></td><td><span class="pill pill-warn">error</span></td><td><code>extends</code> names a type that does not resolve.</td></tr>
+        <tr><td><code>unresolved-mixin</code></td><td><span class="pill pill-warn">error</span></td><td>A mixin name does not resolve.</td></tr>
+        <tr><td><code>cyclic-inheritance</code></td><td><span class="pill pill-warn">error</span></td><td>The <code>extends</code> chain forms a cycle.</td></tr>
+        <tr><td><code>missing-endpoint</code></td><td><span class="pill pill-warn">error</span></td><td>An edge omits <code>from</code> or <code>to</code>.</td></tr>
+        <tr><td><code>unresolved-endpoint</code></td><td><span class="pill pill-warn">error</span></td><td>An edge endpoint names a type that does not resolve.</td></tr>
+        <tr><td><code>missing-import</code></td><td><span class="pill pill-warn">error</span></td><td>An imported file cannot be read.</td></tr>
+        <tr><td><code>sealed-import</code></td><td><span class="pill pill-warn">error</span></td><td>The model attempts to mutate an imported definition.</td></tr>
+        <tr><td><code>type-in-no-view</code></td><td><span class="pill pill-off">warning</span></td><td>A type appears on no diagram. Views drift as a model grows.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="wrap">
+  <h2>Where to go next</h2>
+  <div class="next">
+    <a href="targets.html"><div class="k">Targets</div><div class="v">How each of these concepts lands in four different schemas.</div></a>
+    <a href="cli.html"><div class="k">CLI</div><div class="v">Check and generate without an editor.</div></a>
+    <a href="architecture.html"><div class="k">Architecture</div><div class="v">Why the metamodel stops where it does.</div></a>
+  </div>
+</section>
+</main>
+
+<footer class="site">
+  <div class="wrap">
+    <span>LPG Modeler — MIT licensed</span>
+    <span class="spacer"><a href="https://github.com/Volland/lpg-modeler">Source</a></span>
+    <span><a href="https://github.com/Volland/lpg-modeler/issues">Report an issue</a></span>
+    <span><a href="https://github.com/Volland/lpg-modeler/blob/main/CHANGELOG.md">Changelog</a></span>
+  </div>
+</footer>
+
+</body>
+</html>

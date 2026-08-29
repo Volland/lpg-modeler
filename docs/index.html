@@ -1,0 +1,432 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LPG Modeler — design a property graph once, generate every schema</title>
+<meta name="description" content="A VS Code extension for labeled property graph schemas: author them as reviewable YAML, edit them on a canvas, and generate LadybugDB DDL, Neo4j constraints, SHACL shapes and an OWL ontology from one model.">
+<meta property="og:title" content="LPG Modeler">
+<meta property="og:description" content="Design a property graph once. Generate LadybugDB DDL, Neo4j constraints, SHACL shapes and an OWL ontology from the same model.">
+<meta property="og:type" content="website">
+<meta property="og:image" content="https://volland.github.io/lpg-modeler/assets/diagrams/pipeline.png">
+<link rel="icon" href="assets/icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;650&family=Instrument+Serif&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/site.css">
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="index.html"><img src="assets/icon.png" alt=""> LPG Modeler</a>
+    <nav class="links">
+      <a href="index.html" aria-current="page">Overview</a>
+      <a href="getting-started.html">Getting started</a>
+      <a href="model-format.html">Model format</a>
+      <a href="targets.html">Targets</a>
+      <a href="cli.html">CLI</a>
+      <a href="architecture.html">Architecture</a>
+      <a href="https://github.com/Volland/lpg-modeler">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+
+<div class="wrap hero">
+  <span class="eyebrow">VS Code extension</span>
+  <h1>Design a property graph once. Generate every schema from it.</h1>
+  <p class="lede">
+    LPG Modeler turns one hand-editable model file into LadybugDB DDL, Neo4j constraints,
+    SHACL shapes and an OWL ontology — and tells you, before you ship, exactly what each
+    database is unable to enforce.
+  </p>
+  <div class="cta">
+    <a class="btn btn-primary" href="getting-started.html">Get started</a>
+    <a class="btn btn-ghost" href="https://github.com/Volland/lpg-modeler">View on GitHub</a>
+  </div>
+</div>
+
+<div class="wrap">
+  <figure>
+    <img src="assets/diagrams/pipeline.svg" alt="The model file is parsed into an intermediate representation, resolved across imports, validated, then emitted to Ladybug DDL, Neo4j constraints, SHACL shapes and an OWL ontology. Anything a target cannot enforce is reported as a diagnostic.">
+    <figcaption>The YAML model is the only thing you edit. Everything downstream is generated, and nothing is generated from a model that has errors.</figcaption>
+  </figure>
+</div>
+
+<hr class="rule">
+
+<section class="wrap">
+  <h2>The problem it removes</h2>
+  <p class="section-lede">
+    A graph schema usually lives in four places at once: the DDL that creates the tables,
+    the constraint script someone ran last quarter, a diagram in a wiki that stopped being
+    true, and an ontology maintained by a different team. They drift. LPG Modeler makes
+    three of those four generated artifacts.
+  </p>
+
+  <div class="grid grid-3">
+    <div class="card">
+      <span class="tag">Before</span>
+      <h3>Four sources, one truth, no agreement</h3>
+      <p>The diagram says a property is required. The database never enforced it. Nobody
+      finds out until a null reaches production.</p>
+    </div>
+    <div class="card">
+      <span class="tag">After</span>
+      <h3>One source, generated outputs</h3>
+      <p>The model states the constraint. Every target either enforces it or declares, in
+      writing, that it cannot.</p>
+    </div>
+    <div class="card">
+      <span class="tag">Kept honest</span>
+      <h3>Checked in CI</h3>
+      <p>The same validation the editor runs also runs as a command, so a pull request can
+      be gated on the model being valid.</p>
+    </div>
+  </div>
+</section>
+
+<hr class="rule">
+
+<section class="wrap">
+  <h2>What you get</h2>
+  <p class="section-lede">Six things the extension does that a diagram tool or a hand-written DDL file cannot.</p>
+
+  <div class="grid grid-2">
+    <div class="card feature">
+      <span class="k">A canvas that writes the file</span>
+      <span class="v">Create node types, draw edges, add properties and rename things
+      directly on the diagram. Every action becomes a targeted edit to the YAML, applied as
+      a workspace edit — so undo, dirty state and version control all behave normally.</span>
+    </div>
+    <div class="card feature">
+      <span class="k">Diffs you can actually review</span>
+      <span class="v">Edits are computed as text splices, never as a re-serialization.
+      Renaming a type changes exactly the lines that name it. Diagram coordinates live in a
+      separate sidecar, so rearranging a diagram produces no semantic diff at all.</span>
+    </div>
+    <div class="card feature">
+      <span class="k">Four generators, one model</span>
+      <span class="v">LadybugDB node and relationship tables, Neo4j constraints and indexes,
+      SHACL node shapes, and an OWL ontology — all from the same type hierarchy, keys and
+      properties, with no second definition to keep in sync.</span>
+    </div>
+    <div class="card feature">
+      <span class="k">Loss is reported, never silent</span>
+      <span class="v">Each target publishes what it can express. Everything it cannot becomes
+      a warning in the Problems panel <em>and</em> a comment at the exact line of the generated
+      file, so the operator reading the DDL learns what the author already knew.</span>
+    </div>
+    <div class="card feature">
+      <span class="k">Schema-driven YAML editing</span>
+      <span class="v">The model format ships as a JSON Schema the extension contributes, so
+      completion, hover documentation and structural errors come from the YAML tooling you
+      already have.</span>
+    </div>
+    <div class="card feature">
+      <span class="k">Views, so diagrams stay readable</span>
+      <span class="v">A view names a subset of types plus an optional neighbourhood expansion.
+      One model can carry an overview beside several focused diagrams, and validation tells
+      you which types have fallen out of every view.</span>
+    </div>
+  </div>
+</section>
+
+<hr class="rule">
+
+<section class="wrap">
+  <h2>From this model, these artifacts</h2>
+  <p class="section-lede">
+    A small social domain: an abstract <code>Party</code> contributing the key, two concrete
+    subtypes, a mixin, and an edge that carries a property. Every tab below is real generator
+    output for the model on the left.
+  </p>
+
+  <div class="grid grid-2">
+    <div>
+      <h4>social.lpg.yaml</h4>
+<pre><code><span class="c-key">namespace</span>:
+  prefix: social
+  iri: https://example.org/vocab/social#
+
+<span class="c-key">mixins</span>:
+  Timestamped:
+    props:
+      createdAt: { type: datetime, required: true }
+
+<span class="c-key">nodes</span>:
+  <span class="c-com"># Abstract root: gives the key to every descendant.</span>
+  Party:
+    abstract: true
+    key: [id]
+    props:
+      id: { type: string, required: true }
+
+  Person:
+    extends: Party
+    mixins: [Timestamped]
+    props:
+      email: { type: string, required: true, unique: true }
+      born: { type: date }
+
+  Company:
+    extends: Party
+    props:
+      vat: { type: string }
+
+  Car:
+    key: [vin]
+    props:
+      vin: { type: string, required: true }
+      seats: { type: int }
+
+<span class="c-key">edges</span>:
+  <span class="c-com"># Abstract endpoint: expands per concrete subtype.</span>
+  OWNS:
+    from: Party
+    to: Car
+    props:
+      since: { type: date }
+
+  <span class="c-com"># No properties: stays a plain relation in RDF.</span>
+  LIKES:
+    from: Person
+    to: Company
+</code></pre>
+    </div>
+
+    <div>
+      <h4>Generated output</h4>
+      <div class="tabs" role="tablist">
+        <button role="tab" aria-selected="true" aria-controls="t-ladybug" id="b-ladybug">ladybug</button>
+        <button role="tab" aria-selected="false" aria-controls="t-neo4j" id="b-neo4j">neo4j</button>
+        <button role="tab" aria-selected="false" aria-controls="t-shacl" id="b-shacl">shacl</button>
+        <button role="tab" aria-selected="false" aria-controls="t-owl" id="b-owl">owl</button>
+      </div>
+
+<pre class="panel" id="t-ladybug" role="tabpanel" aria-labelledby="b-ladybug"><code><span class="c-com">// Abstract node types are flattened to one table per
+// concrete type, with inherited properties copied down.</span>
+
+<span class="c-com">// Abstract, no table emitted: Party</span>
+
+CREATE NODE TABLE IF NOT EXISTS Company (
+  vat STRING,
+  id STRING,
+  PRIMARY KEY(id)
+);
+
+CREATE NODE TABLE IF NOT EXISTS Person (
+  <span class="c-warn">// UNENFORCED: 'email' is required in the model;
+  // LadybugDB has no NOT NULL.
+  // UNENFORCED: 'email' is unique in the model;
+  // only the primary key is unique.</span>
+  email STRING,
+  born DATE,
+  createdAt TIMESTAMP,
+  id STRING,
+  PRIMARY KEY(id)
+);
+
+CREATE REL TABLE IF NOT EXISTS OWNS (
+  <span class="c-com">// 'Party' is abstract; expanded to 2 endpoint pairs.</span>
+  FROM Company TO Car,
+  FROM Person TO Car,
+  since DATE
+);
+
+CREATE REL TABLE IF NOT EXISTS LIKES (
+  FROM Person TO Company
+);
+</code></pre>
+
+<pre class="panel" id="t-neo4j" role="tabpanel" aria-labelledby="b-neo4j" hidden><code><span class="c-com">// Neo4j has no table DDL. A hierarchy is expressed as
+// labels, so a Person node also carries every ancestor.
+// Edition: community</span>
+
+<span class="c-warn">// DOWNGRADE: NODE KEY requires Enterprise.
+// Uniqueness only; presence unenforced.</span>
+CREATE CONSTRAINT car_key_unique IF NOT EXISTS
+  FOR (n:Car) REQUIRE (n.vin) IS UNIQUE;
+
+<span class="c-com">// Person carries labels :Person :Party
+// (hierarchy flattened to labels).</span>
+CREATE CONSTRAINT person_key_unique IF NOT EXISTS
+  FOR (n:Person) REQUIRE (n.id) IS UNIQUE;
+CREATE CONSTRAINT person_email_unique IF NOT EXISTS
+  FOR (n:Person) REQUIRE n.email IS UNIQUE;
+<span class="c-warn">// UNENFORCED: 'email' is required; existence
+// constraints require Enterprise.</span>
+CREATE INDEX person_created_at IF NOT EXISTS
+  FOR (n:Person) ON (n.createdAt);
+
+<span class="c-com">// (:Person)-[:LIKES]-&gt;(:Company)
+// (:Party)-[:OWNS]-&gt;(:Car)</span>
+</code></pre>
+
+<pre class="panel" id="t-shacl" role="tabpanel" aria-labelledby="b-shacl" hidden><code><span class="c-com"># SHACL carries the constraints because it is
+# closed-world, and so means what the model means.</span>
+
+@prefix sh: &lt;http://www.w3.org/ns/shacl#&gt; .
+@prefix social: &lt;https://example.org/vocab/social#&gt; .
+
+social:PersonShape a sh:NodeShape ;
+  sh:targetClass social:Person ;
+  sh:property [
+    sh:path social:email ;
+    sh:datatype xsd:string ;
+    sh:maxCount 1 ;
+    sh:minCount 1 ;
+    <span class="c-warn"># UNENFORCED: 'email' is unique in the model;
+    # core SHACL cannot express uniqueness across
+    # instances without a SPARQL constraint.</span>
+  ] ;
+  sh:property [
+    sh:path social:id ;
+    sh:datatype xsd:string ;
+    sh:maxCount 1 ;
+    sh:minCount 1 ;
+  ] .
+
+<span class="c-com"># Reified from (:Party)-[:OWNS]-&gt;(:Car)</span>
+social:OwnsShape a sh:NodeShape ;
+  sh:targetClass social:Owns ;
+  sh:property [
+    sh:path social:ownsSubject ;
+    sh:minCount 1 ; sh:maxCount 1 ;
+  ] ;
+  sh:property [
+    sh:path social:since ;
+    sh:datatype xsd:date ;
+    sh:maxCount 1 ;
+  ] .
+</code></pre>
+
+<pre class="panel" id="t-owl" role="tabpanel" aria-labelledby="b-owl" hidden><code><span class="c-com"># Restricted to the safe assertional subset: classes,
+# subClassOf and hasKey. No rdfs:domain, no rdfs:range,
+# no cardinality restrictions — those state inference
+# rules, not constraints. The SHACL artifact carries
+# the constraints.</span>
+
+@prefix owl: &lt;http://www.w3.org/2002/07/owl#&gt; .
+@prefix social: &lt;https://example.org/vocab/social#&gt; .
+
+social:Person a owl:Class ;
+  rdfs:label "Person" ;
+  rdfs:subClassOf social:Party ;
+  owl:hasKey ( social:id ) .
+
+social:Company a owl:Class ;
+  rdfs:label "Company" ;
+  rdfs:subClassOf social:Party ;
+  owl:hasKey ( social:id ) .
+
+social:email a owl:DatatypeProperty ;
+  rdfs:label "email" ; rdfs:range xsd:string .
+
+<span class="c-com"># (:Party)-[:OWNS]-&gt;(:Car) carries properties, so it is
+# reified into a class. 'owns' is the shortcut.</span>
+social:Owns a owl:Class ; rdfs:label "OWNS" .
+social:ownsSubject a owl:ObjectProperty .
+social:ownsObject a owl:ObjectProperty .
+social:owns a owl:ObjectProperty .
+
+<span class="c-com"># (:Person)-[:LIKES]-&gt;(:Company) carries no properties,
+# so it stays a plain object property.</span>
+social:likes a owl:ObjectProperty ; rdfs:label "LIKES" .
+</code></pre>
+    </div>
+  </div>
+</section>
+
+<hr class="rule">
+
+<section class="wrap">
+  <h2>Nothing disappears quietly</h2>
+  <p class="section-lede">
+    Three kinds of loss exist before a line of generator code is written: LadybugDB has no
+    multi-label nodes, Neo4j existence and node-key constraints are Enterprise-only, and OWL
+    is open-world where a schema is closed-world. Each one is stated rather than absorbed.
+  </p>
+  <figure>
+    <img src="assets/diagrams/capabilities.svg" alt="A matrix of five model features against four targets, showing which are enforced natively, which are downgraded, and which are transformed.">
+    <figcaption>A required property that quietly vanishes is a data-integrity bug that surfaces in production. Here it surfaces in the Problems panel instead. See <a href="targets.html">Targets</a> for the full matrix.</figcaption>
+  </figure>
+</section>
+
+<hr class="rule">
+
+<section class="wrap">
+  <h2>The canvas edits the file, not a copy of it</h2>
+  <p class="section-lede">
+    The diagram is a companion view beside the YAML, in the manner of Markdown preview — not
+    a replacement editor. It holds no model state: it posts an intent, the extension host
+    computes the edits, and a fresh diagram comes back from the file.
+  </p>
+  <figure>
+    <img src="assets/diagrams/intent-loop.svg" alt="The canvas posts an intent to the extension host, which splices the YAML file, which is re-resolved into a fresh projection sent back to the canvas.">
+    <figcaption>Because the round trip always ends at the file, nothing on the canvas can diverge from what your teammates will review.</figcaption>
+  </figure>
+
+  <figure>
+    <img src="assets/diagrams/files.svg" alt="Three files: the model holds semantics, a views sidecar holds diagram scope, and a layout sidecar holds coordinates keyed by stable element ids.">
+    <figcaption>Coordinates never touch the model file, and layout is keyed by a stable element id — so renaming a type moves nothing on screen, and a rename stays distinguishable from a delete plus an add.</figcaption>
+  </figure>
+</section>
+
+<hr class="rule">
+
+<section class="wrap">
+  <h2>Serious about RDF</h2>
+  <p class="section-lede">
+    A property graph schema and an OWL ontology do not mean the same thing, so the RDF export
+    is split in two. SHACL carries the constraints because it is closed-world validation. OWL
+    asserts only what is safe to assert.
+  </p>
+  <figure>
+    <img src="assets/diagrams/reification.svg" alt="An edge with no properties becomes a plain object property; an edge carrying properties becomes an n-ary relation class plus a shortcut property.">
+    <figcaption>Reification is applied only where it is needed. Emitting <code>rdfs:domain</code> for an edge does not constrain anything — it instructs a reasoner to reclassify unrelated individuals, which inverts the meaning of the model rather than merely losing some of it.</figcaption>
+  </figure>
+</section>
+
+<hr class="rule">
+
+<section class="wrap">
+  <h2>Start here</h2>
+  <div class="next">
+    <a href="getting-started.html"><div class="k">Getting started</div><div class="v">Install, write your first model, open the canvas, generate.</div></a>
+    <a href="model-format.html"><div class="k">Model format</div><div class="v">Node types, mixins, keys, edges, imports, views.</div></a>
+    <a href="targets.html"><div class="k">Targets</div><div class="v">What each generator emits, and what it will not enforce.</div></a>
+    <a href="cli.html"><div class="k">CLI</div><div class="v">The same checks and generators, in continuous integration.</div></a>
+  </div>
+</section>
+
+</main>
+
+<footer class="site">
+  <div class="wrap">
+    <span>LPG Modeler — MIT licensed</span>
+    <span class="spacer"><a href="https://github.com/Volland/lpg-modeler">Source</a></span>
+    <span><a href="https://github.com/Volland/lpg-modeler/issues">Report an issue</a></span>
+    <span><a href="https://github.com/Volland/lpg-modeler/blob/main/CHANGELOG.md">Changelog</a></span>
+  </div>
+</footer>
+
+<script>
+  document.querySelectorAll('[role="tablist"]').forEach(function (list) {
+    var tabs = Array.prototype.slice.call(list.querySelectorAll('[role="tab"]'));
+    list.addEventListener('click', function (event) {
+      var tab = event.target.closest('[role="tab"]');
+      if (!tab) return;
+      tabs.forEach(function (t) {
+        var selected = t === tab;
+        t.setAttribute('aria-selected', String(selected));
+        document.getElementById(t.getAttribute('aria-controls')).hidden = !selected;
+      });
+    });
+  });
+</script>
+
+</body>
+</html>

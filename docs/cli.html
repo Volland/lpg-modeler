@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CLI — LPG Modeler</title>
+<meta name="description" content="Reference for the lpg command line tool: check, emit, ids and targets, with flags, exit codes and a continuous integration example.">
+<link rel="icon" href="assets/icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;650&family=Instrument+Serif&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/site.css">
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="index.html"><img src="assets/icon.png" alt=""> LPG Modeler</a>
+    <nav class="links">
+      <a href="index.html">Overview</a>
+      <a href="getting-started.html">Getting started</a>
+      <a href="model-format.html">Model format</a>
+      <a href="targets.html">Targets</a>
+      <a href="cli.html">CLI</a>
+      <a href="architecture.html">Architecture</a>
+      <a href="https://github.com/Volland/lpg-modeler">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+<div class="wrap hero">
+  <span class="eyebrow">Reference</span>
+  <h1>The same checks, without an editor</h1>
+  <p class="lede">
+    <code>lpg</code> runs the resolution, validation and generation the extension runs, in plain
+    Node. That is what lets a pull request be gated on the model being valid.
+  </p>
+</div>
+
+<section class="wrap narrow">
+<pre><code>lpg - labeled property graph modeler
+
+Usage:
+  lpg check &lt;model.lpg.yaml&gt;
+  lpg emit  &lt;model.lpg.yaml&gt; --target &lt;ladybug|neo4j|owl|shacl&gt; [options]
+  lpg ids   &lt;model.lpg.yaml&gt;        assign any missing stable element ids
+  lpg targets
+
+Options:
+  --target &lt;name&gt;       generation target (repeatable)
+  --out &lt;dir&gt;           write artifacts to this directory instead of stdout
+  --edition &lt;name&gt;      neo4j edition: community (default) or enterprise</code></pre>
+
+  <h2>check</h2>
+  <p>
+    Resolves the model and its imports, validates it, and prints every diagnostic as
+    <code>file:line:column severity code: message</code>. Exits <code>1</code> when the model
+    has errors, <code>0</code> otherwise — warnings alone do not fail the run.
+  </p>
+<pre><code>$ lpg check social.lpg.yaml
+0 error(s), 0 warning(s)</code></pre>
+
+  <h2>emit</h2>
+  <p>
+    Generates one or more targets. <code>--target</code> is repeatable. Without
+    <code>--out</code>, artifacts go to stdout; with it, each is written as
+    <code>&lt;model-stem&gt;.&lt;target&gt;.&lt;ext&gt;</code> in that directory, which is
+    created if it does not exist.
+  </p>
+<pre><code>$ lpg emit social.lpg.yaml --target ladybug --target shacl --out ./schema
+schema/social.ladybug.cypher
+schema/social.shacl.ttl</code></pre>
+  <p>
+    A model with errors produces nothing at all — the command reports them and exits
+    <code>1</code> rather than writing a partial artifact. Downgrade warnings are printed to
+    stderr after the artifact list, and each one is also recorded as a comment inside the
+    artifact:
+  </p>
+<pre><code>$ lpg emit social.lpg.yaml --target ladybug --out ./schema
+schema/social.ladybug.cypher
+<span class="c-warn">social.lpg.yaml:26:7 warning [ladybug] downgrade-required: Property
+'Person.email' is required, which LadybugDB cannot enforce: it has no
+NOT NULL and only the primary key is non-null.</span></code></pre>
+
+  <h2>ids</h2>
+  <p>
+    Assigns a stable element id to every node type, edge type, property and mixin that lacks
+    one, editing the model file in place. Useful after hand-writing a model, or after a merge.
+    Existing ids are never rewritten.
+  </p>
+<pre><code>$ lpg ids social.lpg.yaml
+assigned 14 id(s) in /work/social.lpg.yaml</code></pre>
+
+  <h2>targets</h2>
+  <p>Prints the registered target names, one per line.</p>
+<pre><code>$ lpg targets
+ladybug
+neo4j
+owl
+shacl</code></pre>
+
+  <h2>Options</h2>
+  <dl class="args">
+    <dt>--target &lt;name&gt;</dt>
+    <dd>Which generator to run. Repeat the flag to run several in one pass. An unknown name is an error naming the ones that exist.</dd>
+    <dt>--out &lt;dir&gt;</dt>
+    <dd>Write artifacts into this directory instead of stdout. Created recursively if missing.</dd>
+    <dt>--edition &lt;community|enterprise&gt;</dt>
+    <dd>Neo4j edition. Community — the default — cannot enforce existence or node key constraints, so under it those become downgrades and comments.</dd>
+  </dl>
+
+  <h2>Exit codes</h2>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Code</th><th>When</th></tr></thead>
+      <tbody>
+        <tr><td><code>0</code></td><td>Success. Warnings may still have been printed.</td></tr>
+        <tr><td><code>1</code></td><td>The model has errors, a file could not be read, or a generator failed.</td></tr>
+        <tr><td><code>2</code></td><td>Usage error — an unknown flag, a missing target, or no model path.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2>In continuous integration</h2>
+  <p>Gate the branch on the model staying valid, and on the committed schema staying in sync with it:</p>
+<pre><code><span class="c-key">name</span>: schema
+on: [push, pull_request]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+      - run: npm ci
+
+      <span class="c-com"># Fails the build on any model error.</span>
+      - run: npx lpg check model/domain.lpg.yaml
+
+      <span class="c-com"># Regenerate and fail if the committed artifacts drifted.</span>
+      - run: npx lpg emit model/domain.lpg.yaml --target ladybug --target shacl --out schema
+      - run: git diff --exit-code schema</code></pre>
+  <p>
+    The second step is the one that matters over time. It turns "someone forgot to regenerate
+    the DDL" from a thing you discover during an incident into a red build.
+  </p>
+</section>
+
+<section class="wrap">
+  <h2>Where to go next</h2>
+  <div class="next">
+    <a href="model-format.html"><div class="k">Model format</div><div class="v">What the checker is checking.</div></a>
+    <a href="targets.html"><div class="k">Targets</div><div class="v">What each <code>--target</code> produces.</div></a>
+    <a href="getting-started.html"><div class="k">Getting started</div><div class="v">The extension side of the same pipeline.</div></a>
+  </div>
+</section>
+</main>
+
+<footer class="site">
+  <div class="wrap">
+    <span>LPG Modeler — MIT licensed</span>
+    <span class="spacer"><a href="https://github.com/Volland/lpg-modeler">Source</a></span>
+    <span><a href="https://github.com/Volland/lpg-modeler/issues">Report an issue</a></span>
+    <span><a href="https://github.com/Volland/lpg-modeler/blob/main/CHANGELOG.md">Changelog</a></span>
+  </div>
+</footer>
+
+</body>
+</html>

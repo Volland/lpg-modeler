@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1040 380" width="1040" height="380" font-family="ui-sans-serif, -apple-system, Segoe UI, Inter, Helvetica, Arial, sans-serif" role="img" aria-label="Three files: the model holds semantics, a views sidecar holds diagram scope, and a layout sidecar holds coordinates keyed by stable element ids.">
+  <rect width="1040" height="380" rx="14" fill="#fcfbf9"/>
+  <text x="40" y="46" font-size="19" font-weight="700" fill="#101318">Moving a box does not dirty your diff</text>
+  <text x="40" y="70" font-size="13.5" fill="#5b6472">Semantics, diagram scope, and coordinates are three separate files, so a layout tweak never lands in a review.</text>
+
+  <g>
+    <rect x="40" y="104" width="300" height="212" rx="11" fill="#ffffff" stroke="#2f5fe0" stroke-width="1.6"/>
+    <text x="62" y="132" font-size="13.5" font-weight="700" fill="#2f5fe0">model.lpg.yaml</text>
+    <text x="62" y="151" font-size="11" fill="#5b6472">reviewed · the canonical artifact</text>
+    <rect x="62" y="164" width="256" height="132" rx="7" fill="#f7f8fa" stroke="#e6e9ee"/>
+    <g font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="10.5" fill="#3c4653">
+      <text x="76" y="184">nodes:</text>
+      <text x="89" y="200">Person:</text>
+      <text x="101" y="216">id: n_person</text>
+      <text x="101" y="232">extends: Party</text>
+      <text x="101" y="248">props:</text>
+      <text x="114" y="264">email:</text>
+      <text x="126" y="280">required: true</text>
+    </g>
+  </g>
+
+  <g>
+    <rect x="372" y="104" width="300" height="212" rx="11" fill="#ffffff" stroke="#dfe2e7" stroke-width="1.4"/>
+    <text x="394" y="132" font-size="13.5" font-weight="700" fill="#101318">model.views.yaml</text>
+    <text x="394" y="151" font-size="11" fill="#5b6472">which types each diagram shows</text>
+    <rect x="394" y="164" width="256" height="132" rx="7" fill="#f7f8fa" stroke="#e6e9ee"/>
+    <g font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="10.5" fill="#3c4653">
+      <text x="408" y="184">views:</text>
+      <text x="421" y="200">overview:</text>
+      <text x="433" y="216">include: ["*"]</text>
+      <text x="421" y="240">billing:</text>
+      <text x="433" y="256">include: ["Invoice"]</text>
+      <text x="433" y="272">expand: 1</text>
+    </g>
+  </g>
+
+  <g>
+    <rect x="704" y="104" width="296" height="212" rx="11" fill="#ffffff" stroke="#dfe2e7" stroke-width="1.4"/>
+    <text x="726" y="132" font-size="13.5" font-weight="700" fill="#101318">model.layout.json</text>
+    <text x="726" y="151" font-size="11" fill="#5b6472">coordinates, keyed by stable id</text>
+    <rect x="726" y="164" width="252" height="132" rx="7" fill="#f7f8fa" stroke="#e6e9ee"/>
+    <g font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="10.5" fill="#3c4653">
+      <text x="740" y="184">{ "overview": {</text>
+      <text x="765" y="200">"n_person":</text>
+      <text x="778" y="216">{ "x": 120, "y": 40 },</text>
+      <text x="765" y="232">"n_party":</text>
+      <text x="778" y="248">{ "x": 120, "y": 260 }</text>
+      <text x="740" y="264">} }</text>
+    </g>
+  </g>
+
+  <rect x="40" y="332" width="960" height="0" fill="none"/>
+  <text x="40" y="346" font-size="12" fill="#5b6472">Layout is keyed by the element id, never by the type name — so renaming <tspan font-family="ui-monospace, Menlo, monospace" fill="#101318">Person</tspan> moves nothing on screen, and a rename stays distinguishable from a delete-plus-add.</text>
+</svg>

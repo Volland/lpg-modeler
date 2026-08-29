@@ -4,3 +4,5 @@ out/
 *.vsix
 .lat/
 lat.md/.cache/
+.gstack/
+.omc/

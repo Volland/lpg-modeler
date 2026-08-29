@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1040 400" width="1040" height="400" font-family="ui-sans-serif, -apple-system, Segoe UI, Inter, Helvetica, Arial, sans-serif" role="img" aria-label="Gradual reification: an edge without properties becomes a plain object property, while an edge carrying properties becomes an n-ary relation class plus a shortcut property.">
+  <rect width="1040" height="400" rx="14" fill="#fcfbf9"/>
+  <defs>
+    <marker id="a4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#7a4de0"/>
+    </marker>
+    <marker id="a5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#8a94a6"/>
+    </marker>
+  </defs>
+
+  <text x="40" y="46" font-size="19" font-weight="700" fill="#101318">Reify only what needs reifying</text>
+  <text x="40" y="70" font-size="13.5" fill="#5b6472">An edge that carries no data stays a plain relation. An edge with properties becomes a class, because RDF has nowhere else to put them.</text>
+
+  <path d="M520 100 V368" stroke="#e6e9ee" stroke-width="1"/>
+
+  <!-- left: plain -->
+  <text x="40" y="126" font-size="12" font-weight="700" fill="#5b6472" letter-spacing="0.6">NO PROPERTIES</text>
+  <rect x="40" y="140" width="440" height="52" rx="8" fill="#ffffff" stroke="#dfe2e7"/>
+  <text x="60" y="164" font-family="ui-monospace, Menlo, monospace" font-size="12" fill="#101318">LIKES: { from: Person, to: Company }</text>
+  <text x="60" y="182" font-size="11" fill="#5b6472">in the model</text>
+
+  <g>
+    <ellipse cx="110" cy="266" rx="56" ry="30" fill="#ffffff" stroke="#7a4de0" stroke-width="1.5"/>
+    <text x="110" y="271" font-size="12.5" fill="#7a4de0" text-anchor="middle" font-weight="600">Person</text>
+    <ellipse cx="384" cy="266" rx="60" ry="30" fill="#ffffff" stroke="#7a4de0" stroke-width="1.5"/>
+    <text x="384" y="271" font-size="12.5" fill="#7a4de0" text-anchor="middle" font-weight="600">Company</text>
+    <path d="M168 266 H320" stroke="#7a4de0" stroke-width="1.6" marker-end="url(#a4)" fill="none"/>
+    <text x="244" y="257" font-family="ui-monospace, Menlo, monospace" font-size="11" fill="#7a4de0" text-anchor="middle">social:likes</text>
+  </g>
+  <text x="40" y="332" font-size="11.5" fill="#5b6472">One object property. Nothing invented, nothing lost.</text>
+  <text x="40" y="352" font-size="11.5" fill="#5b6472">No domain or range is asserted — that would tell a reasoner</text>
+  <text x="40" y="368" font-size="11.5" fill="#5b6472">to reclassify individuals rather than reject bad data.</text>
+
+  <!-- right: reified -->
+  <text x="560" y="126" font-size="12" font-weight="700" fill="#5b6472" letter-spacing="0.6">CARRIES PROPERTIES</text>
+  <rect x="560" y="140" width="440" height="52" rx="8" fill="#ffffff" stroke="#dfe2e7"/>
+  <text x="580" y="164" font-family="ui-monospace, Menlo, monospace" font-size="12" fill="#101318">KNOWS: { from: Person, to: Person,</text>
+  <text x="645" y="182" font-family="ui-monospace, Menlo, monospace" font-size="12" fill="#101318">props: { since: date } }</text>
+
+  <g>
+    <ellipse cx="614" cy="266" rx="50" ry="28" fill="#ffffff" stroke="#7a4de0" stroke-width="1.5"/>
+    <text x="614" y="271" font-size="12" fill="#7a4de0" text-anchor="middle" font-weight="600">Person</text>
+    <rect x="726" y="238" width="108" height="56" rx="8" fill="#f4efff" stroke="#7a4de0" stroke-width="1.6"/>
+    <text x="780" y="262" font-size="12" fill="#7a4de0" text-anchor="middle" font-weight="700">social:Knows</text>
+    <text x="780" y="280" font-size="10.5" fill="#6b5a8a" text-anchor="middle">since: date</text>
+    <ellipse cx="946" cy="266" rx="50" ry="28" fill="#ffffff" stroke="#7a4de0" stroke-width="1.5"/>
+    <text x="946" y="271" font-size="12" fill="#7a4de0" text-anchor="middle" font-weight="600">Person</text>
+
+    <path d="M726 266 H670" stroke="#7a4de0" stroke-width="1.5" marker-end="url(#a4)" fill="none"/>
+    <text x="698" y="256" font-size="9.5" fill="#7a4de0" text-anchor="middle">subject</text>
+    <path d="M834 266 H890" stroke="#7a4de0" stroke-width="1.5" marker-end="url(#a4)" fill="none"/>
+    <text x="862" y="256" font-size="9.5" fill="#7a4de0" text-anchor="middle">object</text>
+
+    <path d="M614 296 V326 H946 V296" stroke="#8a94a6" stroke-width="1.3" fill="none" marker-end="url(#a5)" stroke-dasharray="5 4"/>
+    <text x="780" y="342" font-family="ui-monospace, Menlo, monospace" font-size="11" fill="#5b6472" text-anchor="middle">social:knows — the shortcut, so queries stay short</text>
+  </g>
+  <text x="560" y="368" font-size="11.5" fill="#5b6472">The SHACL shape targets the relation class, so <tspan font-family="ui-monospace, Menlo, monospace" fill="#101318">since</tspan> is validated like any other property.</text>
+</svg>

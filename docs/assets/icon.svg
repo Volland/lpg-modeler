@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" role="img" aria-label="LPG Modeler icon: three linked graph nodes over a schema card.">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#2f5fe0"/>
+      <stop offset="1" stop-color="#5b3ba8"/>
+    </linearGradient>
+  </defs>
+  <rect width="256" height="256" rx="56" fill="url(#bg)"/>
+  <!-- schema card -->
+  <rect x="46" y="58" width="96" height="140" rx="12" fill="#ffffff" opacity="0.16"/>
+  <g fill="#ffffff" opacity="0.85">
+    <rect x="62" y="80" width="64" height="9" rx="4.5"/>
+    <rect x="62" y="102" width="48" height="7" rx="3.5" opacity="0.72"/>
+    <rect x="62" y="120" width="56" height="7" rx="3.5" opacity="0.72"/>
+    <rect x="62" y="138" width="42" height="7" rx="3.5" opacity="0.72"/>
+    <rect x="62" y="156" width="52" height="7" rx="3.5" opacity="0.72"/>
+    <rect x="62" y="174" width="36" height="7" rx="3.5" opacity="0.72"/>
+  </g>
+  <!-- graph -->
+  <g stroke="#ffffff" stroke-width="7" stroke-linecap="round" fill="none">
+    <path d="M120 108 H176"/>
+    <path d="M176 108 L176 172"/>
+    <path d="M176 172 L124 152"/>
+  </g>
+  <circle cx="120" cy="108" r="17" fill="#ffffff"/>
+  <circle cx="190" cy="98" r="24" fill="#ffffff"/>
+  <circle cx="190" cy="98" r="10" fill="#2f5fe0"/>
+  <circle cx="182" cy="180" r="21" fill="#ffffff"/>
+  <circle cx="182" cy="180" r="8.5" fill="#5b3ba8"/>
+</svg>

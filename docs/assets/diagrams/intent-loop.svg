@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1040 380" width="1040" height="380" font-family="ui-sans-serif, -apple-system, Segoe UI, Inter, Helvetica, Arial, sans-serif" role="img" aria-label="Canvas round trip: the canvas posts an intent, the extension host splices the YAML file, and a fresh projection returns to the canvas.">
+  <rect width="1040" height="380" rx="14" fill="#fcfbf9"/>
+  <defs>
+    <marker id="a3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#2f5fe0"/>
+    </marker>
+  </defs>
+
+  <text x="40" y="46" font-size="19" font-weight="700" fill="#101318">The canvas holds no state of its own</text>
+  <text x="40" y="70" font-size="13.5" fill="#5b6472">Nothing on screen can drift from the file, because the diagram is always redrawn from it.</text>
+
+  <!-- canvas -->
+  <rect x="40" y="108" width="252" height="140" rx="11" fill="#ffffff" stroke="#2f5fe0" stroke-width="1.6"/>
+  <text x="62" y="136" font-size="14" font-weight="700" fill="#2f5fe0">Canvas</text>
+  <text x="62" y="157" font-size="11.5" fill="#5b6472">ERD boxes, one row per property.</text>
+  <text x="62" y="174" font-size="11.5" fill="#5b6472">Drag a handle to draw an edge,</text>
+  <text x="62" y="191" font-size="11.5" fill="#5b6472">rename in place, add a property.</text>
+  <text x="62" y="216" font-size="11.5" fill="#5b6472">Renders what it is given.</text>
+  <text x="62" y="233" font-size="11.5" fill="#5b6472">Decides nothing.</text>
+
+  <!-- host -->
+  <rect x="394" y="108" width="252" height="140" rx="11" fill="#ffffff" stroke="#dfe2e7" stroke-width="1.4"/>
+  <text x="416" y="136" font-size="14" font-weight="700" fill="#101318">Extension host</text>
+  <text x="416" y="157" font-size="11.5" fill="#5b6472">Turns the intent into targeted</text>
+  <text x="416" y="174" font-size="11.5" fill="#5b6472">text splices computed from the</text>
+  <text x="416" y="191" font-size="11.5" fill="#5b6472">YAML syntax tree.</text>
+  <text x="416" y="216" font-size="11.5" fill="#5b6472">Applied as a WorkspaceEdit,</text>
+  <text x="416" y="233" font-size="11.5" fill="#5b6472">so VS Code owns undo.</text>
+
+  <!-- file -->
+  <rect x="748" y="108" width="252" height="140" rx="11" fill="#ffffff" stroke="#2f5fe0" stroke-width="1.6"/>
+  <text x="770" y="136" font-size="14" font-weight="700" fill="#2f5fe0">model.lpg.yaml</text>
+  <text x="770" y="157" font-size="11.5" fill="#5b6472">The source of truth.</text>
+  <text x="770" y="182" font-size="11.5" fill="#5b6472">Renaming a type changes exactly</text>
+  <text x="770" y="199" font-size="11.5" fill="#5b6472">the lines that name it — never</text>
+  <text x="770" y="216" font-size="11.5" fill="#5b6472">a whole-file reformat.</text>
+  <text x="770" y="240" font-size="11.5" fill="#5b6472">Your diff stays reviewable.</text>
+
+  <g stroke="#2f5fe0" stroke-width="1.6" fill="none" marker-end="url(#a3)">
+    <path d="M296 168 H388"/>
+    <path d="M650 168 H742"/>
+  </g>
+  <text x="342" y="160" font-size="11" fill="#2f5fe0" text-anchor="middle" font-weight="600">intent</text>
+  <text x="696" y="160" font-size="11" fill="#2f5fe0" text-anchor="middle" font-weight="600">splice</text>
+
+  <path d="M874 256 V296 H166 V254" stroke="#2f5fe0" stroke-width="1.6" fill="none" marker-end="url(#a3)" stroke-dasharray="6 4"/>
+  <text x="520" y="288" font-size="11.5" fill="#2f5fe0" text-anchor="middle" font-weight="600">re-resolve, re-validate, fresh projection</text>
+
+  <rect x="40" y="312" width="960" height="48" rx="9" fill="#fdf6ec" stroke="#eccfa4"/>
+  <text x="62" y="341" font-size="12" fill="#7a6547">Typing in the YAML redraws the canvas the same way — there is only one direction of truth, and it starts at the file.</text>
+</svg>

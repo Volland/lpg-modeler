@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Targets — LPG Modeler</title>
+<meta name="description" content="What each LPG Modeler generator emits: LadybugDB DDL, Neo4j constraints, SHACL shapes and an OWL ontology, and exactly which constraints each target cannot enforce.">
+<link rel="icon" href="assets/icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;650&family=Instrument+Serif&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/site.css">
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="index.html"><img src="assets/icon.png" alt=""> LPG Modeler</a>
+    <nav class="links">
+      <a href="index.html">Overview</a>
+      <a href="getting-started.html">Getting started</a>
+      <a href="model-format.html">Model format</a>
+      <a href="targets.html">Targets</a>
+      <a href="cli.html">CLI</a>
+      <a href="architecture.html">Architecture</a>
+      <a href="https://github.com/Volland/lpg-modeler">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+<div class="wrap hero">
+  <span class="eyebrow">Reference</span>
+  <h1>Four targets, and what each one refuses to promise</h1>
+  <p class="lede">
+    Every generator publishes a typed capability set. The compiler works out what your model
+    requires, compares the two, and reports every gap — as an editor diagnostic and as a
+    comment at the lossy site in the artifact.
+  </p>
+</div>
+
+<div class="wrap">
+  <figure>
+    <img src="assets/diagrams/capabilities.svg" alt="A matrix of five model features against four targets, showing which are enforced natively, which are downgraded, and which are transformed.">
+    <figcaption>Silent best-effort was rejected deliberately: a <code>required</code> constraint that quietly vanishes is a data-integrity bug that surfaces in production, long after the model stopped being read.</figcaption>
+  </figure>
+</div>
+
+<section class="wrap narrow">
+
+  <h2>ladybug</h2>
+  <p>
+    LadybugDB — formerly Kuzu — is an embedded Cypher property graph database with a mandatory
+    closed schema: <code>CREATE NODE TABLE</code> and <code>CREATE REL TABLE</code>, typed
+    columns, a required primary key, and declared endpoint pairs. Output extension:
+    <code>.cypher</code>.
+  </p>
+  <h3>How the hierarchy lands</h3>
+  <p>
+    An abstract hierarchy is flattened to one node table per concrete leaf type, with inherited
+    columns copied down. The abstract type itself gets no table. The cost is that an edge
+    declared on an abstract endpoint expands to a cross-product of endpoint pairs, and adding a
+    subtype becomes a schema migration.
+  </p>
+  <h3>What it will not enforce</h3>
+  <p>
+    Measured against LadybugDB 0.19.1, the engine enforces less than the flattening suggests:
+  </p>
+  <ul class="plain">
+    <li><code>NOT NULL</code> is not accepted by the parser, and a null non-key value inserts successfully — so a required property that is not the key is unenforceable, and is reported as a downgrade.</li>
+    <li>A composite <code>PRIMARY KEY</code> does not parse either, so a composite key is emitted as a synthesized concatenated column.</li>
+    <li>Only primary key uniqueness and primary key presence are actually enforced.</li>
+  </ul>
+  <div class="note">
+    <p><strong>These are measured, not assumed.</strong> The Ladybug generator executes its own
+    output against an in-process LadybugDB instance and then asserts that the declared
+    constraints really do reject invalid data. That is how the <code>--</code> versus
+    <code>//</code> comment syntax was discovered: the SQL-style form is rejected by the parser,
+    which a golden file alone would never have caught.</p>
+  </div>
+
+  <hr class="rule">
+
+  <h2>neo4j</h2>
+  <p>
+    Neo4j is schema-optional: there is no table DDL, only constraints and indexes. Multi-label
+    nodes are native, so an abstract hierarchy flattens to labels rather than to separate
+    tables — a <code>Person</code> node carries <code>:Person :Party</code>. Output extension:
+    <code>.cypher</code>.
+  </p>
+  <h3>Edition awareness</h3>
+  <p>
+    Existence and node key constraints require Enterprise. Under a Community configuration they
+    are reported as downgrades and emitted as comments rather than silently dropped — a node key
+    becomes a plain uniqueness constraint, which does not enforce that the key is present.
+  </p>
+<pre><code><span class="c-com">// Setting: lpg.targets.neo4j.edition</span>
+<span class="c-warn">// DOWNGRADE: NODE KEY requires Enterprise.
+// Uniqueness only; presence unenforced.</span>
+CREATE CONSTRAINT person_key_unique IF NOT EXISTS
+  FOR (n:Person) REQUIRE (n.id) IS UNIQUE;</code></pre>
+  <p>Set the editions setting to <code>enterprise</code>, or pass <code>--edition enterprise</code> to the CLI, and the real constraints are emitted instead.</p>
+
+  <hr class="rule">
+
+  <h2>shacl</h2>
+  <p>
+    SHACL is the primary constraint artifact for RDF, because it is closed-world validation and
+    so means what a property graph schema means. Required, unique, cardinality and datatype all
+    translate faithfully, and a generated shape genuinely rejects invalid data. Output
+    extension: <code>.ttl</code>.
+  </p>
+  <p>
+    The one gap: uniqueness across all instances needs a SPARQL-based constraint, which core
+    SHACL cannot express. It is reported as a downgrade with a comment on the affected property
+    shape.
+  </p>
+
+  <hr class="rule">
+
+  <h2>owl</h2>
+  <p>
+    The ontology is emitted alongside SHACL, not instead of it, because a property graph schema
+    and an OWL ontology do not mean the same thing. A schema is a closed-world constraint; OWL
+    is open-world inference. Output extension: <code>.ttl</code>.
+  </p>
+  <h3>The safe assertional subset</h3>
+  <p>
+    Only classes, <code>subClassOf</code>, <code>hasKey</code>, disjointness and inverse
+    properties are emitted. Domain, range and cardinality restrictions are deliberately omitted.
+  </p>
+  <div class="note">
+    <p><strong>Why omitting them is the careful choice.</strong> Emitting
+    <code>rdfs:domain</code> for an edge type does not constrain anything — it instructs a
+    reasoner that anything carrying that relation belongs to the domain class, silently
+    reclassifying unrelated individuals. Mapping constraints naively into OWL does not lose
+    information so much as invert its meaning. The constraints live in the SHACL artifact, and
+    every omission here is reported with a diagnostic pointing at it.</p>
+  </div>
+
+  <h3>Gradual reification</h3>
+  <p>
+    An edge with no properties becomes a plain object property. An edge that carries properties
+    becomes an n-ary relation class plus a shortcut property, and its SHACL shape targets that
+    class.
+  </p>
+</section>
+
+<div class="wrap">
+  <figure>
+    <img src="assets/diagrams/reification.svg" alt="An edge with no properties becomes a plain object property; an edge carrying properties becomes an n-ary relation class plus a shortcut property.">
+    <figcaption>Reifying only what needs it keeps the output inside OWL DL, so reasoners keep working. RDF-star was rejected as the uniform representation because OWL DL reasoners do not handle quoted triples and SHACL cannot constrain them.</figcaption>
+  </figure>
+</div>
+
+<section class="wrap narrow">
+  <h2>Targets that are deliberately absent</h2>
+  <p>
+    Cypher compatibility is a marketing category rather than a dialect: Ladybug, Neo4j, Memgraph
+    and Apache AGE disagree on nearly everything schema-related, so a generic Cypher generator
+    would have no reference implementation to test against. Only targets verifiable against a
+    real engine ship as first-class code.
+  </p>
+  <p>
+    For a dialect that cannot be tested here, the intended path is a template fed by the
+    resolved model rather than a hand-written generator — so an additional target is a piece of
+    configuration rather than a feature request. That, along with migrations and the lockfile
+    diff, is not in this release.
+  </p>
+
+  <h2>Adding a target</h2>
+  <p>
+    Generators sit behind an internal registry: a target is one file plus one entry. The public
+    plugin API is deliberately deferred until three real generators have shown where the seam
+    actually falls — the capability set on this page is what that API will eventually expose.
+  </p>
+<pre><code><span class="c-key">interface</span> Capabilities {
+  target: string
+  multiLabel: boolean
+  inheritance: 'leaf-tables' | 'labels' | 'subclass'
+  requiredConstraint: 'enforced' | 'key-only' | 'edition-dependent' | 'unsupported'
+  uniqueConstraint:   'enforced' | 'key-only' | 'edition-dependent' | 'unsupported'
+  compositeKey: 'native' | 'synthesized' | 'unsupported'
+  edgeProps: 'native' | 'reified'
+  nestedEdges: boolean
+}</code></pre>
+</section>
+
+<section class="wrap">
+  <h2>Where to go next</h2>
+  <div class="next">
+    <a href="model-format.html"><div class="k">Model format</div><div class="v">The concepts these generators consume.</div></a>
+    <a href="cli.html"><div class="k">CLI</div><div class="v">Generate every target in one command.</div></a>
+    <a href="architecture.html"><div class="k">Architecture</div><div class="v">How generators are tested against a real engine.</div></a>
+  </div>
+</section>
+</main>
+
+<footer class="site">
+  <div class="wrap">
+    <span>LPG Modeler — MIT licensed</span>
+    <span class="spacer"><a href="https://github.com/Volland/lpg-modeler">Source</a></span>
+    <span><a href="https://github.com/Volland/lpg-modeler/issues">Report an issue</a></span>
+    <span><a href="https://github.com/Volland/lpg-modeler/blob/main/CHANGELOG.md">Changelog</a></span>
+  </div>
+</footer>
+
+</body>
+</html>

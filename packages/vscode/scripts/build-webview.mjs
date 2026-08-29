@@ -1,5 +1,5 @@
 import { build } from 'esbuild'
-import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -26,4 +26,19 @@ const reactFlowCss = readFileSync(
 const ours = readFileSync(join(root, 'src', 'webview', 'styles.css'), 'utf8')
 writeFileSync(join(root, 'out', 'webview.css'), `${reactFlowCss}\n${ours}`)
 
-console.log('webview bundled')
+// The extension host entry is bundled over the tsc output, inlining @lpg/core. A published
+// .vsix carries no node_modules, so a bare require('@lpg/core') would not resolve there.
+// 'vscode' stays external: the editor provides it at runtime.
+await build({
+  entryPoints: [join(root, 'src', 'extension.ts')],
+  outfile: join(root, 'out', 'extension.js'),
+  bundle: true,
+  format: 'cjs',
+  platform: 'node',
+  target: 'node20',
+  external: ['vscode'],
+  minify: true,
+  sourcemap: true,
+})
+
+console.log('webview and extension bundled')

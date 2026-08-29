@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1040 400" width="1040" height="400" font-family="ui-sans-serif, -apple-system, Segoe UI, Inter, Helvetica, Arial, sans-serif" role="img" aria-label="Capability matrix showing which of four targets enforces multi-label nodes, required properties, unique properties, composite keys and edge properties.">
+  <rect width="1040" height="400" rx="14" fill="#fcfbf9"/>
+  <text x="40" y="46" font-size="19" font-weight="700" fill="#101318">Every target says what it cannot do</text>
+  <text x="40" y="70" font-size="13.5" fill="#5b6472">A constraint that quietly disappears is a data-integrity bug you find in production. Here it is a warning before you ship.</text>
+
+  <g font-size="12">
+    <text x="40" y="118" font-size="11.5" font-weight="700" fill="#5b6472" letter-spacing="0.5">WHAT THE MODEL ASKS FOR</text>
+    <text x="424" y="118" font-size="11.5" font-weight="700" fill="#5b6472" letter-spacing="0.5" text-anchor="middle">LADYBUG</text>
+    <text x="576" y="118" font-size="11.5" font-weight="700" fill="#5b6472" letter-spacing="0.5" text-anchor="middle">NEO4J</text>
+    <text x="728" y="118" font-size="11.5" font-weight="700" fill="#5b6472" letter-spacing="0.5" text-anchor="middle">SHACL</text>
+    <text x="880" y="118" font-size="11.5" font-weight="700" fill="#5b6472" letter-spacing="0.5" text-anchor="middle">OWL</text>
+  </g>
+  <path d="M40 130 H1000" stroke="#dfe2e7"/>
+
+  <g font-size="12.5" fill="#101318">
+    <text x="40" y="164">Multi-label nodes</text>
+    <text x="40" y="212">Required property</text>
+    <text x="40" y="260">Unique, not the key</text>
+    <text x="40" y="308">Composite key</text>
+    <text x="40" y="356">Edge properties</text>
+  </g>
+  <g stroke="#eef0f3">
+    <path d="M40 180 H1000"/><path d="M40 228 H1000"/><path d="M40 276 H1000"/><path d="M40 324 H1000"/>
+  </g>
+
+  <!-- pills: green enforced, amber downgraded, violet transformed -->
+  <g font-size="11" text-anchor="middle">
+    <!-- row 1: multi-label -->
+    <rect x="366" y="148" width="116" height="24" rx="12" fill="#fdf6ec" stroke="#eccfa4"/><text x="424" y="164" fill="#8a5a13">flattened</text>
+    <rect x="518" y="148" width="116" height="24" rx="12" fill="#eaf6ee" stroke="#b6dcc3"/><text x="576" y="164" fill="#1d6b3a">native</text>
+    <rect x="670" y="148" width="116" height="24" rx="12" fill="#eaf6ee" stroke="#b6dcc3"/><text x="728" y="164" fill="#1d6b3a">native</text>
+    <rect x="822" y="148" width="116" height="24" rx="12" fill="#eaf6ee" stroke="#b6dcc3"/><text x="880" y="164" fill="#1d6b3a">native</text>
+
+    <!-- row 2: required -->
+    <rect x="366" y="196" width="116" height="24" rx="12" fill="#fdf6ec" stroke="#eccfa4"/><text x="424" y="212" fill="#8a5a13">key only</text>
+    <rect x="518" y="196" width="116" height="24" rx="12" fill="#fdf6ec" stroke="#eccfa4"/><text x="576" y="212" fill="#8a5a13">Enterprise</text>
+    <rect x="670" y="196" width="116" height="24" rx="12" fill="#eaf6ee" stroke="#b6dcc3"/><text x="728" y="212" fill="#1d6b3a">enforced</text>
+    <rect x="822" y="196" width="116" height="24" rx="12" fill="#f4f6fa" stroke="#dfe2e7"/><text x="880" y="212" fill="#5b6472">see SHACL</text>
+
+    <!-- row 3: unique -->
+    <rect x="366" y="244" width="116" height="24" rx="12" fill="#fdf6ec" stroke="#eccfa4"/><text x="424" y="260" fill="#8a5a13">key only</text>
+    <rect x="518" y="244" width="116" height="24" rx="12" fill="#eaf6ee" stroke="#b6dcc3"/><text x="576" y="260" fill="#1d6b3a">enforced</text>
+    <rect x="670" y="244" width="116" height="24" rx="12" fill="#fdf6ec" stroke="#eccfa4"/><text x="728" y="260" fill="#8a5a13">needs SPARQL</text>
+    <rect x="822" y="244" width="116" height="24" rx="12" fill="#f4f6fa" stroke="#dfe2e7"/><text x="880" y="260" fill="#5b6472">see SHACL</text>
+
+    <!-- row 4: composite key -->
+    <rect x="366" y="292" width="116" height="24" rx="12" fill="#fdf6ec" stroke="#eccfa4"/><text x="424" y="308" fill="#8a5a13">synthesized</text>
+    <rect x="518" y="292" width="116" height="24" rx="12" fill="#eaf6ee" stroke="#b6dcc3"/><text x="576" y="308" fill="#1d6b3a">native</text>
+    <rect x="670" y="292" width="116" height="24" rx="12" fill="#eaf6ee" stroke="#b6dcc3"/><text x="728" y="308" fill="#1d6b3a">native</text>
+    <rect x="822" y="292" width="116" height="24" rx="12" fill="#eaf6ee" stroke="#b6dcc3"/><text x="880" y="308" fill="#1d6b3a">owl:hasKey</text>
+
+    <!-- row 5: edge props -->
+    <rect x="366" y="340" width="116" height="24" rx="12" fill="#eaf6ee" stroke="#b6dcc3"/><text x="424" y="356" fill="#1d6b3a">native</text>
+    <rect x="518" y="340" width="116" height="24" rx="12" fill="#eaf6ee" stroke="#b6dcc3"/><text x="576" y="356" fill="#1d6b3a">native</text>
+    <rect x="670" y="340" width="116" height="24" rx="12" fill="#f4efff" stroke="#d3c2f0"/><text x="728" y="356" fill="#5b3ba8">reified</text>
+    <rect x="822" y="340" width="116" height="24" rx="12" fill="#f4efff" stroke="#d3c2f0"/><text x="880" y="356" fill="#5b3ba8">reified</text>
+  </g>
+</svg>
