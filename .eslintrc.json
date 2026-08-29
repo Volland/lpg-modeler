@@ -1,0 +1,19 @@
+{
+  "root": true,
+  "parser": "@typescript-eslint/parser",
+  "plugins": ["@typescript-eslint"],
+  "rules": {},
+  "overrides": [
+    {
+      "files": ["packages/core/**/*.ts"],
+      "rules": {
+        "no-restricted-imports": ["error", {
+          "paths": [{
+            "name": "vscode",
+            "message": "core must never import vscode. See lat.md/architecture#Package Boundary."
+          }]
+        }]
+      }
+    }
+  ]
+}

@@ -1,0 +1,65 @@
+:root {
+  --line: var(--vscode-panel-border, #444);
+  --fg: var(--vscode-foreground, #ccc);
+  --bg: var(--vscode-editor-background, #1e1e1e);
+  --accent: var(--vscode-focusBorder, #007acc);
+  --muted: var(--vscode-descriptionForeground, #999);
+}
+
+body { margin: 0; font-family: var(--vscode-font-family, sans-serif); color: var(--fg); background: var(--bg); }
+.app { display: flex; flex-direction: column; height: 100vh; }
+.empty { padding: 24px; color: var(--muted); }
+
+.toolbar {
+  display: flex; align-items: center; gap: 10px;
+  padding: 6px 10px; border-bottom: 1px solid var(--line); font-size: 12px;
+}
+.toolbar .spacer { flex: 1; }
+.toolbar button, .toolbar select {
+  background: var(--vscode-button-secondaryBackground, #3a3d41);
+  color: var(--vscode-button-secondaryForeground, #ccc);
+  border: 1px solid var(--line); border-radius: 3px; padding: 3px 8px; cursor: pointer; font-size: 12px;
+}
+
+.banner { padding: 5px 10px; font-size: 12px; border-bottom: 1px solid var(--line); }
+.banner.error { background: var(--vscode-inputValidation-errorBackground, #5a1d1d); }
+.banner.warn  { background: var(--vscode-inputValidation-warningBackground, #5a4d1d); }
+
+.canvas { flex: 1; min-height: 0; }
+
+/* --- ERD node --- */
+.erd {
+  width: 240px; background: var(--vscode-editorWidget-background, #252526);
+  border: 1px solid var(--line); border-radius: 4px; font-size: 11px; overflow: hidden;
+}
+.erd-abstract { border-style: dashed; opacity: 0.9; }
+.erd-title {
+  display: flex; align-items: center; gap: 6px;
+  padding: 5px 7px; border-bottom: 1px solid var(--line);
+  background: var(--vscode-titleBar-activeBackground, #2d2d2d); font-weight: 600;
+}
+.erd-name { cursor: text; }
+.erd-badge { font-size: 9px; text-transform: uppercase; color: var(--muted); border: 1px solid var(--line); border-radius: 2px; padding: 0 3px; }
+.erd-extends { font-size: 10px; color: var(--muted); font-weight: 400; }
+.erd-rows { display: flex; flex-direction: column; }
+.erd-row { display: flex; align-items: center; gap: 5px; padding: 2px 7px; height: 20px; }
+.erd-row:hover { background: var(--vscode-list-hoverBackground, #2a2d2e); }
+.erd-inherited { opacity: 0.65; font-style: italic; }
+.erd-prop { flex: 1; }
+.erd-type { color: var(--muted); font-size: 10px; }
+.erd-flag { color: var(--accent); font-weight: 700; }
+.erd-from { color: var(--muted); font-size: 9px; }
+.erd-empty { padding: 4px 7px; color: var(--muted); font-style: italic; }
+.erd-key { background: none; border: none; cursor: pointer; padding: 0; font-size: 10px; }
+.erd-key.on { filter: none; }
+.erd-x { background: none; border: none; color: var(--muted); cursor: pointer; padding: 0 2px; }
+.erd-x:hover { color: var(--vscode-errorForeground, #f48771); }
+.erd-add { width: 100%; background: none; border: none; border-top: 1px solid var(--line); color: var(--muted); cursor: pointer; padding: 3px; font-size: 10px; }
+.erd-add:hover { color: var(--fg); }
+.erd-handle { width: 7px; height: 7px; background: var(--accent); }
+
+/* --- modal --- */
+.modal { position: fixed; inset: 0; background: rgba(0,0,0,0.45); display: flex; align-items: center; justify-content: center; z-index: 20; }
+.modal-body { background: var(--vscode-editorWidget-background, #252526); border: 1px solid var(--line); border-radius: 4px; padding: 14px; min-width: 280px; font-size: 12px; }
+.modal-body input, .modal-body select { background: var(--vscode-input-background, #3c3c3c); color: var(--vscode-input-foreground, #ccc); border: 1px solid var(--line); border-radius: 3px; padding: 4px 6px; margin-right: 6px; }
+.form { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }

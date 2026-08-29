@@ -74,15 +74,45 @@ context: |
 
   ## v1 scope
 
-  IN:  parse, IR, validate, emit; ladybug (live-tested) and neo4j targets; CLI
-       `emit` and `check`; read-only canvas with ELK auto-layout; keys, element ids,
-       imports, namespaces.
-  OUT: migrations and the lockfile diff, SHACL and OWL targets, editable views and
-       the layout sidecar, bidirectional canvas editing, memgraph, template targets.
+  Shipped by change `add-visual-lpg-modeler` (archived 2026-08-29). That change
+  amended the roadmap only; locked decisions 1-14 were not altered.
+
+  IN:  parse, IR, validate, emit; ladybug (live-tested), neo4j, shacl and owl
+       targets; CLI `check`, `emit`, `ids`, `targets`; canvas as the authoring
+       surface with ELK auto-layout; named views and the layout sidecar; keys,
+       element ids, imports, namespaces.
+  OUT: migrations and the lockfile diff, memgraph, template targets.
+
+  Visual authoring, the layout sidecar, editable views, and the RDF targets moved
+  from OUT to IN: shipping a compiler first would have left the tool unusable for
+  its stated purpose until a second release.
 
   Deferred is not cancelled - every deferred item is already accounted for in
-  `lat.md/` and must stay reachable from the design. The metamodel is the least
-  reversible decision in the project; validating it against executing DDL comes first.
+  `lat.md/` and must stay reachable from the design. Nothing may assume a lockfile
+  exists, but the IR serializer orders keys stably so one can be added later.
+
+  ## Measured target behaviour - do not re-assert from memory
+
+  Verified against LadybugDB 0.19.1 while implementing the Ladybug emitter:
+
+  - `NOT NULL` is not accepted by the parser, and a null non-key value inserts
+    successfully. A required property that is not the key is unenforceable and must
+    be reported as a downgrade. Do not propose emitting `NOT NULL`.
+  - A composite `PRIMARY KEY(a, b)` does not parse. A composite key must be emitted
+    as a synthesized concatenated column; this is mandatory, not a fallback.
+  - Only primary key uniqueness and primary key presence are enforced.
+  - Comments in generated DDL use `//`. The SQL-style `--` is rejected.
+
+  A golden file alone would have frozen the invalid `--` form, which is why the
+  Ladybug target executes its DDL in-process rather than only snapshotting it.
+
+  ## Editing the model file
+
+  Canvas edits are targeted text splices computed from the YAML syntax tree, never a
+  re-serialization. `Document.toString()` normalizes flow-collection padding across
+  the whole file, so re-serializing turns a one-property change into a whole-file
+  diff. A block's extent is found by indentation, because a YAML node's own range can
+  run past its block into whatever follows.
 
 rules:
   proposal:

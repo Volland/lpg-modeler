@@ -1,0 +1,30 @@
+namespace:
+  prefix: broken
+  iri: https://example.org/vocab/broken#
+
+nodes:
+  Good:
+    id: n_good
+    key: [id]
+    props:
+      id: { id: p_gid, type: string }
+  AlsoGood:
+    id: n_ag
+    key: [id]
+    props:
+      id: { id: p_agid, type: string }
+  Orphan:
+    id: n_orph
+    extends: DoesNotExist
+    key: [id]
+    props:
+      id: { id: p_oid, type: string }
+  NoKey:
+    id: n_nokey
+    props:
+      whatever: { id: p_w, type: string }
+  BadKey:
+    id: n_badkey
+    key: [missing]
+    props:
+      present: { id: p_pres, type: string }

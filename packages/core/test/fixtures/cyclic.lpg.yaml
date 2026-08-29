@@ -1,0 +1,15 @@
+namespace:
+  prefix: cyc
+  iri: https://example.org/vocab/cyc#
+
+nodes:
+  A:
+    id: n_a
+    extends: B
+    key: [id]
+    props: { id: { id: p_ai, type: string } }
+  B:
+    id: n_b
+    extends: A
+    key: [id]
+    props: { id: { id: p_bi, type: string } }

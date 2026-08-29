@@ -1,0 +1,11 @@
+namespace:
+  prefix: party
+  iri: https://example.org/vocab/party#
+
+nodes:
+  Party:
+    id: n_cparty
+    abstract: true
+    key: [id]
+    props:
+      id: { id: p_cpid, type: string, required: true }

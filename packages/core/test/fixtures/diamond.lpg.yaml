@@ -1,0 +1,16 @@
+# Imports the same vocabulary through two different paths. Identity is the namespace
+# IRI, not the path, so this must resolve to one Party rather than a conflict.
+namespace:
+  prefix: diamond
+  iri: https://example.org/vocab/diamond#
+
+imports:
+  - { path: ./common/party.lpg.yaml, as: a }
+  - { path: ./vendor/party.lpg.yaml, as: b }
+
+nodes:
+  Customer:
+    id: n_cust
+    extends: a:Party
+    props:
+      tier: { id: p_tier, type: string }

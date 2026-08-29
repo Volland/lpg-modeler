@@ -1,0 +1,14 @@
+{
+  "name": "@lpg/cli",
+  "version": "0.1.0",
+  "type": "commonjs",
+  "bin": {
+    "lpg": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@lpg/core": "*"
+  }
+}

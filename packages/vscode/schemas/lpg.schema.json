@@ -1,0 +1,90 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://lpg-modeler.dev/schemas/lpg.schema.json",
+  "title": "LPG model",
+  "type": "object",
+  "required": ["namespace"],
+  "additionalProperties": false,
+  "properties": {
+    "namespace": {
+      "type": "object",
+      "description": "Prefix and base IRI forming the global identity of every type this model declares.",
+      "required": ["prefix", "iri"],
+      "additionalProperties": false,
+      "properties": {
+        "prefix": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_-]*$" },
+        "iri": { "type": "string", "format": "uri" }
+      }
+    },
+    "imports": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["path", "as"],
+        "additionalProperties": false,
+        "properties": {
+          "path": { "type": "string", "description": "Path to another model file, relative to this one." },
+          "as": { "type": "string", "description": "Local alias. Bindings are local; identity is the IRI." }
+        }
+      }
+    },
+    "mixins": { "type": "object", "additionalProperties": { "$ref": "#/definitions/mixin" } },
+    "nodes": { "type": "object", "additionalProperties": { "$ref": "#/definitions/node" } },
+    "edges": { "type": "object", "additionalProperties": { "$ref": "#/definitions/edge" } }
+  },
+  "definitions": {
+    "id": {
+      "type": "string",
+      "pattern": "^[nepm]_[a-z0-9]+$",
+      "description": "Stable element id. Assigned by the tool; never edit or copy it."
+    },
+    "property": {
+      "type": "object",
+      "required": ["type"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/definitions/id" },
+        "type": { "enum": ["string", "int", "float", "boolean", "date", "datetime", "uuid", "json"] },
+        "required": { "type": "boolean", "default": false },
+        "unique": { "type": "boolean", "default": false }
+      }
+    },
+    "props": { "type": "object", "additionalProperties": { "$ref": "#/definitions/property" } },
+    "mixin": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/definitions/id" },
+        "props": { "$ref": "#/definitions/props" }
+      }
+    },
+    "node": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/definitions/id" },
+        "abstract": { "type": "boolean", "default": false },
+        "extends": { "type": "string", "description": "Abstract parent, optionally alias-qualified." },
+        "mixins": { "type": "array", "items": { "type": "string" } },
+        "key": {
+          "type": "array", "items": { "type": "string" },
+          "description": "Property names forming this type's key. Inherited when omitted."
+        },
+        "previousIri": { "type": "string", "description": "Set on rename so ontology consumers keep resolving." },
+        "props": { "$ref": "#/definitions/props" }
+      }
+    },
+    "edge": {
+      "type": "object",
+      "required": ["from", "to"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/definitions/id" },
+        "from": { "type": "string" },
+        "to": { "type": "string" },
+        "previousIri": { "type": "string" },
+        "props": { "$ref": "#/definitions/props" }
+      }
+    }
+  }
+}

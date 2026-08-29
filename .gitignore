@@ -1,2 +1,6 @@
-.claude
-.mcp.json
+node_modules/
+dist/
+out/
+*.vsix
+.lat/
+lat.md/.cache/

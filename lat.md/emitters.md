@@ -14,7 +14,11 @@ Three lossiness cases exist before a line of emitter code is written: Ladybug ha
 
 LadybugDB, formerly Kuzu, is an embedded Cypher property graph database with a mandatory closed schema: `CREATE NODE TABLE` and `CREATE REL TABLE` with typed columns, a required primary key, and declared endpoint pairs.
 
-An abstract hierarchy is flattened to one node table per concrete leaf type, with inherited columns copied down. This plays to the engine's strength of typed non-null columns and real constraint enforcement. The cost is that an edge declared on an abstract endpoint expands to a cross-product of endpoint pairs, and adding a subtype becomes a schema migration.
+An abstract hierarchy is flattened to one node table per concrete leaf type, with inherited columns copied down. The cost is that an edge declared on an abstract endpoint expands to a cross-product of endpoint pairs, and adding a subtype becomes a schema migration.
+
+Measured against LadybugDB 0.19.1, the engine enforces less than the flattening suggests. `NOT NULL` is not accepted by the parser and a null non-key value inserts successfully, so a required property that is not the key is unenforceable and is reported as a downgrade. A composite `PRIMARY KEY` does not parse either, so a composite key must be emitted as a synthesized column. Only primary key uniqueness and primary key presence are actually enforced.
+
+Comments in generated DDL use `//`. The SQL-style `--` is rejected by the parser, which the execution test caught and a golden file alone would not have.
 
 The alternative of a single root table with a discriminator column is the idiom used by the multipartite pattern in the author's own work, and remains a reasonable per-model override, but it cannot enforce a property that is required on only one subtype.
 

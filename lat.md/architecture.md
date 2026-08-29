@@ -28,9 +28,21 @@ Model composition is a metamodel feature and cannot be retrofitted once models e
 
 ## Editing Surface
 
-The canvas is a companion webview opened beside the YAML editor, in the manner of Markdown preview. The text editor stays primary, which preserves the schema-driven completion that motivated choosing YAML.
+The canvas is a companion webview opened beside the YAML editor, in the manner of Markdown preview. It is the authoring surface: a user creates node types, edge types, and properties without opening the file, which remains canonical and reviewable.
 
-Registering the canvas as a `CustomTextEditorProvider` was rejected: it would become the default editor for model files and hide the YAML, forfeiting that tooling. Canvas edits apply as surgical `WorkspaceEdit`s through the `yaml` package's Document API so comments, key order, and formatting survive a round trip.
+Registering the canvas as a `CustomTextEditorProvider` was rejected: it would become the default editor for model files and hide the YAML, forfeiting the schema-driven completion that motivated choosing YAML. Canvas edits reach the file as `WorkspaceEdit`s, so VS Code owns undo and dirty state.
+
+### Targeted edits
+
+Every canvas action becomes a set of targeted text splices computed from the YAML syntax tree, never a re-serialization of the document.
+
+`Document.toString()` normalizes flow-collection padding across the whole file, so re-serializing would turn a one-property change into a whole-file diff. Splicing keeps the change minimal: renaming a type alters exactly the lines that name it. A block's extent is found by indentation rather than by node range, because a YAML node's own range can run past its block into whatever follows.
+
+### Intents
+
+The webview holds no model state. It posts a named intent, the extension host turns that into edits, and a fresh projection comes back, so nothing on the canvas can diverge from the file.
+
+Deleting a node type also deletes the edge types that reference it: leaving the reference behind would produce a model that cannot resolve. Renaming a type first records its previous IRI, so the ontology can assert equivalence to the identity consumers already have.
 
 ## Views
 
@@ -46,6 +58,18 @@ React Flow is DOM-based and degrades past a few hundred nodes, which is acceptab
 
 ## Roadmap
 
-v1 proves the compiler pipeline end to end against a real database before expensive interactive UI is built on top of it: parse, IR, validate, emit, with a read-only auto-laid-out canvas.
+v1 is a visual modeler: the full compiler pipeline plus a canvas that authors the model, generating Ladybug DDL, Neo4j constraints, SHACL shapes, and an OWL ontology.
 
-Deferred to later releases: migrations and the lockfile diff, the SHACL and OWL targets, editable views and the layout sidecar, bidirectional canvas editing, the Memgraph target, and template targets. The metamodel is the least reversible decision in the project, so validating it against executing DDL is the highest-value first move. Every deferred item is cheaper once the IR is settled.
+The original plan deferred interactive editing to v2 and shipped a read-only canvas first. That was amended: building the compiler first would have left the tool unusable for its stated purpose until a second release, and the IR is exercised by every canvas action anyway, so real use validates the metamodel rather than tests alone.
+
+### Still deferred
+
+Migrations and the lockfile diff, the Memgraph target, and user-supplied template targets remain out of scope.
+
+Nothing in the implementation assumes a lockfile exists. The IR serializer nevertheless orders keys stably, so introducing one later is a serialization call rather than a rework.
+
+## Packages
+
+Three packages: `core` holds the pipeline, `cli` wraps it for continuous integration, and `vscode` adds the webview and diagnostics.
+
+`core` never imports `vscode`, enforced by an ESLint rule and by a test that scans the source. The intent translation used by the canvas lives in the extension package but imports no editor API, so the whole authoring surface is tested without a running VS Code.

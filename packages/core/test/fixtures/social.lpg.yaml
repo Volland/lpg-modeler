@@ -1,0 +1,62 @@
+# A small social domain, used across the emitter tests.
+namespace:
+  prefix: social
+  iri: https://example.org/vocab/social#
+
+mixins:
+  Timestamped:
+    id: m_stamp
+    props:
+      createdAt: { id: p_creat, type: datetime, required: true }
+
+nodes:
+  # Abstract root: contributes id and the key to every descendant.
+  Party:
+    id: n_party
+    abstract: true
+    key: [id]
+    props:
+      id: { id: p_pid, type: string, required: true }
+
+  Person:
+    id: n_person
+    extends: Party
+    mixins: [Timestamped]
+    props:
+      email: { id: p_mail, type: string, required: true, unique: true }
+      born: { id: p_born, type: date }
+
+  Company:
+    id: n_comp
+    extends: Party
+    props:
+      vat: { id: p_vat, type: string }
+
+  Car:
+    id: n_car
+    key: [vin]
+    props:
+      vin: { id: p_vin, type: string, required: true }
+      seats: { id: p_seat, type: int }
+
+edges:
+  # Abstract endpoint: expands to a pair per concrete descendant.
+  OWNS:
+    id: e_owns
+    from: Party
+    to: Car
+    props:
+      since: { id: p_since, type: date }
+
+  KNOWS:
+    id: e_knows
+    from: Person
+    to: Person
+    props:
+      since: { id: p_ksince, type: date }
+
+  # No properties: stays a plain object property in RDF, never reified.
+  LIKES:
+    id: e_likes
+    from: Person
+    to: Company

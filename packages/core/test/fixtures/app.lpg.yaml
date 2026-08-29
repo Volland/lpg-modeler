@@ -1,0 +1,13 @@
+namespace:
+  prefix: app
+  iri: https://example.org/vocab/app#
+
+imports:
+  - { path: ./common/party.lpg.yaml, as: common }
+
+nodes:
+  Employee:
+    id: n_emp
+    extends: common:Party
+    props:
+      badge: { id: p_badge, type: string, required: true }
