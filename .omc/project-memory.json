@@ -48,6 +48,49 @@
       ]
     }
   },
-  "hotPaths": [],
+  "hotPaths": [
+    {
+      "path": "docs/assets/diagrams/files.png",
+      "accessCount": 3,
+      "lastAccessed": 1788000080311,
+      "type": "file"
+    },
+    {
+      "path": "docs/assets/diagrams/pipeline.png",
+      "accessCount": 1,
+      "lastAccessed": 1788000022179,
+      "type": "file"
+    },
+    {
+      "path": "docs/assets/diagrams/architecture.png",
+      "accessCount": 1,
+      "lastAccessed": 1788000026290,
+      "type": "file"
+    },
+    {
+      "path": "docs/assets/diagrams/reification.png",
+      "accessCount": 1,
+      "lastAccessed": 1788000026809,
+      "type": "file"
+    },
+    {
+      "path": "docs/assets/diagrams/capabilities.png",
+      "accessCount": 1,
+      "lastAccessed": 1788000031053,
+      "type": "file"
+    },
+    {
+      "path": "docs/assets/diagrams/intent-loop.png",
+      "accessCount": 1,
+      "lastAccessed": 1788000080614,
+      "type": "file"
+    },
+    {
+      "path": "docs/assets/icon.png",
+      "accessCount": 1,
+      "lastAccessed": 1788000098462,
+      "type": "file"
+    }
+  ],
   "userDirectives": []
 }
