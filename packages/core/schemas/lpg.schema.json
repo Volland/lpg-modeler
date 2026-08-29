@@ -1,90 +1,300 @@
 {
-  "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://lpg-modeler.dev/schemas/lpg.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://lpg-modeler.dev/schemas/lpg-1.0.schema.json",
   "title": "LPG model",
   "type": "object",
-  "required": ["namespace"],
+  "required": [
+    "namespace"
+  ],
   "additionalProperties": false,
   "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "Optional pointer to this schema, so a validator outside VS Code can find it."
+    },
+    "lpg": {
+      "description": "Model format version. Omitted means 1.0, which every model written before the key existed is.",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^[0-9]+\\.[0-9]+$"
+        },
+        {
+          "type": "number"
+        }
+      ]
+    },
     "namespace": {
       "type": "object",
       "description": "Prefix and base IRI forming the global identity of every type this model declares.",
-      "required": ["prefix", "iri"],
+      "required": [
+        "prefix",
+        "iri"
+      ],
       "additionalProperties": false,
       "properties": {
-        "prefix": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_-]*$" },
-        "iri": { "type": "string", "format": "uri" }
+        "prefix": {
+          "type": "string",
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]*$"
+        },
+        "iri": {
+          "type": "string",
+          "format": "uri"
+        }
+      }
+    },
+    "prefixes": {
+      "type": "object",
+      "description": "Extra prefix bindings, beyond this model's own namespace. Same shape as a JSON-LD context: prefix to base IRI. Bound in every generated RDF document.",
+      "propertyNames": {
+        "pattern": "^[A-Za-z][A-Za-z0-9_-]*$"
+      },
+      "additionalProperties": {
+        "type": "string",
+        "format": "uri"
       }
     },
     "imports": {
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["path", "as"],
+        "required": [
+          "path",
+          "as"
+        ],
         "additionalProperties": false,
         "properties": {
-          "path": { "type": "string", "description": "Path to another model file, relative to this one." },
-          "as": { "type": "string", "description": "Local alias. Bindings are local; identity is the IRI." }
+          "path": {
+            "type": "string",
+            "description": "Path to another model file, relative to this one."
+          },
+          "as": {
+            "type": "string",
+            "description": "Local alias. Bindings are local; identity is the IRI."
+          }
         }
       }
     },
-    "mixins": { "type": "object", "additionalProperties": { "$ref": "#/definitions/mixin" } },
-    "nodes": { "type": "object", "additionalProperties": { "$ref": "#/definitions/node" } },
-    "edges": { "type": "object", "additionalProperties": { "$ref": "#/definitions/edge" } }
+    "mixins": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/mixin"
+      }
+    },
+    "enums": {
+      "type": "object",
+      "description": "Enumerated value sets. A property with a matching `enum` is limited to these values.",
+      "additionalProperties": {
+        "$ref": "#/$defs/enum"
+      }
+    },
+    "nodes": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/node"
+      }
+    },
+    "edges": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/edge"
+      }
+    }
   },
-  "definitions": {
+  "$defs": {
     "id": {
       "type": "string",
-      "pattern": "^[nepm]_[a-z0-9]+$",
+      "pattern": "^[nepmx]_[a-z0-9]+$",
       "description": "Stable element id. Assigned by the tool; never edit or copy it."
+    },
+    "scalarType": {
+      "description": "A property type. The lower-case names are the original spelling; the upper-case ones are the GQL (ISO/IEC 39075) spelling of the same type. Matching ignores case. A list is written LIST<STRING> or STRING[], or with `list: true`.",
+      "anyOf": [
+        {
+          "enum": [
+            "string",
+            "int",
+            "float",
+            "boolean",
+            "date",
+            "datetime",
+            "uuid",
+            "json",
+            "STRING",
+            "INT",
+            "INTEGER",
+            "INT64",
+            "FLOAT",
+            "FLOAT64",
+            "DOUBLE",
+            "BOOL",
+            "BOOLEAN",
+            "DATE",
+            "DATETIME",
+            "TIMESTAMP",
+            "ZONED_DATETIME",
+            "UUID",
+            "JSON"
+          ]
+        },
+        {
+          "type": "string",
+          "pattern": "^([Ll][Ii][Ss][Tt]\\s*<[^>]+>|[^\\[\\]]+\\[\\s*\\])$"
+        }
+      ]
     },
     "property": {
       "type": "object",
-      "required": ["type"],
+      "required": [
+        "type"
+      ],
       "additionalProperties": false,
       "properties": {
-        "id": { "$ref": "#/definitions/id" },
-        "type": { "enum": ["string", "int", "float", "boolean", "date", "datetime", "uuid", "json"] },
-        "required": { "type": "boolean", "default": false },
-        "unique": { "type": "boolean", "default": false }
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "type": {
+          "$ref": "#/$defs/scalarType"
+        },
+        "required": {
+          "type": "boolean",
+          "default": false
+        },
+        "unique": {
+          "type": "boolean",
+          "default": false
+        },
+        "list": {
+          "type": "boolean",
+          "default": false,
+          "description": "Whether the property holds a list of its type. Equivalent to writing the type as LIST<\u2026>."
+        },
+        "enum": {
+          "type": "string",
+          "description": "Name of an enum this property's values are limited to. Requires a string type."
+        }
       }
     },
-    "props": { "type": "object", "additionalProperties": { "$ref": "#/definitions/property" } },
+    "props": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/property"
+      }
+    },
     "mixin": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "id": { "$ref": "#/definitions/id" },
-        "props": { "$ref": "#/definitions/props" }
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "props": {
+          "$ref": "#/$defs/props"
+        }
       }
     },
     "node": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "id": { "$ref": "#/definitions/id" },
-        "abstract": { "type": "boolean", "default": false },
-        "extends": { "type": "string", "description": "Abstract parent, optionally alias-qualified." },
-        "mixins": { "type": "array", "items": { "type": "string" } },
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "abstract": {
+          "type": "boolean",
+          "default": false
+        },
+        "extends": {
+          "type": "string",
+          "description": "Abstract parent, optionally alias-qualified."
+        },
+        "mixins": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
         "key": {
-          "type": "array", "items": { "type": "string" },
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
           "description": "Property names forming this type's key. Inherited when omitted."
         },
-        "previousIri": { "type": "string", "description": "Set on rename so ontology consumers keep resolving." },
-        "props": { "$ref": "#/definitions/props" }
+        "previousIri": {
+          "type": "string",
+          "description": "Set on rename so ontology consumers keep resolving."
+        },
+        "props": {
+          "$ref": "#/$defs/props"
+        },
+        "open": {
+          "type": "boolean",
+          "default": false,
+          "description": "Whether an instance may carry properties this type does not declare. Never inherited."
+        }
       }
     },
     "edge": {
       "type": "object",
-      "required": ["from", "to"],
+      "required": [
+        "from",
+        "to"
+      ],
       "additionalProperties": false,
       "properties": {
-        "id": { "$ref": "#/definitions/id" },
-        "from": { "type": "string" },
-        "to": { "type": "string" },
-        "previousIri": { "type": "string" },
-        "props": { "$ref": "#/definitions/props" }
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "from": {
+          "type": "string"
+        },
+        "to": {
+          "type": "string"
+        },
+        "previousIri": {
+          "type": "string"
+        },
+        "props": {
+          "$ref": "#/$defs/props"
+        },
+        "cardinality": {
+          "$ref": "#/$defs/cardinality"
+        }
       }
+    },
+    "enum": {
+      "type": "object",
+      "required": [
+        "values"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "values": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string"
+          },
+          "description": "The permitted values. Must be distinct."
+        }
+      }
+    },
+    "cardinality": {
+      "description": "Endpoint multiplicity, read as <from end>-to-<to end>. Defaults to many-to-many.",
+      "enum": [
+        "one-to-one",
+        "one-to-many",
+        "many-to-one",
+        "many-to-many",
+        "ONE_ONE",
+        "ONE_MANY",
+        "MANY_ONE",
+        "MANY_MANY"
+      ]
     }
   }
 }

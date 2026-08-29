@@ -6,10 +6,11 @@ import type { RawModel } from './parse'
 
 const ALPHABET = 'abcdefghijklmnopqrstuvwxyz0123456789'
 
-export type ElementKind = 'node' | 'edge' | 'prop' | 'mixin'
+export type ElementKind = 'node' | 'edge' | 'prop' | 'mixin' | 'enum'
 
+// 'e' is taken by edge, so an enum id is prefixed 'x'.
 const PREFIX: Record<ElementKind, string> = {
-  node: 'n', edge: 'e', prop: 'p', mixin: 'm',
+  node: 'n', edge: 'e', prop: 'p', mixin: 'm', enum: 'x',
 }
 
 /** Random source, injectable so tests can generate deterministic ids. */
@@ -30,6 +31,7 @@ export function collectIds(raw: RawModel): string[] {
   for (const m of raw.mixins) { push(m.id); m.props.forEach((p) => push(p.id)) }
   for (const n of raw.nodes) { push(n.id); n.props.forEach((p) => push(p.id)) }
   for (const e of raw.edges) { push(e.id); e.props.forEach((p) => push(p.id)) }
+  for (const x of raw.enums) push(x.id)
   return ids
 }
 
@@ -46,6 +48,7 @@ export function duplicateIdDiagnostics(raw: RawModel): Diagnostic[] {
   for (const m of raw.mixins) { note(m.id, `mixin ${m.name}`); m.props.forEach((p) => note(p.id, `${m.name}.${p.name}`)) }
   for (const n of raw.nodes) { note(n.id, `node ${n.name}`); n.props.forEach((p) => note(p.id, `${n.name}.${p.name}`)) }
   for (const e of raw.edges) { note(e.id, `edge ${e.name}`); e.props.forEach((p) => note(p.id, `${e.name}.${p.name}`)) }
+  for (const x of raw.enums) note(x.id, `enum ${x.name}`)
 
   const out: Diagnostic[] = []
   for (const [id, owners] of seen) {
@@ -67,6 +70,7 @@ function locateOwner(raw: RawModel, id: string) {
     if (e.id === id) return e.loc
     for (const p of e.props) if (p.id === id) return p.loc
   }
+  for (const x of raw.enums) if (x.id === id) return x.loc
   return undefined
 }
 
@@ -125,8 +129,9 @@ export function backfillIdEdits(text: string, rand: RandomFn = Math.random): Tex
   }
 
   const edits: TextEdit[] = []
+  // An enum body holds `values`, not `props`, so the property pass simply finds none.
   const sections: Array<[string, ElementKind]> = [
-    ['mixins', 'mixin'], ['nodes', 'node'], ['edges', 'edge'],
+    ['mixins', 'mixin'], ['nodes', 'node'], ['edges', 'edge'], ['enums', 'enum'],
   ]
   // First pass: learn which ids are already in use, so generated ones cannot collide.
   for (const [name] of sections) {

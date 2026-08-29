@@ -4,6 +4,9 @@
 //
 // Neo4j has no table DDL. A hierarchy is expressed as labels, so a Person node
 // also carries every ancestor label. See lat.md/emitters#Neo4j Target.
+//
+// Neo4j is schema-optional, so a node may always carry properties its type does not
+// declare. A closed type in the model is therefore documentation here, not a constraint.
 
 // DOWNGRADE: NODE KEY requires Enterprise. Uniqueness only; presence unenforced.
 CREATE CONSTRAINT car_key_unique IF NOT EXISTS

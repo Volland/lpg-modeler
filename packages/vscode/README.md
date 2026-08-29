@@ -11,7 +11,8 @@
 </p>
 
 LPG Modeler turns one hand-editable model file into **LadybugDB DDL, Neo4j constraints,
-SHACL shapes and an OWL ontology** — and tells you, before you ship, exactly what each
+SHACL shapes, an OWL ontology, GQL graph types, PG-Schema and LinkML** — and tells you,
+before you ship, exactly what each
 database is unable to enforce.
 
 You author the model as YAML, or on a canvas beside it. Everything downstream is generated.
@@ -64,7 +65,7 @@ diagram produces **no semantic diff at all**, and renaming a type moves nothing 
 **Why it matters:** a schema change that shows up as a 400-line reformat does not get
 reviewed. It gets approved.
 
-### Four generators, one model
+### Seven generators, one model
 
 | Target | Produces | Notes |
 | --- | --- | --- |
@@ -72,9 +73,17 @@ reviewed. It gets approved.
 | `neo4j` | Constraints and indexes | Hierarchy expressed as labels; Community/Enterprise aware |
 | `shacl` | `sh:NodeShape` per type | The primary constraint artifact — closed-world, so it means what the model means |
 | `owl` | Classes, `subClassOf`, `hasKey` | The safe assertional subset only |
+| `gql` | `CREATE GRAPH TYPE` element types | ISO/IEC 39075; hierarchy carried as implied labels |
+| `pgschema` | PG-Schema graph type | The most faithful target — `ABSTRACT`, inheritance and PG-Keys all survive |
+| `linkml` | LinkML classes and slots | Opens the LinkML generator ecosystem; edges with properties are reified |
 
 One type hierarchy, one set of keys, one set of properties — with no second definition to
 keep in sync.
+
+The last three are standards rather than database dialects. They are what makes a model
+readable by tools this project does not own — and they are emitted rather than adopted as the
+model format, because no published standard has anywhere to put stable element ids, import
+aliases, or a rename's previous IRI.
 
 ### Loss is reported, never silent
 
@@ -204,6 +213,11 @@ generation is entirely offline.
 - **Nested edges** — edges that are themselves endpoints of other edges — are outside the core metamodel, because Neo4j cannot represent them natively.
 - **Composite keys on LadybugDB** are emitted as a synthesized concatenated column, since a composite `PRIMARY KEY` does not parse there.
 - **Uniqueness in SHACL** across all instances needs a SPARQL-based constraint, which core SHACL cannot express. It is reported as a downgrade.
+- **Enums** have nowhere to go in LadybugDB, Neo4j, GQL or PG-Schema. SHACL, OWL and LinkML enforce them; the rest report a downgrade.
+- **Open types** cannot exist in LadybugDB's mandatory closed schema, nor in a GQL element type or a LinkML class. Reported as a downgrade.
+- **Cardinality** is enforced by LadybugDB and SHACL. Neo4j, GQL and OWL have no constraint for it and say so.
+- **Composite keys in GQL graph types** cannot be expressed, because a key marker attaches to a single property. Reported as a downgrade.
+- **Edges carrying properties in LinkML** are reified into a class, because LinkML has no binary relation that can hold them. Reported as a downgrade.
 - The canvas is built on React Flow, which is DOM-based and degrades past a few hundred nodes on one diagram. Use views to keep any single diagram small.
 
 ## Documentation

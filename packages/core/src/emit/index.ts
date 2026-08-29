@@ -4,6 +4,9 @@ import { emitLadybug, LADYBUG_CAPABILITIES } from './ladybug'
 import { emitNeo4j, NEO4J_CAPABILITIES } from './neo4j'
 import { emitShacl, SHACL_CAPABILITIES } from './shacl'
 import { emitOwl, OWL_CAPABILITIES } from './owl'
+import { emitGql, GQL_CAPABILITIES } from './gql'
+import { emitPgSchema, PGSCHEMA_CAPABILITIES } from './pgschema'
+import { emitLinkml, LINKML_CAPABILITIES } from './linkml'
 
 export type Emitter = (model: ModelIR, options: EmitOptions) => EmitResult
 
@@ -21,6 +24,9 @@ const REGISTRY = new Map<string, Registration>([
   ['neo4j', { capabilities: NEO4J_CAPABILITIES, emit: emitNeo4j }],
   ['shacl', { capabilities: SHACL_CAPABILITIES, emit: emitShacl }],
   ['owl', { capabilities: OWL_CAPABILITIES, emit: emitOwl }],
+  ['gql', { capabilities: GQL_CAPABILITIES, emit: emitGql }],
+  ['pgschema', { capabilities: PGSCHEMA_CAPABILITIES, emit: emitPgSchema }],
+  ['linkml', { capabilities: LINKML_CAPABILITIES, emit: emitLinkml }],
 ])
 
 export function registerTarget(name: string, reg: Registration): void {

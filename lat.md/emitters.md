@@ -6,6 +6,10 @@ An emitter turns the resolved intermediate representation into an artifact for o
 
 Each emitter publishes a typed capability set. The compiler computes which capabilities a model requires and reports every downgrade as an editor diagnostic, with per-target configurable severity.
 
+The set covers the hierarchy, identity, and edge properties, plus [[metamodel#Lists|lists]], [[metamodel#Enums]], [[metamodel#Open and Closed Types|openness]], and [[metamodel#Cardinality]].
+
+A downgrade is reported only when a model actually uses the feature. A target that cannot enforce closure says so in the capability set, but does not raise a diagnostic on every closed type, which would be noise on every model rather than information.
+
 A comment is also injected at the lossy site in the generated file, so an operator reading the DDL sees the same information as the author reading the editor.
 
 Three lossiness cases exist before a line of emitter code is written: Ladybug has no multi-label nodes, Neo4j existence and node-key constraints are Enterprise-only, and generic Cypher engines have no schema facility at all. Silent best-effort was rejected because a `required` constraint that quietly vanishes is a data-integrity bug that surfaces in production. This declared capability set is also the seam the deferred public plugin API will expose — see [[architecture#Modularity]].
@@ -15,6 +19,8 @@ Three lossiness cases exist before a line of emitter code is written: Ladybug ha
 LadybugDB, formerly Kuzu, is an embedded Cypher property graph database with a mandatory closed schema: `CREATE NODE TABLE` and `CREATE REL TABLE` with typed columns, a required primary key, and declared endpoint pairs.
 
 An abstract hierarchy is flattened to one node table per concrete leaf type, with inherited columns copied down. The cost is that an edge declared on an abstract endpoint expands to a cross-product of endpoint pairs, and adding a subtype becomes a schema migration.
+
+Two features are carried natively. A [[metamodel#Lists|list]] property becomes a `STRING[]` column, and [[metamodel#Cardinality]] becomes the trailing multiplicity keyword — `MANY_ONE` and its siblings — which, measured against a running instance, really is rejected on write. It is one of the few constraints this target enforces rather than reports.
 
 Measured against LadybugDB 0.19.1, the engine enforces less than the flattening suggests. `NOT NULL` is not accepted by the parser and a null non-key value inserts successfully, so a required property that is not the key is unenforceable and is reported as a downgrade. A composite `PRIMARY KEY` does not parse either, so a composite key must be emitted as a synthesized column. Only primary key uniqueness and primary key presence are actually enforced.
 
@@ -28,11 +34,41 @@ Neo4j is schema-optional: there is no table DDL, only constraints and indexes. M
 
 The emitter is edition-aware. Existence and node-key constraints require Enterprise, so under a Community configuration they are reported as downgrades and emitted as comments rather than silently dropped.
 
+## Standards Targets
+
+Three targets exist to make a model readable by tools this project does not own: GQL graph types, PG-Schema, and LinkML. None of them is a database dialect, and none can be executed against an engine, so all three carry golden coverage only.
+
+The reason to emit a standard rather than adopt one as the model format is that no standard covers what a model file has to do. PG-Schema and GQL graph types are textual DSLs with nowhere to hang [[metamodel#Stable Element IDs]], import aliases, or a rename's previous IRI, and neither has a namespace concept the RDF targets need. LinkML is the closest serialization, but it has no binary edge carrying properties, so adopting it would force the uniform reification that [[emitters#RDF Targets#Gradual Reification]] exists to avoid.
+
+## GQL Target
+
+GQL graph types, per ISO/IEC 39075. A graph type is a list of element types, each naming an identifying label, the labels it implies, and its typed properties.
+
+Label implication carries the hierarchy: a concrete type is identified by its own label and implies every ancestor's, so an edge on an abstract endpoint stays one element type rather than expanding to a cross-product the way [[emitters#Ladybug Target]] must. Abstract types therefore get no element type of their own — they exist only as implied labels. Mixins are property bundles rather than labels, so they contribute properties only, the same reading [[emitters#Neo4j Target]] takes.
+
+Two things are lost. A key marker attaches to a single property, so a composite key is a reported downgrade, and `uuid` and `json` have no GQL value type. Engines disagree on the statement that installs a graph type — Neo4j writes the same body after `ALTER CURRENT GRAPH TYPE SET` — so the generated file says as much in a header comment rather than claiming portability it does not have.
+
+## PG-Schema Target
+
+PG-Schema, the LDBC Property Graph Schema Working Group formalism that GQL's graph types grew out of. It is the most faithful target: `ABSTRACT`, inheritance, mixins, and keys all have direct counterparts, so nothing about the hierarchy is flattened.
+
+A mixin becomes an abstract type declared without a label, which is precisely what a mixin is here. Keys become PG-Keys constraints, stated once on the type that owns them because subtypes inherit them; a composite key needs no synthesized column, unlike [[emitters#Ladybug Target]]. `STRICT` is emitted because the closed-world reading it names is the one this metamodel already has. Only `uuid` and `json` are downgrades.
+
+## LinkML Target
+
+LinkML, the linked-data modelling language. Classes, `is_a`, and `mixins` line up almost directly with this metamodel, which is what makes the target worth having: it opens the LinkML generator ecosystem to a model authored here.
+
+Every class and slot carries the IRI it has in this model, so identity survives the round trip rather than degrading to a local name. A single key becomes an `identifier`; a composite key and every other unique property become `unique_keys`, which is the only mechanism LinkML has for them.
+
+The mismatch is edges. LinkML has no binary relation that can hold properties, so [[emitters#RDF Targets#Gradual Reification]] applies here too and the reification is a reported downgrade. The shortcut property the RDF targets emit is deliberately omitted: in a schema meant to be generated from, it would imply a second place the same fact is written.
+
 ## Template Targets
 
 Targets that cannot be tested against a running instance are not shipped as code. Instead the resolved IR is exposed to a user-supplied template, so an additional dialect is a small amount of configuration rather than a feature request.
 
-Cypher compatibility is a marketing category rather than a dialect: Ladybug, Neo4j, Memgraph, and Apache AGE disagree on nearly everything schema-related, and a generic emitter would have no reference implementation to test against. Only targets verifiable against a real engine ship as first-class code.
+Cypher compatibility is a marketing category rather than a dialect: Ladybug, Neo4j, Memgraph, and Apache AGE disagree on nearly everything schema-related, and a generic emitter would have no reference implementation to test against.
+
+The rule is about reference implementations, not about running engines, which is why [[emitters#Standards Targets]] ship as code despite having no instance to execute against. A published specification is a reference an emitter can be held to; a dialect nobody has specified is not.
 
 ## RDF Targets
 
@@ -42,11 +78,17 @@ Emitting `rdfs:domain` for an edge type does not constrain anything — it instr
 
 ### SHACL Shapes
 
-SHACL is the primary constraint artifact. It is closed-world validation, so required, unique, cardinality, and datatype translate faithfully and a generated shape genuinely rejects invalid data.
+SHACL is the primary constraint artifact. It is closed-world validation, so required, datatype, [[metamodel#Cardinality]], [[metamodel#Enums]], and closure all translate faithfully, and a generated shape genuinely rejects invalid data.
+
+Uniqueness is the exception: across all instances it needs a SPARQL-based constraint, which core SHACL cannot express, so it is reported as a downgrade rather than emitted.
+
+A closed type becomes `sh:closed`, which is only sound because a shape is emitted for every relation leaving the type as well as for every property. A shape that named only the datatype properties would reject any node that had an edge. Cardinality is emitted in both directions: the forward bound as `sh:maxCount` on the relation, the reverse as a `sh:inversePath` shape on the target.
 
 ### OWL Subset
 
-OWL is emitted alongside SHACL but restricted to the safe assertional subset: classes, `subClassOf`, `hasKey`, disjointness, and inverse properties. Domain, range, and cardinality restrictions are deliberately omitted.
+OWL is emitted alongside SHACL but restricted to the safe assertional subset: classes, `subClassOf`, `hasKey`, disjointness, and inverse properties. Domain and cardinality restrictions are deliberately omitted.
+
+An [[metamodel#Enums|enum]] is the one constraint that does cross over, as an OWL 2 datatype definition — `rdfs:Datatype` with `owl:oneOf` — used as the property's range. That is assertional and stays inside OWL DL, so it neither invites a reasoner to reclassify individuals nor breaks one.
 
 ### Gradual Reification
 
@@ -63,5 +105,7 @@ Destructive changes are gated behind an explicit flag. Renames are detected thro
 ## Verification
 
 Every emitter has golden-file tests for output stability. The Ladybug target additionally executes its generated DDL against an in-process LadybugDB instance, then asserts that the declared constraints actually reject invalid data.
+
+The standards targets are the other side of this rule: GQL, PG-Schema, and LinkML have no engine to execute against, so they assert on the structures that matter — implied labels, PG-Keys constraints, `is_a` — rather than on a golden file alone. The LinkML output is additionally parsed back as YAML, so a formatting slip cannot pass as a valid schema.
 
 Real execution is affordable here because the database is embedded: `@ladybugdb/core` provides native bindings and `@ladybugdb/wasm-core` a WebAssembly build, so no container is required. Neo4j and Memgraph have no embedded mode, so they keep golden coverage with containerised tests gated behind an opt-in flag. A golden file alone only proves that output has not changed, not that it is valid.

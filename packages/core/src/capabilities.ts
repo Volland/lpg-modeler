@@ -20,6 +20,20 @@ export interface Capabilities {
   edgeProps: 'native' | 'reified'
   /** Edges that are themselves endpoints of other edges. Out of the core metamodel. */
   nestedEdges: boolean
+  /** Whether a property may hold a list of values. */
+  listProps: 'native' | 'unsupported'
+  /**
+   * Whether an enumerated value set is enforced, merely written down where a reader
+   * will see it, or has nowhere to go at all.
+   */
+  enums: 'enforced' | 'documented' | 'unsupported'
+  /**
+   * Whether a type can say that undeclared properties are allowed. `always-open`
+   * means the target cannot enforce a closed type either way.
+   */
+  openTypes: 'native' | 'always-open' | 'unsupported'
+  /** Whether endpoint multiplicity is enforced. */
+  cardinality: 'enforced' | 'unsupported'
 }
 
 export interface EmitOptions {

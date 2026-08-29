@@ -1,0 +1,37 @@
+# Exercises the metamodel additions: enums, list-valued properties, an open type,
+# and edge cardinality. Both list spellings appear on purpose.
+lpg: "1.0"
+namespace:
+  prefix: fleet
+  iri: https://example.org/vocab/fleet#
+
+enums:
+  Status:
+    id: x_stat
+    values: [active, retired]
+
+nodes:
+  Driver:
+    id: n_drv
+    key: [licence]
+    open: true
+    props:
+      licence:   { id: p_lic, type: STRING, required: true }
+      nicknames: { id: p_nick, type: LIST<STRING> }
+      status:    { id: p_stat, type: string, enum: Status }
+
+  Vehicle:
+    id: n_veh
+    key: [vin]
+    props:
+      vin:  { id: p_vin, type: STRING, required: true }
+      tags: { id: p_tag, type: string, list: true }
+
+edges:
+  DRIVES:
+    id: e_drv
+    from: Driver
+    to: Vehicle
+    cardinality: many-to-one
+    props:
+      since: { id: p_since, type: DATE }

@@ -16,6 +16,11 @@ export const NEO4J_CAPABILITIES: Capabilities = {
   compositeKey: 'native',
   edgeProps: 'native',
   nestedEdges: false,
+  listProps: 'native',
+  enums: 'unsupported',
+  // Neo4j is schema-optional, so a closed type cannot be enforced either.
+  openTypes: 'always-open',
+  cardinality: 'unsupported',
 }
 
 const snake = (s: string) => s.replace(/([a-z0-9])([A-Z])/g, '$1_$2').toLowerCase()
@@ -53,6 +58,12 @@ function nodeConstraints(
   }
 
   for (const p of node.props) {
+    if (p.enum) {
+      downgrade(diags, 'neo4j', 'downgrade-enum',
+        `Property '${node.name}.${p.name}' is constrained to enum '${p.enum}', which Neo4j has no schema facility for.`,
+        p.loc)
+      out.push(`// UNENFORCED: '${p.name}' is limited to enum '${p.enum}' in the model.`)
+    }
     if (p.unique && !node.key.includes(p.name)) {
       out.push(
         `CREATE CONSTRAINT ${n}_${snake(p.name)}_unique IF NOT EXISTS`,
@@ -78,6 +89,12 @@ function edgeConstraints(edge: EdgeTypeIR, enterprise: boolean, diags: Diagnosti
   const out: string[] = []
   const e = snake(edge.name)
   out.push(`// (:${edge.from})-[:${edge.name}]->(:${edge.to})`)
+  if (edge.cardinality !== 'many-to-many') {
+    downgrade(diags, 'neo4j', 'downgrade-cardinality',
+      `Edge type '${edge.name}' declares ${edge.cardinality} cardinality, which Neo4j has no constraint for: multiplicity is not part of its schema facility.`,
+      edge.loc)
+    out.push(`// UNENFORCED: ${edge.cardinality} in the model; Neo4j has no multiplicity constraint.`)
+  }
   for (const p of edge.props) {
     if (!p.required) continue
     if (enterprise) {
@@ -117,6 +134,9 @@ export function emitNeo4j(model: ModelIR, options: EmitOptions = {}): EmitResult
     '//',
     '// Neo4j has no table DDL. A hierarchy is expressed as labels, so a Person node',
     '// also carries every ancestor label. See lat.md/emitters#Neo4j Target.',
+    '//',
+    '// Neo4j is schema-optional, so a node may always carry properties its type does not',
+    '// declare. A closed type in the model is therefore documentation here, not a constraint.',
     '',
   ]
 

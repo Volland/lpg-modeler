@@ -6,10 +6,13 @@
 
 @prefix sh: <http://www.w3.org/ns/shacl#> .
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
 @prefix social: <https://example.org/vocab/social#> .
 
 social:CarShape a sh:NodeShape ;
   sh:targetClass social:Car ;
+  sh:closed true ;
+  sh:ignoredProperties ( rdf:type ) ;
   sh:property [
     sh:path social:vin ;
     sh:datatype xsd:string ;
@@ -24,6 +27,8 @@ social:CarShape a sh:NodeShape ;
 
 social:CompanyShape a sh:NodeShape ;
   sh:targetClass social:Company ;
+  sh:closed true ;
+  sh:ignoredProperties ( rdf:type ) ;
   sh:property [
     sh:path social:vat ;
     sh:datatype xsd:string ;
@@ -34,10 +39,16 @@ social:CompanyShape a sh:NodeShape ;
     sh:datatype xsd:string ;
     sh:maxCount 1 ;
     sh:minCount 1 ;
+  ] ;
+  sh:property [
+    sh:path social:owns ;
+    # (:Party)-[:OWNS]->(:Car)
   ] .
 
 social:PersonShape a sh:NodeShape ;
   sh:targetClass social:Person ;
+  sh:closed true ;
+  sh:ignoredProperties ( rdf:type ) ;
   sh:property [
     sh:path social:email ;
     sh:datatype xsd:string ;
@@ -62,6 +73,18 @@ social:PersonShape a sh:NodeShape ;
     sh:datatype xsd:string ;
     sh:maxCount 1 ;
     sh:minCount 1 ;
+  ] ;
+  sh:property [
+    sh:path social:knows ;
+    # (:Person)-[:KNOWS]->(:Person)
+  ] ;
+  sh:property [
+    sh:path social:likes ;
+    # (:Person)-[:LIKES]->(:Company)
+  ] ;
+  sh:property [
+    sh:path social:owns ;
+    # (:Party)-[:OWNS]->(:Car)
   ] .
 
 # Reified from (:Person)-[:KNOWS]->(:Person)

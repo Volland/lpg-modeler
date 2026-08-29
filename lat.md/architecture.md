@@ -14,6 +14,8 @@ Models are YAML validated by a JSON Schema the extension contributes through `co
 
 Owning no parser is a deliberate trade. The durable asset is the intermediate representation and the emitters that consume it; the surface syntax stays swappable, and a concise custom DSL with a real language server remains a later option rather than a prerequisite.
 
+The schema is written against JSON Schema 2020-12 but keeps to constructs an older validator still resolves, so the file is portable without giving up the current dialect. It lives once in `core` and is copied into the extension for `contributes.jsonValidation`; a test asserts the two are identical, because an editor and a CLI that disagree about what a model may say is the one failure this arrangement invites. A model file is self-describing through [[metamodel#Format Version]], so it can be validated by anything, not only inside VS Code.
+
 ## Package Boundary
 
 The repository is a monorepo of three packages: `core` holds parsing, the IR, validation, diffing, and every emitter; `cli` wraps core for continuous integration; `vscode` adds only webview and diagnostics plumbing.

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Model format — LPG Modeler</title>
-<meta name="description" content="Reference for the LPG model format: node types, mixins, keys, edge types, imports, stable element ids, views and validation codes.">
+<meta name="description" content="Reference for the LPG Modeler model format: node types, mixins, keys, edge types, imports, stable element ids, views and validation codes.">
 <link rel="icon" href="assets/icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -44,11 +44,43 @@
     A model is a YAML file named <code>*.lpg.yaml</code> or <code>*.lpg.yml</code>, validated
     against a JSON Schema the extension contributes. Only <code>namespace</code> is required.
   </p>
-<pre><code><span class="c-key">namespace</span>: { prefix: …, iri: … }   <span class="c-com"># required</span>
+<pre><code><span class="c-key">lpg</span>: <span class="c-str">"1.0"</span>                       <span class="c-com"># optional, format version</span>
+<span class="c-key">$schema</span>: …                          <span class="c-com"># optional, points at the JSON Schema</span>
+<span class="c-key">namespace</span>: { prefix: …, iri: … }   <span class="c-com"># required</span>
+<span class="c-key">prefixes</span>:  { pfx: … }              <span class="c-com"># optional</span>
 <span class="c-key">imports</span>:   [ { path: …, as: … } ]  <span class="c-com"># optional</span>
 <span class="c-key">mixins</span>:    { Name: { props: … } }   <span class="c-com"># optional</span>
+<span class="c-key">enums</span>:     { Name: { values: [ … ] } } <span class="c-com"># optional</span>
 <span class="c-key">nodes</span>:     { Name: { … } }          <span class="c-com"># optional</span>
 <span class="c-key">edges</span>:     { NAME: { from: …, to: … } }</code></pre>
+
+  <h2>Format version</h2>
+  <p>
+    A file may declare the version of the format it is written against. A file that declares
+    nothing is read as 1.0 — which is what every model written before the key existed is, so
+    adding it is never required.
+  </p>
+  <p>
+    A major version this build does not know is a warning rather than an error: the keys it
+    understands still resolve, so a model from a future version stays readable instead of
+    becoming opaque. The optional <code>$schema</code> key points at the JSON Schema, so a
+    generic validator outside VS Code can find it — the schema is written against JSON Schema
+    2020-12.
+  </p>
+
+  <h2>Prefixes</h2>
+  <p>
+    Beyond its own namespace, a model may bind further prefixes to base IRIs. The shape is a
+    JSON-LD context — prefix to base IRI, nothing else — and every binding is declared in the
+    RDF documents generated from the model.
+  </p>
+<pre><code><span class="c-key">prefixes</span>:
+  dct: http://purl.org/dc/terms/</code></pre>
+  <p>
+    Without this, a model that mentions a vocabulary by CURIE emits a document where that CURIE
+    is unbound, which no RDF parser will read. Bindings resolve across a closure with the entry
+    file winning, so a consumer can rebind a vendored vocabulary without editing it.
+  </p>
 
   <h2>Namespace</h2>
   <p>
@@ -92,6 +124,21 @@
     </table>
   </div>
 
+  <h3>Open and closed types</h3>
+  <p>
+    A node type is closed by default: an instance carries only the properties the type
+    declares. <code>open: true</code> admits others. Openness is never inherited — a subtype
+    that quietly widened its parent&rsquo;s contract would give the reader of the parent no
+    way to see it.
+  </p>
+  <div class="note">
+    <p><strong>Why this is a modelling concept and not an emitter detail.</strong> The
+    targets genuinely disagree. LadybugDB&rsquo;s schema is mandatory and closed, so an open
+    type is a downgrade there. Neo4j is schema-optional and cannot enforce closure either
+    way. SHACL expresses it exactly, as <code>sh:closed</code>. PG-Schema has an
+    <code>OPEN</code> keyword. Without the concept, a model could not say which it meant.</p>
+  </div>
+
   <h2>Properties</h2>
 <pre><code>email: { type: string, required: true, unique: true }</code></pre>
   <p>Eight scalar types, chosen because every target can carry all of them:</p>
@@ -100,6 +147,54 @@
     <span class="pill pill-off">float</span> <span class="pill pill-off">boolean</span>
     <span class="pill pill-off">date</span> <span class="pill pill-off">datetime</span>
     <span class="pill pill-off">uuid</span> <span class="pill pill-off">json</span>
+  </p>
+  <p>
+    Each one also answers to its <strong>GQL</strong> name, so a model can read the way the
+    schema it generates does. Matching ignores case and treats an underscore as a space, so
+    <code>ZONED_DATETIME</code> and <code>zoned datetime</code> are one type. Both spellings
+    mean exactly the same thing — this is vocabulary, not a second type system.
+  </p>
+<pre><code>copies:  { type: INTEGER }         <span class="c-com"># same as int</span>
+pressed: { type: ZONED_DATETIME }  <span class="c-com"># same as datetime</span>
+shipped: { type: BOOL }            <span class="c-com"># same as boolean</span></code></pre>
+  <p>
+    The mapping is not total in the other direction: <code>uuid</code> and <code>json</code>
+    have no GQL value type and stay reported downgrades, as they already were for RDF.
+  </p>
+
+  <h3>Lists</h3>
+  <p>
+    A property may hold a list of its type rather than one value. Three spellings, all
+    meaning the same thing:
+  </p>
+<pre><code>tags: { type: string, list: true }
+tags: { type: LIST&lt;STRING&gt; }        <span class="c-com"># the GQL form</span>
+tags: { type: STRING[] }            <span class="c-com"># the bracket form</span></code></pre>
+  <p>
+    Lists cost nothing to carry: LadybugDB stores a <code>STRING[]</code> column, Neo4j
+    stores arrays natively, GQL and PG-Schema spell the type <code>LIST&lt;…&gt;</code>, and
+    LinkML calls it <code>multivalued</code>. A list may not be part of a
+    <a href="#ids">key</a> — a key identifies one node, and a list of values cannot.
+  </p>
+
+  <h3>Enums</h3>
+  <p>
+    An enum names a set of permitted string values. A property references one with
+    <code>enum:</code>, and its type must be <code>string</code>.
+  </p>
+<pre><code><span class="c-key">enums</span>:
+  Status:
+    values: [active, retired]
+
+<span class="c-key">nodes</span>:
+  Driver:
+    props:
+      status: { type: string, enum: Status }</code></pre>
+  <p>
+    Only some targets can enforce a value set. SHACL turns it into <code>sh:in</code>, OWL
+    into a datatype definition with <code>owl:oneOf</code>, and LinkML into
+    <code>permissible_values</code>. LadybugDB, Neo4j, GQL and PG-Schema have nowhere to put
+    it, and each reports a downgrade rather than pretending the set holds.
   </p>
   <p>
     <code>required</code> and <code>unique</code> both default to false. Whether they are
@@ -137,6 +232,25 @@
     Edges that are themselves endpoints of other edges — the metagraph case — are deliberately
     outside the core. Neo4j cannot represent them natively, so admitting them would force every
     generator to grow a silent reification path.
+  </p>
+
+  <h3>Cardinality</h3>
+  <p>
+    An edge type may declare endpoint multiplicity, read as
+    <code>&lt;from end&gt;-to-&lt;to end&gt;</code>. <code>many-to-one</code> says each source
+    node has at most one target. The default is <code>many-to-many</code>, which constrains
+    nothing.
+  </p>
+<pre><code><span class="c-key">edges</span>:
+  DRIVES:
+    from: Driver
+    to: Vehicle
+    cardinality: many-to-one   <span class="c-com"># MANY_ONE is accepted too</span></code></pre>
+  <p>
+    This one is genuinely enforced where it can be. LadybugDB rejects a violating write —
+    measured against a running instance, not assumed — and SHACL expresses both directions,
+    the forward bound as <code>sh:maxCount</code> and the reverse as a
+    <code>sh:inversePath</code> shape. Neo4j, GQL and OWL each report it as a downgrade.
   </p>
 
   <h2>Mixins</h2>

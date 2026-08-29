@@ -31,7 +31,7 @@
 <main>
 <div class="wrap hero">
   <span class="eyebrow">Reference</span>
-  <h1>Four targets, and what each one refuses to promise</h1>
+  <h1>Seven targets, and what each one refuses to promise</h1>
   <p class="lede">
     Every generator publishes a typed capability set. The compiler works out what your model
     requires, compares the two, and reports every gap — as an editor diagnostic and as a
@@ -153,13 +153,125 @@ CREATE CONSTRAINT person_key_unique IF NOT EXISTS
   </figure>
 </div>
 
+
+<section class="wrap narrow">
+  <h2>Standards targets</h2>
+  <p>
+    Three targets exist so a model is readable by tools this project does not own. None is a
+    database dialect: they are the schema languages the graph world has agreed on, and emitting
+    them is how a model authored here stays portable.
+  </p>
+  <div class="note">
+    <p><strong>Why emit a standard rather than adopt one.</strong> No published standard covers
+    what a model file has to do. PG-Schema and GQL graph types are textual DSLs with nowhere to
+    hang stable element ids, import aliases, or a rename&rsquo;s previous IRI, and neither has a
+    namespace concept the RDF targets need. LinkML is the closest serialization, but it has no
+    binary edge that can carry properties &mdash; adopting it would force the uniform reification
+    that gradual reification exists to avoid. So the YAML stays, and the standards come out of
+    the pipeline instead.</p>
+  </div>
+
+  <h2>gql</h2>
+  <p>
+    GQL graph types, per <strong>ISO/IEC 39075</strong> &mdash; the international standard for
+    graph query languages. A graph type is a list of element types, each naming an identifying
+    label, the labels it implies, and its typed properties. Output extension: <code>.gql</code>.
+  </p>
+<pre><code>CREATE GRAPH TYPE socialGraphType AS {
+  (personType: Person =&gt; :Party {
+    email :: STRING NOT NULL IS NODE UNIQUE,
+    id :: STRING NOT NULL IS NODE KEY
+  }),
+  (:Party)-[ownsType: OWNS =&gt; {
+    since :: DATE
+  }]-&gt;(:Car)
+}</code></pre>
+  <p>
+    Label implication carries the hierarchy, so an edge declared on an abstract endpoint stays a
+    single element type instead of expanding to a cross-product the way the Ladybug target must.
+    Abstract types get no element type of their own &mdash; they exist purely as implied labels.
+  </p>
+  <p>
+    Two things are lost, both reported. A key marker attaches to one property, so a composite key
+    cannot be expressed; and <code>uuid</code> and <code>json</code> have no GQL value type.
+    Engines also disagree on the statement that installs a graph type &mdash; Neo4j writes the same
+    body after <code>ALTER CURRENT GRAPH TYPE SET</code> &mdash; so the generated file says so in a
+    header comment rather than claiming portability it does not have.
+  </p>
+
+  <hr class="rule">
+
+  <h2>pgschema</h2>
+  <p>
+    <strong>PG-Schema</strong>, the formalism from the LDBC Property Graph Schema Working Group
+    that GQL&rsquo;s graph types grew out of. This is the most faithful target of the seven:
+    <code>ABSTRACT</code>, inheritance, mixins and keys all have direct counterparts, so nothing
+    about the hierarchy is flattened. Output extension: <code>.pgs</code>.
+  </p>
+<pre><code>CREATE GRAPH TYPE socialType STRICT {
+  ABSTRACT (timestampedType {createdAt ZONED DATETIME}),
+  ABSTRACT (partyType: Party {id STRING}),
+  (personType: partyType &amp; timestampedType &amp; Person {email STRING, OPTIONAL born DATE}),
+  (:partyType)-[ownsType: OWNS {OPTIONAL since DATE}]-&gt;(:carType),
+  FOR (x: partyType) EXCLUSIVE MANDATORY SINGLETON x.id
+}</code></pre>
+  <p>
+    A mixin becomes an abstract type declared without a label, which is exactly what a mixin is
+    here. Keys become PG-Keys constraints, stated once on the type that owns them because
+    subtypes inherit them, and a composite key needs no synthesized column. Only
+    <code>uuid</code> and <code>json</code> are downgrades.
+  </p>
+
+  <hr class="rule">
+
+  <h2>linkml</h2>
+  <p>
+    <strong>LinkML</strong>, the linked-data modelling language. Its classes, <code>is_a</code>
+    and <code>mixins</code> line up almost directly with this metamodel, which is what makes the
+    target worth having: it opens the whole LinkML generator ecosystem &mdash; Python, Pydantic,
+    TypeScript, GraphQL, SQL DDL, SQLAlchemy &mdash; to a model authored here. Output extension:
+    <code>.yaml</code>.
+  </p>
+<pre><code>classes:
+  Party:
+    class_uri: social:Party
+    abstract: true
+    attributes:
+      id:
+        slot_uri: social:id
+        range: string
+        identifier: true
+  Person:
+    is_a: Party
+    mixins:
+      - Timestamped</code></pre>
+  <p>
+    Every class and slot carries the IRI it has in this model, so identity survives the round
+    trip rather than degrading to a local name. A single key becomes an <code>identifier</code>;
+    a composite key and every other unique property become <code>unique_keys</code>, the only
+    mechanism LinkML has for them.
+  </p>
+  <div class="note">
+    <p><strong>The one real mismatch.</strong> LinkML has no binary relation that can hold
+    properties, so an edge that carries them is reified into a class &mdash; and that is reported
+    as a downgrade like any other. The shortcut property the RDF targets emit is deliberately
+    left out here: in a schema meant to be generated from, it would imply a second place the
+    same fact is written.</p>
+  </div>
+</section>
+
 <section class="wrap narrow">
   <h2>Targets that are deliberately absent</h2>
   <p>
     Cypher compatibility is a marketing category rather than a dialect: Ladybug, Neo4j, Memgraph
     and Apache AGE disagree on nearly everything schema-related, so a generic Cypher generator
-    would have no reference implementation to test against. Only targets verifiable against a
-    real engine ship as first-class code.
+    would have no reference implementation to test against.
+  </p>
+  <p>
+    The rule is about reference implementations rather than running engines, which is why the
+    standards targets ship as code despite having no instance to execute against: a published
+    specification is a reference a generator can be held to, and a dialect nobody has specified
+    is not.
   </p>
   <p>
     For a dialect that cannot be tested here, the intended path is a template fed by the
@@ -183,7 +295,17 @@ CREATE CONSTRAINT person_key_unique IF NOT EXISTS
   compositeKey: 'native' | 'synthesized' | 'unsupported'
   edgeProps: 'native' | 'reified'
   nestedEdges: boolean
+  listProps: 'native' | 'unsupported'
+  enums: 'enforced' | 'documented' | 'unsupported'
+  openTypes: 'native' | 'always-open' | 'unsupported'
+  cardinality: 'enforced' | 'unsupported'
 }</code></pre>
+  <p>
+    A downgrade is reported only when a model actually <em>uses</em> the feature. A target
+    that cannot enforce closure declares that in its capability set, but does not raise a
+    diagnostic on every closed type — that would be noise on every model rather than
+    information.
+  </p>
 </section>
 
 <section class="wrap">

@@ -1,4 +1,5 @@
-import type { Diagnostic, ModelIR } from '../ir'
+import type { Diagnostic, ModelIR, PropertyIR } from '../ir'
+import { findEnum } from '../ir'
 import { downgrade, type Capabilities, type EmitOptions, type EmitResult } from '../capabilities'
 import { LOSSY_TYPES, XSD, mapEdges, prefixHeader, term } from './reify'
 
@@ -16,6 +17,12 @@ export const OWL_CAPABILITIES: Capabilities = {
   compositeKey: 'native',
   edgeProps: 'reified',
   nestedEdges: false,
+  listProps: 'native',
+  enums: 'enforced',
+  // OWL is open-world by construction, so closure is not something it can assert.
+  openTypes: 'always-open',
+  // Cardinality restrictions are deliberately omitted; see the safe assertional subset.
+  cardinality: 'unsupported',
 }
 
 export function emitOwl(model: ModelIR, _options: EmitOptions = {}): EmitResult {
@@ -61,6 +68,22 @@ export function emitOwl(model: ModelIR, _options: EmitOptions = {}): EmitResult 
     parts.push(...lines, '')
   }
 
+  // --- Enumerated value sets, as OWL 2 datatype definitions. This is assertional and
+  // stays inside OWL DL, so it is one of the few constraints safe to carry here.
+  for (const e of model.enums) {
+    const values = e.values.map((v) => `"${v}"`).join(' ')
+    parts.push(
+      `${e.prefix}:${e.name} a rdfs:Datatype ;`,
+      `  owl:equivalentClass [ a rdfs:Datatype ; owl:oneOf ( ${values} ) ] .`)
+  }
+  if (model.enums.length > 0) parts.push('')
+
+  /** The range of a property: its enum datatype when it has one, else the XSD type. */
+  const rangeOf = (p: PropertyIR): string => {
+    const e = p.enum ? findEnum(model, p.enum) : undefined
+    return e ? `${e.prefix}:${e.name}` : XSD[p.type]
+  }
+
   // --- Datatype properties, declared without domain or range.
   const declared = new Set<string>()
   for (const node of model.nodes) {
@@ -68,7 +91,7 @@ export function emitOwl(model: ModelIR, _options: EmitOptions = {}): EmitResult 
       const t = `${node.prefix}:${p.name}`
       if (declared.has(t)) continue
       declared.add(t)
-      parts.push(`${t} a owl:DatatypeProperty ; rdfs:label "${p.name}" ; rdfs:range ${XSD[p.type]} .`)
+      parts.push(`${t} a owl:DatatypeProperty ; rdfs:label "${p.name}" ; rdfs:range ${rangeOf(p)} .`)
       if (LOSSY_TYPES.has(p.type)) {
         downgrade(diagnostics, 'owl', 'downgrade-type',
           `Property '${node.name}.${p.name}' has type ${p.type}, which RDF has no dedicated datatype for. Declared as ${XSD[p.type]}.`,
@@ -90,6 +113,11 @@ export function emitOwl(model: ModelIR, _options: EmitOptions = {}): EmitResult 
 
   // --- Edges, by gradual reification.
   for (const m of mapEdges(model)) {
+    if (m.edge.cardinality !== 'many-to-many') {
+      downgrade(diagnostics, 'owl', 'downgrade-cardinality',
+        `Edge type '${m.edge.name}' declares ${m.edge.cardinality} cardinality. A cardinality restriction is deliberately not emitted here, because it would state an inference rule rather than a constraint; the SHACL artifact carries it.`,
+        m.edge.loc)
+    }
     if (m.kind === 'plain') {
       parts.push(
         `# (:${m.edge.from})-[:${m.edge.name}]->(:${m.edge.to}) carries no properties,`,
@@ -106,7 +134,7 @@ export function emitOwl(model: ModelIR, _options: EmitOptions = {}): EmitResult 
       `${term(m.edge, m.objectProperty)} a owl:ObjectProperty .`,
       `${term(m.edge, m.shortcutProperty)} a owl:ObjectProperty .`)
     for (const p of m.edge.props) {
-      parts.push(`${m.edge.prefix}:${p.name} a owl:DatatypeProperty ; rdfs:range ${XSD[p.type]} .`)
+      parts.push(`${m.edge.prefix}:${p.name} a owl:DatatypeProperty ; rdfs:range ${rangeOf(p)} .`)
     }
     if (m.edge.previousIri) {
       parts.push(`${term(m.edge, m.className)} owl:equivalentClass <${m.edge.previousIri}> .`)

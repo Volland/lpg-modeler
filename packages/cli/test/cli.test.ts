@@ -18,7 +18,8 @@ describe('lpg cli', () => {
   it('lists the registered targets', () => {
     const r = run(['targets'])
     expect(r.status).toBe(0)
-    expect(r.stdout.trim().split('\n').sort()).toEqual(['ladybug', 'neo4j', 'owl', 'shacl'])
+    expect(r.stdout.trim().split('\n').sort()).toEqual(
+      ['gql', 'ladybug', 'linkml', 'neo4j', 'owl', 'pgschema', 'shacl'])
   })
 
   it('checks a valid model and exits zero', () => {

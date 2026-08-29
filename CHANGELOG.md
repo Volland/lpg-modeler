@@ -4,6 +4,55 @@ All notable changes to LPG Modeler are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **Standards targets.** Three generators for schema languages this project does not own:
+  `gql` (GQL graph types, ISO/IEC 39075), `pgschema` (PG-Schema, the LDBC Property Graph
+  Schema Working Group formalism GQL's graph types grew out of), and `linkml` (LinkML, which
+  opens its generator ecosystem to a model authored here). All three publish a capability set
+  and report their downgrades like every other target.
+- **Format version.** A model may declare `lpg: "1.0"`. A file that declares nothing is read
+  as 1.0, so no existing model needs changing. A newer major version is a warning rather than
+  an error, so a model from a future version stays readable instead of becoming opaque.
+- **Prefix bindings.** A `prefixes:` map, shaped like a JSON-LD context, binds vocabularies
+  beyond the model's own namespace. Every binding is declared in generated RDF, so a CURIE the
+  model mentions no longer emits a document with an unbound prefix.
+- **GQL type spellings.** Every scalar answers to its GQL name as well as its original one —
+  `INTEGER` for `int`, `ZONED_DATETIME` for `datetime`. Matching ignores case and reads an
+  underscore as a space. Both spellings resolve to the same type; this is vocabulary, not a
+  second type system.
+
+- **List-valued properties.** `list: true`, or the GQL `LIST<STRING>`, or `STRING[]` — all
+  the same thing. Carried natively by every target: a `STRING[]` column on LadybugDB, arrays
+  on Neo4j, `LIST<…>` in GQL and PG-Schema, `multivalued` in LinkML. A list may not form part
+  of a key.
+- **Enums.** An `enums:` block names a set of permitted string values that a property
+  references with `enum:`. Enforced as `sh:in` in SHACL, an `owl:oneOf` datatype definition in
+  OWL, and `permissible_values` in LinkML; reported as a downgrade by the four targets that
+  have nowhere to put it.
+- **Open and closed types.** A node type is closed by default; `open: true` admits undeclared
+  properties, and openness is never inherited. SHACL now emits `sh:closed` for a closed type —
+  along with a shape for every relation leaving it, without which closure would reject any
+  node that had an edge — and PG-Schema emits `OPEN`.
+- **Edge cardinality.** `cardinality: many-to-one` and its siblings, defaulting to
+  `many-to-many`. LadybugDB emits the multiplicity keyword, which it genuinely rejects on
+  write; SHACL bounds both directions, the reverse through `sh:inversePath`. Neo4j, GQL, OWL
+  and PG-Schema report it rather than claiming it.
+
+### Changed
+
+- The capability set every target publishes gained four dimensions — `listProps`, `enums`,
+  `openTypes` and `cardinality` — so each target has to state where it stands on the
+  additions above rather than failing quietly.
+- The model JSON Schema is now written against **JSON Schema 2020-12**, keeping to constructs
+  an older validator still resolves. It also permits an optional `$schema` key, so a model can
+  be validated outside VS Code. A test now asserts the schema `core` validates against and the
+  copy the extension contributes are identical.
+
+Nothing in this release changes the meaning of an existing model file.
+
 ## [0.1.0] — 2026-08-29
 
 First release. A visual modeler: the full compiler pipeline plus a canvas that authors the

@@ -1,4 +1,6 @@
-import type { Diagnostic, EdgeTypeIR, ModelIR, NodeTypeIR, PropertyIR, ScalarType } from '../ir'
+import type {
+  Cardinality, Diagnostic, EdgeTypeIR, ModelIR, NodeTypeIR, PropertyIR, ScalarType,
+} from '../ir'
 import { concreteDescendants, concreteNodes } from '../ir'
 import { downgrade, type Capabilities, type EmitOptions, type EmitResult } from '../capabilities'
 
@@ -16,12 +18,29 @@ export const LADYBUG_CAPABILITIES: Capabilities = {
   compositeKey: 'synthesized',
   edgeProps: 'native',
   nestedEdges: false,
+  listProps: 'native',
+  // Measured against LadybugDB 0.19.1: rel multiplicity is rejected on write, unlike
+  // NOT NULL. The schema is mandatory and closed, and there is no enum type.
+  enums: 'unsupported',
+  openTypes: 'unsupported',
+  cardinality: 'enforced',
 }
 
 const TYPES: Record<ScalarType, string> = {
   string: 'STRING', int: 'INT64', float: 'DOUBLE', boolean: 'BOOL',
   date: 'DATE', datetime: 'TIMESTAMP', uuid: 'UUID', json: 'STRING',
 }
+
+/** LadybugDB spells multiplicity as a trailing keyword; MANY_MANY is the default. */
+const MULTIPLICITY: Record<Cardinality, string | undefined> = {
+  'one-to-one': 'ONE_ONE',
+  'one-to-many': 'ONE_MANY',
+  'many-to-one': 'MANY_ONE',
+  'many-to-many': undefined,
+}
+
+/** A column type, with the `[]` suffix LadybugDB uses for a list. */
+const columnType = (p: PropertyIR) => `${TYPES[p.type]}${p.list ? '[]' : ''}`
 
 /** Column name for a synthesized composite key. */
 export function syntheticKeyColumn(node: NodeTypeIR): string {
@@ -51,13 +70,25 @@ function columnLines(node: NodeTypeIR, diags: Diagnostic[]): string[] {
         p.loc)
       lines.push(`  // UNENFORCED: '${p.name}' is unique in the model; only the primary key is unique.`)
     }
-    lines.push(`  ${p.name} ${TYPES[p.type]},`)
+    if (p.enum) {
+      downgrade(diags, 'ladybug', 'downgrade-enum',
+        `Property '${node.name}.${p.name}' is constrained to enum '${p.enum}', which LadybugDB has no column type for. Stored as ${columnType(p)} with the value set unenforced.`,
+        p.loc)
+      lines.push(`  // UNENFORCED: '${p.name}' is limited to enum '${p.enum}' in the model.`)
+    }
+    lines.push(`  ${p.name} ${columnType(p)},`)
   }
   return lines
 }
 
 function nodeTable(node: NodeTypeIR, diags: Diagnostic[]): string {
   const lines = [`CREATE NODE TABLE IF NOT EXISTS ${node.name} (`]
+  if (node.open) {
+    downgrade(diags, 'ladybug', 'downgrade-open',
+      `Node type '${node.name}' is open, but LadybugDB has a mandatory closed schema: a property the table does not declare cannot be written at all.`,
+      node.loc)
+    lines.push(`  // DOWNGRADE: '${node.name}' is open in the model; this table is closed.`)
+  }
   lines.push(...columnLines(node, diags))
 
   if (node.key.length === 1) {
@@ -106,8 +137,23 @@ function relTable(model: ModelIR, edge: EdgeTypeIR, diags: Diagnostic[]): string
         p.loc)
       lines.push(`  // UNENFORCED: '${p.name}' is required in the model.`)
     }
-    lines.push(`  ${p.name} ${TYPES[p.type]},`)
+    if (p.enum) {
+      downgrade(diags, 'ladybug', 'downgrade-enum',
+        `Edge property '${edge.name}.${p.name}' is constrained to enum '${p.enum}', which LadybugDB has no column type for.`,
+        p.loc)
+      lines.push(`  // UNENFORCED: '${p.name}' is limited to enum '${p.enum}' in the model.`)
+    }
+    lines.push(`  ${p.name} ${columnType(p)},`)
   }
+
+  // Multiplicity is a trailing keyword inside the parentheses, and it is one of the
+  // few things LadybugDB really does reject on write.
+  const multiplicity = MULTIPLICITY[edge.cardinality]
+  if (multiplicity) {
+    lines.push(`  // ${edge.cardinality}: enforced on write.`)
+    lines.push(`  ${multiplicity},`)
+  }
+
   const last = lines.length - 1
   lines[last] = (lines[last] ?? '').replace(/,$/, '')
   lines.push(');')

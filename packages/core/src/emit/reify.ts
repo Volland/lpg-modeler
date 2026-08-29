@@ -62,6 +62,9 @@ export function mapEdges(model: ModelIR): EdgeMapping[] {
 /** Namespace prefixes in play across a resolved closure, prefix -> base IRI. */
 export function collectPrefixes(model: ModelIR): Map<string, string> {
   const out = new Map<string, string>()
+  // Prefixes the model declared explicitly, so a vocabulary it references by CURIE is
+  // bound in the generated document rather than left dangling.
+  for (const [p, iri] of Object.entries(model.prefixes ?? {})) out.set(p, iri)
   const add = (t: NodeTypeIR | EdgeTypeIR) => {
     if (!t.prefix) return
     out.set(t.prefix, t.iri.slice(0, t.iri.length - t.name.length))

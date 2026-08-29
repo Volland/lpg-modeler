@@ -47,6 +47,38 @@ describe('ladybug emitter, executed', () => {
     expect((await r.getAll())[0]?.n).toBe(1)
   })
 
+  // @lat: [[metamodel#Lists]]
+  it('round-trips a list-valued property', async () => {
+    const conn = await connect()
+    await conn.query(emit(loadFixture('features.lpg.yaml'), 'ladybug').content)
+    await conn.query("CREATE (:Driver {licence: 'L1', nicknames: ['Ace', 'Red']})")
+    const r = await conn.query('MATCH (d:Driver) RETURN d.nicknames AS n')
+    expect((await r.getAll())[0]?.n).toEqual(['Ace', 'Red'])
+  })
+
+  // @lat: [[metamodel#Cardinality]]
+  it('enforces many-to-one: a second target for one source is rejected', async () => {
+    const conn = await connect()
+    await conn.query(emit(loadFixture('features.lpg.yaml'), 'ladybug').content)
+    await conn.query("CREATE (:Driver {licence: 'L1'}), (:Vehicle {vin: 'V1'}), (:Vehicle {vin: 'V2'})")
+    await conn.query("MATCH (d:Driver), (v:Vehicle {vin:'V1'}) CREATE (d)-[:DRIVES]->(v)")
+    // Unlike a required property, this constraint is genuinely enforced on write, which
+    // is why cardinality is declared 'enforced' rather than reported as a downgrade.
+    await expect(conn.query("MATCH (d:Driver), (v:Vehicle {vin:'V2'}) CREATE (d)-[:DRIVES]->(v)"))
+      .rejects.toThrow()
+  })
+
+  // @lat: [[metamodel#Enums]]
+  it('confirms the enum downgrade is real: an undeclared value is accepted', async () => {
+    const conn = await connect()
+    await conn.query(emit(loadFixture('features.lpg.yaml'), 'ladybug').content)
+    // 'nonsense' is not in the Status enum. LadybugDB has no enum column type, which is
+    // exactly why the emitter reports a downgrade rather than claiming the set holds.
+    await conn.query("CREATE (:Driver {licence: 'L9', status: 'nonsense'})")
+    const r = await conn.query("MATCH (d:Driver {licence:'L9'}) RETURN d.status AS s")
+    expect((await r.getAll())[0]?.s).toBe('nonsense')
+  })
+
   it('accepts an expanded abstract endpoint on both concrete sides', async () => {
     const conn = await connect()
     await conn.query(emit(loadFixture('social.lpg.yaml'), 'ladybug').content)

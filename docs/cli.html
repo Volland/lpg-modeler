@@ -43,7 +43,7 @@
 
 Usage:
   lpg check &lt;model.lpg.yaml&gt;
-  lpg emit  &lt;model.lpg.yaml&gt; --target &lt;ladybug|neo4j|owl|shacl&gt; [options]
+  lpg emit  &lt;model.lpg.yaml&gt; --target &lt;gql|ladybug|linkml|neo4j|owl|pgschema|shacl&gt; [options]
   lpg ids   &lt;model.lpg.yaml&gt;        assign any missing stable element ids
   lpg targets
 
@@ -72,6 +72,14 @@ Options:
 schema/social.ladybug.cypher
 schema/social.shacl.ttl</code></pre>
   <p>
+    The standards targets work the same way, and are what you reach for when the model has to
+    be read by something this project does not own:
+  </p>
+<pre><code>$ lpg emit social.lpg.yaml --target gql --target pgschema --target linkml --out ./schema
+schema/social.gql.gql
+schema/social.pgschema.pgs
+schema/social.linkml.yaml</code></pre>
+  <p>
     A model with errors produces nothing at all — the command reports them and exits
     <code>1</code> rather than writing a partial artifact. Downgrade warnings are printed to
     stderr after the artifact list, and each one is also recorded as a comment inside the
@@ -95,9 +103,12 @@ assigned 14 id(s) in /work/social.lpg.yaml</code></pre>
   <h2>targets</h2>
   <p>Prints the registered target names, one per line.</p>
 <pre><code>$ lpg targets
+gql
 ladybug
+linkml
 neo4j
 owl
+pgschema
 shacl</code></pre>
 
   <h2>Options</h2>

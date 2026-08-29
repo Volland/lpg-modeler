@@ -42,6 +42,10 @@
     "shacl",
     "owl",
     "ontology",
+    "gql",
+    "iso 39075",
+    "pg-schema",
+    "linkml",
     "erd",
     "data modeling",
     "knowledge graph"

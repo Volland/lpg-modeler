@@ -1,6 +1,6 @@
 import * as path from 'node:path'
 import type {
-  Diagnostic, EdgeTypeIR, ModelIR, NodeTypeIR, PropertyIR, ResolveResult,
+  Diagnostic, EdgeTypeIR, EnumIR, ModelIR, NodeTypeIR, PropertyIR, ResolveResult,
 } from './ir'
 import { err } from './ir'
 import { parseModel, type RawModel, type RawNode, type RawProperty } from './parse'
@@ -73,6 +73,8 @@ function toProp(p: RawProperty, inheritedFrom?: string): PropertyIR {
     id: p.id ?? generateId('prop'),
     name: p.name,
     type: p.type,
+    list: p.list,
+    ...(p.enum ? { enum: p.enum } : {}),
     required: p.required,
     unique: p.unique,
     ...(inheritedFrom ? { inheritedFrom } : {}),
@@ -91,11 +93,22 @@ export function resolveModel(entry: string, readFile: ReadFile): ResolveResult {
   const loaded = dedupeByNamespace(loadClosure(entry, readFile, diagnostics))
   const entryModel = loaded.get(entry)
 
+  // Imported models may bind prefixes too; the entry file wins on a conflict, so a
+  // consumer can rebind a vendored vocabulary without editing it.
+  const prefixes: Record<string, string> = {}
+  for (const [file, m] of loaded) {
+    if (file === entry) continue
+    Object.assign(prefixes, m.raw.prefixes)
+  }
+  Object.assign(prefixes, entryModel?.raw.prefixes ?? {})
+
   const emptyNs = { prefix: '', iri: '' }
   const model: ModelIR = {
     file: entry,
     namespace: entryModel?.raw.namespace ?? emptyNs,
-    nodes: [], edges: [], mixins: [],
+    ...(entryModel?.raw.formatVersion ? { formatVersion: entryModel.raw.formatVersion } : {}),
+    prefixes,
+    nodes: [], edges: [], mixins: [], enums: [],
   }
 
   // --- Sealed imports: a local declaration must not shadow an imported type name.
@@ -105,6 +118,7 @@ export function resolveModel(entry: string, readFile: ReadFile): ResolveResult {
       if (file === entry) continue
       m.raw.nodes.forEach((n) => importedNames.add(n.name))
       m.raw.edges.forEach((e) => importedNames.add(e.name))
+      m.raw.enums.forEach((x) => importedNames.add(x.name))
     }
     for (const n of entryModel.raw.nodes) {
       if (importedNames.has(n.name)) {
@@ -125,9 +139,24 @@ export function resolveModel(entry: string, readFile: ReadFile): ResolveResult {
   // --- Gather every raw declaration across the closure.
   const rawNodes = new Map<string, { raw: RawNode; prefix: string; iri: string }>()
   const mixinProps = new Map<string, PropertyIR[]>()
+  const seenEnums = new Set<string>()
   for (const m of loaded.values()) {
     const prefix = m.raw.namespace?.prefix ?? ''
     const base = m.raw.namespace?.iri ?? ''
+    for (const x of m.raw.enums) {
+      if (seenEnums.has(x.name)) continue
+      seenEnums.add(x.name)
+      const e: EnumIR = {
+        id: x.id ?? generateId('enum'),
+        name: x.name,
+        qname: prefix ? `${prefix}:${x.name}` : x.name,
+        iri: base + x.name,
+        prefix,
+        values: x.values,
+        ...(x.loc ? { loc: x.loc } : {}),
+      }
+      model.enums.push(e)
+    }
     for (const mx of m.raw.mixins) {
       mixinProps.set(mx.name, mx.props.map((p) => toProp(p)))
       model.mixins.push({
@@ -215,6 +244,7 @@ export function resolveModel(entry: string, readFile: ReadFile): ResolveResult {
       iri: decl.iri,
       prefix: decl.prefix,
       abstract: decl.raw.abstract,
+      open: decl.raw.open,
       ...(decl.raw.extends ? { extends: stripAlias(decl.raw.extends) } : {}),
       ancestors,
       mixins: decl.raw.mixins,
@@ -252,6 +282,7 @@ export function resolveModel(entry: string, readFile: ReadFile): ResolveResult {
         iri: base + e.name,
         prefix,
         from, to,
+        cardinality: e.cardinality,
         props: e.props.map((p) => toProp(p)),
         ...(e.previousIri ? { previousIri: e.previousIri } : {}),
         ...(e.loc ? { loc: e.loc } : {}),
@@ -262,5 +293,6 @@ export function resolveModel(entry: string, readFile: ReadFile): ResolveResult {
 
   model.nodes.sort((a, b) => a.name.localeCompare(b.name))
   model.edges.sort((a, b) => a.name.localeCompare(b.name))
+  model.enums.sort((a, b) => a.name.localeCompare(b.name))
   return { model, diagnostics }
 }

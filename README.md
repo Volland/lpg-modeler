@@ -25,8 +25,10 @@ as ERD-like diagrams, and generating database DDL and RDF artifacts from a singl
 
 - **Authors the model as reviewable YAML**, validated by a contributed JSON Schema — so completion and hover come from the YAML tooling you already have.
 - **Edits it on a canvas beside the file.** Every canvas action becomes a targeted text splice, applied as a workspace edit. Coordinates live in a sidecar, so moving a box produces no semantic diff.
-- **Generates four targets** from one model: LadybugDB DDL, Neo4j constraints, SHACL shapes, and an OWL ontology.
+- **Generates seven targets** from one model: LadybugDB DDL, Neo4j constraints, SHACL shapes, and an OWL ontology — plus three standards artifacts, GQL graph types (ISO/IEC 39075), PG-Schema, and LinkML.
 - **Reports every downgrade.** Anything a target cannot enforce becomes an editor diagnostic *and* a comment at the lossy line of the artifact. Nothing disappears quietly.
+- **Models lists, enums, open types and cardinality** — and cardinality is genuinely enforced where it can be: LadybugDB rejects a violating write, and SHACL bounds both directions.
+- **Stays interoperable.** The model file is self-describing, its scalar types answer to their GQL names, and the JSON Schema is 2020-12 — so a model is readable outside this tool, not only inside it.
 - **Runs in CI.** The same validation, with no editor present, so a pull request can be gated on schema validity.
 
 Full feature tour: **https://volland.github.io/lpg-modeler/**
@@ -43,7 +45,7 @@ The CLI, for continuous integration:
 
 ```bash
 npx lpg check model/domain.lpg.yaml
-npx lpg emit  model/domain.lpg.yaml --target ladybug --out schema
+npx lpg emit model/domain.lpg.yaml --target ladybug --out schema
 ```
 
 ## Repository layout

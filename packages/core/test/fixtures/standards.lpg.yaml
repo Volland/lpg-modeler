@@ -1,0 +1,22 @@
+# Exercises the standards alignment layer: a declared format version, extra prefix
+# bindings, and the GQL spellings of the scalar types.
+lpg: "1.0"
+$schema: https://lpg-modeler.dev/schemas/lpg-1.0.schema.json
+
+namespace:
+  prefix: cat
+  iri: https://example.org/vocab/catalog#
+
+prefixes:
+  dct: http://purl.org/dc/terms/
+
+nodes:
+  Release:
+    id: n_rel
+    key: [label, catalogNumber]
+    props:
+      label: { id: p_lab, type: STRING, required: true }
+      catalogNumber: { id: p_cat, type: STRING, required: true }
+      pressed: { id: p_prs, type: ZONED_DATETIME }
+      copies: { id: p_cop, type: INTEGER }
+      shipped: { id: p_shp, type: BOOL }
