@@ -6,13 +6,13 @@
 
 <p align="center">
   <a href="https://volland.github.io/lpg-modeler/">Documentation</a> ·
-  <a href="https://marketplace.visualstudio.com/items?itemName=volland.lpg-modeler">Marketplace</a> ·
+  <a href="https://marketplace.visualstudio.com/items?itemName=pavlyshyn.lpg-modeler">Marketplace</a> ·
   <a href="https://volland.github.io/lpg-modeler/model-format.html">Model format</a> ·
   <a href="https://volland.github.io/lpg-modeler/architecture.html">Design notes</a>
 </p>
 
 <p align="center">
-  <a href="https://marketplace.visualstudio.com/items?itemName=volland.lpg-modeler"><img src="https://img.shields.io/visual-studio-marketplace/v/volland.lpg-modeler?color=2f5fe0&label=marketplace" alt="Marketplace version"></a>
+  <a href="https://marketplace.visualstudio.com/items?itemName=pavlyshyn.lpg-modeler"><img src="https://img.shields.io/visual-studio-marketplace/v/pavlyshyn.lpg-modeler?color=2f5fe0&label=marketplace" alt="Marketplace version"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-2f5fe0" alt="MIT licensed"></a>
 </p>
 
@@ -36,7 +36,7 @@ Full feature tour: **https://volland.github.io/lpg-modeler/**
 From the VS Code Marketplace:
 
 ```bash
-code --install-extension volland.lpg-modeler
+code --install-extension pavlyshyn.lpg-modeler
 ```
 
 The CLI, for continuous integration:

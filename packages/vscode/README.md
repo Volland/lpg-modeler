@@ -5,8 +5,8 @@
 </p>
 
 <p align="center">
-  <a href="https://marketplace.visualstudio.com/items?itemName=volland.lpg-modeler"><img src="https://img.shields.io/visual-studio-marketplace/v/volland.lpg-modeler?color=2f5fe0&label=marketplace" alt="Marketplace version"></a>
-  <a href="https://marketplace.visualstudio.com/items?itemName=volland.lpg-modeler"><img src="https://img.shields.io/visual-studio-marketplace/i/volland.lpg-modeler?color=2f5fe0" alt="Installs"></a>
+  <a href="https://marketplace.visualstudio.com/items?itemName=pavlyshyn.lpg-modeler"><img src="https://img.shields.io/visual-studio-marketplace/v/pavlyshyn.lpg-modeler?color=2f5fe0&label=marketplace" alt="Marketplace version"></a>
+  <a href="https://marketplace.visualstudio.com/items?itemName=pavlyshyn.lpg-modeler"><img src="https://img.shields.io/visual-studio-marketplace/i/pavlyshyn.lpg-modeler?color=2f5fe0" alt="Installs"></a>
   <a href="https://github.com/Volland/lpg-modeler/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-2f5fe0" alt="MIT licensed"></a>
 </p>
 

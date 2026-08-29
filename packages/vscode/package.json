@@ -3,7 +3,7 @@
   "displayName": "LPG Modeler",
   "description": "Visual modeling for labeled property graphs, with Ladybug, Neo4j, SHACL and OWL generation.",
   "version": "0.1.0",
-  "publisher": "volland",
+  "publisher": "pavlyshyn",
   "license": "MIT",
   "icon": "icon.png",
   "homepage": "https://volland.github.io/lpg-modeler/",
