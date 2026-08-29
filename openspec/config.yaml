@@ -1,0 +1,137 @@
+schema: spec-driven
+
+context: |
+  # lpg-modeler
+
+  A VS Code extension and CLI for authoring Labeled Property Graph (LPG) schemas as
+  text, viewing them as ERD-like diagrams, and generating database DDL, migrations,
+  and RDF artifacts from a single model.
+
+  The authoritative design record lives in `lat.md/` and is validated by `lat check`.
+  Read it before proposing anything: `lat locate "<Section>"`, `lat refs "<file>#<Section>"`.
+  Key sections: architecture#Source of Truth, architecture#Roadmap, metamodel#Identity,
+  metamodel#Composition, emitters#Capability Matrix, emitters#Ladybug Target,
+  emitters#RDF Targets, emitters#Migrations.
+
+  ## Tech stack
+
+  TypeScript throughout. pnpm workspace monorepo with three packages:
+    - `core`    parsing, IR, validation, diffing, all emitters. MUST NOT import `vscode`
+                (lint-enforced) so it runs in CI and in plain Node tests.
+    - `cli`     wraps core for continuous integration (`lpg emit | check | migrate`).
+    - `vscode`  webview and diagnostics plumbing only.
+
+  Models are YAML validated by a JSON Schema contributed via `contributes.jsonValidation`.
+  In-place edits use the `yaml` package Document API so comments, key order, and
+  formatting survive a round trip. Canvas is React Flow (`@xyflow/react`, MIT) with
+  ELK auto-layout (`elkjs`, EPL-2.0). Ladybug tests execute real DDL in-process via
+  `@ladybugdb/core`, with `@ladybugdb/wasm-core` as the CI fallback.
+
+  ## Domain vocabulary
+
+  Use these terms exactly; do not invent synonyms.
+    model            a YAML file declaring node types, edge types, and a namespace
+    IR               resolved intermediate representation; the input to every emitter
+    node type        a labeled entity type; may be abstract, may carry mixins
+    edge type        a binary directed typed relationship, may carry properties
+    mixin            a reusable property set applied to node types
+    key              a node type's declared identity, single or composite
+    element id       short generated stable identifier on every type and property
+    namespace        a model's prefix plus base IRI; the global identity of its types
+    view             a named subset of types forming one diagram
+    layout sidecar   diagram coordinates, keyed by element id, nested per view
+    target           a generation destination (ladybug, neo4j, memgraph, shacl, owl)
+    emitter          IR to artifact for one target
+    capability       a typed declaration of what a target can express
+    downgrade        a model feature a target cannot express; reported as a diagnostic
+    lockfile         canonical stable-ordered IR snapshot committed for diffing
+
+  ## Locked decisions - do not relitigate without an explicit new proposal
+
+  1.  The YAML model is canonical and holds semantics only. Layout is a separate
+      sidecar so rearranging a diagram never dirties the semantic diff.
+  2.  No hand-written parser. Surface syntax is YAML plus a bundled JSON Schema.
+  3.  Metamodel is LPG plus abstract label hierarchy and mixins. Metagraph
+      edges-on-edges are OUT of the core; Neo4j cannot represent them natively.
+  4.  Every concrete node type declares exactly one key. Keys are inherited.
+  5.  Every type and property carries a stable tool-backfilled element id.
+  6.  Imports are sealed: subtype or mixin an imported type, never mutate it.
+  7.  Type identity is the IRI, not the file path.
+  8.  Every emitter declares a capability set. Downgrades surface as editor
+      diagnostics AND as comments at the lossy site. Never silently drop a constraint.
+  9.  Ladybug flattens an abstract hierarchy to one node table per concrete leaf type.
+  10. SHACL carries constraints (closed-world). OWL is restricted to the safe
+      assertional subset: classes, subClassOf, hasKey, disjointness, inverse.
+      Never emit rdfs:domain/range or cardinality restrictions from LPG constraints -
+      that inverts the meaning rather than merely losing information.
+  11. Edge properties map by gradual reification: bare edge to a plain object
+      property, edge with properties to an n-ary class plus a shortcut property.
+  12. Renames are detected via element ids, never inferred from structural similarity.
+  13. Only targets testable against a real engine ship as code. Everything else is a
+      user-supplied template over the IR.
+  14. The public plugin API is deferred until three emitters exist. The capability
+      set is what it will eventually expose.
+
+  ## v1 scope
+
+  IN:  parse, IR, validate, emit; ladybug (live-tested) and neo4j targets; CLI
+       `emit` and `check`; read-only canvas with ELK auto-layout; keys, element ids,
+       imports, namespaces.
+  OUT: migrations and the lockfile diff, SHACL and OWL targets, editable views and
+       the layout sidecar, bidirectional canvas editing, memgraph, template targets.
+
+  Deferred is not cancelled - every deferred item is already accounted for in
+  `lat.md/` and must stay reachable from the design. The metamodel is the least
+  reversible decision in the project; validating it against executing DDL comes first.
+
+rules:
+  proposal:
+    - State which locked decision the change touches, or state that it touches none.
+    - Reworking a locked decision is allowed but must be argued explicitly, naming the
+      decision number and what new information invalidates it.
+    - Always include a "Non-goals" section.
+    - Say which targets are affected (ladybug, neo4j, memgraph, shacl, owl, template).
+    - If the change is in the v1 OUT list, say why it is being pulled forward.
+    - Keep under 500 words.
+
+  specs:
+    - Write requirements in the domain vocabulary above; do not introduce synonyms.
+    - Describe observable behavior of the model, the IR, or a generated artifact -
+      never internal function names.
+    - A requirement about generated output must state the target it applies to.
+    - Behavior a target cannot express is a downgrade requirement rather than an
+      omission. Say what diagnostic is raised and what appears in the output.
+
+  design:
+    - Say whether the metamodel changes. If it does, lead with that - it is the least
+      reversible decision and everything downstream depends on it.
+    - Any new target must state its capability set and every downgrade it implies.
+    - Any change to the IR must state the effect on the lockfile and on diffing.
+    - Any change to type naming or namespaces must state the effect on IRI stability
+      and on rename detection.
+    - Cite the `lat.md/` sections the design depends on by full section id.
+    - Note which package the work lands in; if it lands in `core`, confirm no `vscode`
+      import is introduced.
+
+  tasks:
+    - Break tasks into chunks of max 2 hours.
+    - Emitter work requires a golden-file task; Ladybug emitter work additionally
+      requires an in-process execution task that asserts constraints reject bad data.
+    - Include a task to update the affected `lat.md/` sections.
+    - The final task is always `lat check`.
+
+operations:
+  apply:
+    guidance:
+      - Update `lat.md/` in the same change as the code, never afterwards.
+      - Run `lat check` before reporting the change complete; it must pass.
+      - Do not add a `vscode` import to `core`, even transitively through a shared util.
+      - When an emitter cannot express something, add a capability entry and a
+        diagnostic. Do not silently drop it and do not widen the metamodel to avoid it.
+      - Keep test summaries concise; report failures with the actual output.
+
+  archive:
+    guidance:
+      - Summarize the archive outcome before finishing.
+      - Record any locked decision this change amended, and update the config context.
+      - Note anything discovered that should move between the v1 IN and OUT lists.
