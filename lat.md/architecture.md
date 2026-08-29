@@ -82,7 +82,7 @@ A published `.vsix` carries no `node_modules`, so a bare `require('@lpg/core')` 
 
 ### Documentation site
 
-`docs/` is a hand-written static site deployed verbatim by a Pages workflow. It is the public face of the same material this knowledge graph holds, aimed at someone deciding whether to install rather than at someone changing the code.
+`docs/` is a hand-written static site that GitHub Pages serves verbatim from the branch folder. It is the public face of the material this knowledge graph holds, aimed at someone deciding whether to install rather than at someone changing the code.
 
 Diagrams are authored as SVG and exported to PNG beside them. Both formats are kept because the Marketplace rejects SVG in a README, while the site prefers it. Neither is generated at build time: the site has no build step at all, so a broken toolchain can never take the documentation down.
 
