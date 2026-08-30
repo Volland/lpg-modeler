@@ -1,0 +1,62 @@
+# Constraints beyond required and unique: bounds on values, assertions across
+# properties, and a raw SHACL fragment for the long tail.
+lpg: "1.0"
+namespace:
+  prefix: bk
+  iri: https://example.org/vocab/booking#
+
+enums:
+  Status:
+    id: x_bst
+    values: [held, confirmed, cancelled]
+
+nodes:
+  Guest:
+    id: n_guest
+    key: [email]
+    props:
+      email: { id: p_gmail, type: string, unique: true, pattern: "^[^@]+@[^@]+$" }
+      phone: { id: p_gphone, type: string, minLength: 7, maxLength: 20 }
+      age:   { id: p_gage, type: int, min: 0, max: 130 }
+    constraints:
+      - id: c_reach
+        name: reachable
+        assert: { atLeastOne: [email, phone] }
+        message: a guest needs an email address or a phone number
+
+  Booking:
+    id: n_bkg
+    key: [ref]
+    props:
+      ref:       { id: p_bref, type: string, required: true, pattern: "^BK-[0-9]{6}$" }
+      status:    { id: p_bst, type: string, enum: Status }
+      startDate: { id: p_bs, type: date, required: true }
+      endDate:   { id: p_be, type: date, required: true }
+      nights:    { id: p_bn, type: int, min: 1, max: 30 }
+    constraints:
+      - id: c_dates
+        name: endAfterStart
+        assert: { lessThan: [startDate, endDate] }
+        message: a booking must end after it starts
+      - id: c_lead
+        name: oneLeadGuest
+        assert: { count: { edge: BOOKED_BY, of: Guest, min: 1, max: 1 } }
+        message: exactly one guest leads a booking
+
+    # The escape hatch: anything the closed vocabulary cannot say is written as raw
+    # SHACL and spliced into this shape. Only the shacl target can use it, and every
+    # other target reports that it ignored it.
+    shacl: |
+      sh:property [
+        sh:path bk:nights ;
+        sh:severity sh:Warning ;
+        sh:description "long stays are reviewed by hand" ;
+        sh:maxInclusive 14 ;
+      ] ;
+
+edges:
+  BOOKED_BY:
+    id: e_by
+    from: Booking
+    to: Guest
+    cardinality: { to: "1..*" }

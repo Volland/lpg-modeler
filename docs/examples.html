@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Examples — LPG Modeler</title>
+<meta name="description" content="Four complete model files to download and start from: a starter hierarchy, enums and lists, endpoint bounds, and constraints.">
+<link rel="icon" href="assets/icon.png">
+<link rel="stylesheet" href="assets/fonts.css">
+<link rel="stylesheet" href="assets/site.css">
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="index.html"><img src="assets/icon.png" alt=""> LPG Modeler</a>
+    <nav class="links">
+      <a href="index.html">Overview</a>
+      <a href="getting-started.html">Getting started</a>
+      <a href="examples.html">Examples</a>
+      <a href="model-format.html">Model format</a>
+      <a href="targets.html">Targets</a>
+      <a href="cli.html">CLI</a>
+      <a href="architecture.html">Architecture</a>
+      <a href="https://github.com/Volland/lpg-modeler">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+<div class="wrap hero">
+  <span class="eyebrow">Examples</span>
+  <h1>Four models to start from</h1>
+  <p class="lede">
+    Each one is a complete, valid model file. Download it, drop it in a workspace, open the
+    canvas beside it, and generate. Every example on this page is checked in continuous
+    integration, so none of them can drift out of date with the tool.
+  </p>
+</div>
+
+<section class="wrap narrow">
+  <h2>Start here</h2>
+  <p>
+    Save any of these as <code>&lt;name&gt;.lpg.yaml</code> — the extension matches on that
+    suffix — then run:
+  </p>
+<pre><code>npx lpg check social.lpg.yaml
+npx lpg emit  social.lpg.yaml --target shacl --out ./schema</code></pre>
+
+  <hr class="rule">
+
+  <h2>social.lpg.yaml <a class="dl" href="examples/social.lpg.yaml" download>download</a></h2>
+  <p>
+    <strong>The starter.</strong> An abstract parent contributing a key to its subtypes, a
+    mixin contributing a shared property, and three edges — one of which has an abstract
+    endpoint, and one of which carries no properties at all.
+  </p>
+  <p class="dim">
+    Shows: abstract types · inheritance · mixins · keys · edge properties · gradual
+    reification in the RDF output.
+  </p>
+
+  <hr class="rule">
+
+  <h2>catalog.lpg.yaml <a class="dl" href="examples/catalog.lpg.yaml" download>download</a></h2>
+  <p>
+    <strong>Where the targets start disagreeing.</strong> An enum, two list-valued
+    properties, a composite key and an open type. Generate all seven targets from this one
+    and read the downgrade comments — that is the fastest way to see what each target can
+    and cannot hold.
+  </p>
+  <p class="dim">
+    Shows: enums · lists · composite keys · open types · GQL type spellings.
+  </p>
+
+  <hr class="rule">
+
+  <h2>kinship.lpg.yaml <a class="dl" href="examples/kinship.lpg.yaml" download>download</a></h2>
+  <p>
+    <strong>Endpoint bounds.</strong> A person has exactly two parents — a constraint none
+    of the four named multiplicities can express. SHACL enforces it exactly; LadybugDB emits
+    the strongest keyword it has and reports what it cannot hold.
+  </p>
+<pre><code><span class="c-key">edges</span>:
+  HAS_PARENT:
+    from: Person
+    to: Person
+    cardinality: { to: <span class="c-str">"2"</span> }</code></pre>
+  <p class="dim">Shows: exact counts · ranges · bounds in both directions.</p>
+
+  <hr class="rule">
+
+  <h2>booking.lpg.yaml <a class="dl" href="examples/booking.lpg.yaml" download>download</a></h2>
+  <p>
+    <strong>Constraints.</strong> Bounds and patterns on values, three named constraints
+    across properties and edges, and a raw SHACL fragment for the long tail. Five of the
+    seven targets can hold none of it, and each says so.
+  </p>
+<pre><code><span class="c-key">constraints</span>:
+  - name: endAfterStart
+    assert: { lessThan: [startDate, endDate] }
+    message: a booking must end after it starts
+  - name: oneLeadGuest
+    assert: { count: { edge: BOOKED_BY, of: Guest, min: 1, max: 1 } }</code></pre>
+  <p class="dim">
+    Shows: value bounds · patterns · cross-property assertions · qualified counts · the
+    escape hatch.
+  </p>
+</section>
+
+<section class="wrap narrow">
+  <h2>What to try next</h2>
+  <p>
+    Open <code>booking.lpg.yaml</code> beside the canvas and select the <code>Booking</code>
+    box. The inspector on the right lists its constraints and lets you add one: pick a kind,
+    pick the operands from the type's own properties, and it is written into the file as a
+    targeted edit.
+  </p>
+  <p>
+    Then generate the <code>shacl</code> target and the <code>ladybug</code> target from the
+    same file. The first carries every constraint; the second reports each one it cannot.
+    That difference is the whole design in one screen.
+  </p>
+  <div class="next">
+    <a href="model-format.html"><div class="k">Model format</div><div class="v">Every key these files use.</div></a>
+    <a href="targets.html"><div class="k">Targets</div><div class="v">What each generator promises.</div></a>
+    <a href="getting-started.html"><div class="k">Getting started</div><div class="v">Install and first run.</div></a>
+  </div>
+</section>
+</main>
+
+<footer class="site">
+  <div class="wrap">
+    <span>LPG Modeler — MIT licensed</span>
+    <span class="spacer"><a href="impressum.html">Impressum</a></span>
+    <span><a href="datenschutz.html">Datenschutz</a></span>
+    <span><a href="agb.html">AGB</a></span>
+    <span><a href="https://github.com/Volland/lpg-modeler">Source</a></span>
+    <span><a href="https://github.com/Volland/lpg-modeler/issues">Issues</a></span>
+  </div>
+</footer>
+
+</body>
+</html>

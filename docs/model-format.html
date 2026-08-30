@@ -6,9 +6,7 @@
 <title>Model format — LPG Modeler</title>
 <meta name="description" content="Reference for the LPG Modeler model format: node types, mixins, keys, edge types, imports, stable element ids, views and validation codes.">
 <link rel="icon" href="assets/icon.png">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;650&family=Instrument+Serif&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/fonts.css">
 <link rel="stylesheet" href="assets/site.css">
 </head>
 <body>
@@ -19,6 +17,7 @@
     <nav class="links">
       <a href="index.html">Overview</a>
       <a href="getting-started.html">Getting started</a>
+      <a href="examples.html">Examples</a>
       <a href="model-format.html">Model format</a>
       <a href="targets.html">Targets</a>
       <a href="cli.html">CLI</a>
@@ -202,6 +201,72 @@ tags: { type: STRING[] }            <span class="c-com"># the bracket form</span
     see <a href="targets.html">Targets</a>.
   </p>
 
+  <h3>Value constraints</h3>
+  <p>
+    A property may bound its own values. <code>min</code> and <code>max</code> apply to
+    anything ordered — <code>int</code>, <code>float</code>, <code>date</code>,
+    <code>datetime</code>. <code>pattern</code>, <code>minLength</code> and
+    <code>maxLength</code> apply to <code>string</code>. Each is checked against the type, so
+    a pattern on an integer is an error rather than a silent no-op.
+  </p>
+<pre><code>age:   { type: int, min: 0, max: 130 }
+email: { type: string, pattern: <span class="c-str">"^[^@]+@[^@]+$"</span> }
+phone: { type: string, minLength: 7, maxLength: 20 }</code></pre>
+  <p>
+    SHACL expresses all five and LinkML all but length. The other five targets can hold none
+    of them — measured, not assumed: LadybugDB rejects <code>CHECK</code> outright. Each says
+    so, at <code>info</code> rather than <code>warning</code>, so the constraint reports do
+    not bury the downgrades that are genuinely surprising.
+  </p>
+
+  <h2>Constraints across properties</h2>
+  <p>
+    A node type may declare constraints spanning more than one property: a comparison, a
+    choice, or a count over one of its edges. Each has a name, an assertion and an optional
+    message.
+  </p>
+<pre><code><span class="c-key">nodes</span>:
+  Booking:
+    constraints:
+      - name: endAfterStart
+        assert: { lessThan: [startDate, endDate] }
+        message: a booking must end after it starts
+      - name: reachable
+        assert: { atLeastOne: [email, phone] }
+      - name: oneLeadGuest
+        assert: { count: { edge: BOOKED_BY, of: Guest, min: 1, max: 1 } }</code></pre>
+  <p>
+    Seven kinds, and no more: <code>lessThan</code>, <code>lessThanOrEquals</code>,
+    <code>equals</code>, <code>disjoint</code>, <code>atLeastOne</code>,
+    <code>exactlyOne</code>, and <code>count</code>. Constraints are not inherited.
+  </p>
+  <div class="note">
+    <p><strong>Why the vocabulary is closed.</strong> It is the load-bearing decision. A
+    closed vocabulary can be <em>translated</em> per target or honestly downgraded, where a
+    raw expression could only ever be passed through to one — which would forfeit the
+    one-model-many-artifacts story entirely. It also lets the canvas offer a form per kind,
+    with every operand a dropdown of the type's own properties, instead of shipping an
+    expression parser.</p>
+  </div>
+
+  <h3>The escape hatch</h3>
+  <p>
+    Anything the vocabulary cannot say is written as raw SHACL and spliced into that type's
+    shape verbatim.
+  </p>
+<pre><code>    shacl: |
+      sh:property [
+        sh:path bk:nights ;
+        sh:severity sh:Warning ;
+        sh:maxInclusive 14 ;
+      ] ;</code></pre>
+  <p>
+    It is deliberately unportable, and that is stated rather than hidden: only the
+    <code>shacl</code> target uses it, and every other target reports that it ignored it.
+    Widening the vocabulary is always the better fix — the hatch is what makes waiting for
+    that bearable.
+  </p>
+
   <h2>Identity</h2>
   <p>
     Every concrete node type declares exactly one key; validation fails without one. One
@@ -236,21 +301,46 @@ tags: { type: STRING[] }            <span class="c-com"># the bracket form</span
 
   <h3>Cardinality</h3>
   <p>
-    An edge type may declare endpoint multiplicity, read as
-    <code>&lt;from end&gt;-to-&lt;to end&gt;</code>. <code>many-to-one</code> says each source
-    node has at most one target. The default is <code>many-to-many</code>, which constrains
-    nothing.
+    An edge type may declare endpoint multiplicity, either as one of four named forms or as
+    a bound per end. The bound written at an end says how many nodes at that end may relate
+    to one node at the other &mdash; the UML reading. The default is unbounded at both ends,
+    written by leaving the field out.
   </p>
 <pre><code><span class="c-key">edges</span>:
   DRIVES:
     from: Driver
     to: Vehicle
-    cardinality: many-to-one   <span class="c-com"># MANY_ONE is accepted too</span></code></pre>
+    cardinality: many-to-one          <span class="c-com"># MANY_ONE is accepted too</span>
+
+  HAS_PARENT:                          <span class="c-com"># exactly two parents</span>
+    from: Child
+    to: Person
+    cardinality: { to: <span class="c-str">"2"</span> }
+
+  HELD_BY:
+    from: Passport
+    to: Person
+    cardinality: { from: <span class="c-str">"0..1"</span>, to: <span class="c-str">"1..*"</span> }</code></pre>
   <p>
-    This one is genuinely enforced where it can be. LadybugDB rejects a violating write —
-    measured against a running instance, not assumed — and SHACL expresses both directions,
-    the forward bound as <code>sh:maxCount</code> and the reverse as a
-    <code>sh:inversePath</code> shape. Neo4j, GQL and OWL each report it as a downgrade.
+    A bound is <code>*</code> for unbounded, an exact count such as <code>2</code>, or a range
+    such as <code>1..2</code> or <code>1..*</code>. The named forms are sugar:
+    <code>many-to-one</code> is <code>{ from: "*", to: "0..1" }</code>.
+  </p>
+  <div class="note">
+    <p><strong>Why bounds replaced a four-value enum.</strong> The enum could not say the
+    thing people actually ask for. &ldquo;A child has exactly two parents&rdquo; is
+    <code>{ to: "2" }</code>, and no combination of <em>many</em> and <em>one</em> expresses
+    it. The named forms stayed because they read better for the common cases, and because
+    every model written before bounds used them.</p>
+  </div>
+  <p>
+    This one is genuinely enforced where it can be. SHACL carries it exactly, in both
+    directions: the forward bound as <code>sh:minCount</code> and <code>sh:maxCount</code>,
+    the reverse as the same counts under a <code>sh:inversePath</code>. LadybugDB rejects a
+    violating write &mdash; measured against a running instance, not assumed &mdash; but its
+    multiplicity keyword encodes only an upper bound of one per end, so it emits the
+    strongest keyword that fits and reports whatever the keyword drops. Neo4j, GQL, OWL and
+    PG-Schema report it whole.
   </p>
 
   <h2>Mixins</h2>
@@ -364,9 +454,11 @@ tags: { type: STRING[] }            <span class="c-com"># the bracket form</span
 <footer class="site">
   <div class="wrap">
     <span>LPG Modeler — MIT licensed</span>
-    <span class="spacer"><a href="https://github.com/Volland/lpg-modeler">Source</a></span>
-    <span><a href="https://github.com/Volland/lpg-modeler/issues">Report an issue</a></span>
-    <span><a href="https://github.com/Volland/lpg-modeler/blob/main/CHANGELOG.md">Changelog</a></span>
+    <span class="spacer"><a href="impressum.html">Impressum</a></span>
+    <span><a href="datenschutz.html">Datenschutz</a></span>
+    <span><a href="agb.html">AGB</a></span>
+    <span><a href="https://github.com/Volland/lpg-modeler">Source</a></span>
+    <span><a href="https://github.com/Volland/lpg-modeler/issues">Issues</a></span>
   </div>
 </footer>
 

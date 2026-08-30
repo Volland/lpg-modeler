@@ -1,0 +1,11 @@
+The font files in this directory are redistributed under the SIL Open Font Licence 1.1,
+which permits self-hosting and redistribution.
+
+  Inter            — Copyright (c) The Inter Project Authors.        https://github.com/rsms/inter
+  Instrument Serif — Copyright (c) The Instrument Serif Project Authors.
+  JetBrains Mono   — Copyright (c) JetBrains.                        https://github.com/JetBrains/JetBrainsMono
+
+Full licence text: https://openfontlicense.org/open-font-license-official-text/
+
+They are served from this site rather than from a content delivery network so that no
+visitor's IP address reaches a third party. See the Datenschutzerklaerung.

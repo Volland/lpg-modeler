@@ -8,6 +8,47 @@ All notable changes to LPG Modeler are recorded here. The format follows
 
 ### Added
 
+- **German legal pages** — Impressum (§ 5 DDG), Datenschutzerklärung (Art. 13 DSGVO) and
+  Nutzungsbedingungen — linked from every footer. They describe what the site actually does
+  rather than boilerplate: GitHub named as host and the United States as a processing
+  location, the Gmail contact address disclosed as a Google processing step, and no cookie
+  banner because no cookie is set.
+
+- **Value constraints.** `min`, `max`, `pattern`, `minLength` and `maxLength` on a property,
+  each checked against the property's type. SHACL carries all five, LinkML all but length,
+  and the other five targets report them.
+- **Named constraints.** A node type may declare assertions spanning more than one property:
+  `lessThan`, `lessThanOrEquals`, `equals`, `disjoint`, `atLeastOne`, `exactlyOne` and
+  `count` — the last being a qualified count over an edge, which is what expresses "exactly
+  one of a booking's guests leads it". The vocabulary is closed on purpose: a closed set can
+  be translated per target and rendered as a form, where a raw expression could only be
+  passed through to one target and would need a parser in the canvas.
+- **A raw SHACL escape hatch.** `shacl: |` on a node type splices a fragment into that
+  type's shape. Deliberately unportable, and every other target reports that it ignored it.
+- **An inspector panel in the canvas.** Selecting a type opens a panel for its value
+  constraints and named constraints, with a builder whose operands are dropdowns of the
+  type's own properties. A type box on the diagram shows only a constraint count.
+- **Four downloadable examples and an examples page** on the documentation site — a starter
+  model, enums and lists, endpoint bounds, and constraints. A test resolves and generates
+  every one of them, so the file a reader downloads is the file CI checked.
+
+- **Numeric endpoint bounds.** Cardinality is now a bound per end — `*`, an exact count
+  such as `2`, or a range such as `1..2` or `1..*` — written as
+  `cardinality: { to: "2" }`. The four named forms stay as sugar and every model that used
+  them is unchanged. This is what lets a model say "a child has exactly two parents", which
+  no combination of `many` and `one` could express.
+
+  SHACL carries it exactly in both directions, the reverse through `sh:inversePath`.
+  LadybugDB emits the strongest multiplicity keyword that fits and reports whatever the
+  keyword cannot hold, since it encodes only an upper bound of one per end.
+
+- **The canvas shows the whole metamodel again.** The webview projection had fallen behind:
+  list types, enums, open types and cardinality existed in the model but never reached the
+  diagram. Property rows now show `STRING[]` for a list and the enum a property is limited
+  to, a type carries an `open` badge, and an edge shows its multiplicity. Clicking an edge
+  edits it.
+
+
 - **Standards targets.** Three generators for schema languages this project does not own:
   `gql` (GQL graph types, ISO/IEC 39075), `pgschema` (PG-Schema, the LDBC Property Graph
   Schema Working Group formalism GQL's graph types grew out of), and `linkml` (LinkML, which
@@ -41,7 +82,21 @@ All notable changes to LPG Modeler are recorded here. The format follows
   write; SHACL bounds both directions, the reverse through `sh:inversePath`. Neo4j, GQL, OWL
   and PG-Schema report it rather than claiming it.
 
+### Fixed
+
+- **A trailing separator in generated LadybugDB DDL.** When a downgrade comment was the last
+  line inside a relationship table, the comma stripper acted on the comment instead of the
+  last real entry, leaving a comma before the closing parenthesis — a parse error. Caught by
+  executing the DDL rather than by a golden file.
+
 ### Changed
+
+- **Fonts are self-hosted.** Every page loaded Inter, Instrument Serif and JetBrains Mono
+  from Google's CDN, which sends each visitor's IP address to Google — held unlawful without
+  consent by LG München I (20.01.2022, 3 O 17493/20). The Latin subsets now ship with the
+  site under the SIL Open Font Licence. The site now fetches nothing cross-origin at all,
+  and a test asserts it, since a single convenient `<link>` would quietly make the privacy
+  statement false.
 
 - The capability set every target publishes gained four dimensions — `listProps`, `enums`,
   `openTypes` and `cardinality` — so each target has to state where it stands on the

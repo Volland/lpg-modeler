@@ -6,9 +6,7 @@
 <title>Targets — LPG Modeler</title>
 <meta name="description" content="What each LPG Modeler generator emits: LadybugDB DDL, Neo4j constraints, SHACL shapes and an OWL ontology, and exactly which constraints each target cannot enforce.">
 <link rel="icon" href="assets/icon.png">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;650&family=Instrument+Serif&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/fonts.css">
 <link rel="stylesheet" href="assets/site.css">
 </head>
 <body>
@@ -19,6 +17,7 @@
     <nav class="links">
       <a href="index.html">Overview</a>
       <a href="getting-started.html">Getting started</a>
+      <a href="examples.html">Examples</a>
       <a href="model-format.html">Model format</a>
       <a href="targets.html">Targets</a>
       <a href="cli.html">CLI</a>
@@ -298,13 +297,29 @@ CREATE CONSTRAINT person_key_unique IF NOT EXISTS
   listProps: 'native' | 'unsupported'
   enums: 'enforced' | 'documented' | 'unsupported'
   openTypes: 'native' | 'always-open' | 'unsupported'
-  cardinality: 'enforced' | 'unsupported'
+  cardinality: 'enforced' | 'upper-bound-only' | 'unsupported'
+  valueConstraints: 'enforced' | 'partial' | 'unsupported'
+  namedConstraints: 'enforced' | 'unsupported'
+  rawPassthrough: boolean
 }</code></pre>
   <p>
     A downgrade is reported only when a model actually <em>uses</em> the feature. A target
     that cannot enforce closure declares that in its capability set, but does not raise a
     diagnostic on every closed type — that would be noise on every model rather than
     information.
+  </p>
+  <p>
+    Constraint downgrades are reported at <code>info</code> rather than <code>warning</code>.
+    Five of the seven targets carry no value or named constraint at all, so a warning apiece
+    would bury the downgrades that are genuinely surprising — a <code>required</code> property
+    that silently vanishes is a different class of problem from SHACL being the only place a
+    regular expression can live.
+  </p>
+  <p>
+    A capability is not always a yes or a no. LadybugDB declares cardinality as
+    <code>upper-bound-only</code>, because its multiplicity keyword says an end holds at most
+    one and nothing else. Rounding that up to <code>enforced</code> would be exactly the
+    overstatement this matrix exists to prevent.
   </p>
 </section>
 
@@ -321,9 +336,11 @@ CREATE CONSTRAINT person_key_unique IF NOT EXISTS
 <footer class="site">
   <div class="wrap">
     <span>LPG Modeler — MIT licensed</span>
-    <span class="spacer"><a href="https://github.com/Volland/lpg-modeler">Source</a></span>
-    <span><a href="https://github.com/Volland/lpg-modeler/issues">Report an issue</a></span>
-    <span><a href="https://github.com/Volland/lpg-modeler/blob/main/CHANGELOG.md">Changelog</a></span>
+    <span class="spacer"><a href="impressum.html">Impressum</a></span>
+    <span><a href="datenschutz.html">Datenschutz</a></span>
+    <span><a href="agb.html">AGB</a></span>
+    <span><a href="https://github.com/Volland/lpg-modeler">Source</a></span>
+    <span><a href="https://github.com/Volland/lpg-modeler/issues">Issues</a></span>
   </div>
 </footer>
 
