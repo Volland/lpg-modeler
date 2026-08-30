@@ -1,4 +1,4 @@
-import { parseDocument, isMap, isScalar, type Document, type Pair, type YAMLMap } from 'yaml'
+import { parseDocument, isMap, isScalar, type Document, type Pair, type YAMLMap, isSeq, YAMLSeq } from 'yaml'
 import type { ScalarType } from './ir'
 
 /**
@@ -314,6 +314,132 @@ export function renameProperty(
   return edits
 }
 
+/**
+ * Remove one entry from a flow mapping, taking the separator with it. A flow map holds
+ * several entries on one line, so the line-based deletion would take the lot.
+ */
+function deleteFlowItem(text: string, map: YAMLMap, field: string): TextEdit | undefined {
+  const index = map.items.findIndex(
+    (i) => isScalar(i.key) && i.key.value === field)
+  if (index === -1) return undefined
+  const item = map.items[index]!
+  const keyRange = rangeOf(item.key)
+  const valueRange = rangeOf(item.value)
+  if (!keyRange || !valueRange) return undefined
+
+  let start = keyRange[0]
+  let end = valueRange[1]
+  const previous = index > 0 ? rangeOf(map.items[index - 1]?.value) : undefined
+  if (previous) {
+    // Swallow the comma that joined this entry to the one before it.
+    start = previous[1]
+  } else {
+    while (end < text.length && /[\s,]/.test(text[end] ?? '')) end++
+  }
+  return { start, end, newText: '' }
+}
+
+/**
+ * Set, replace, or remove one facet inside a property's own mapping — a bound, a
+ * pattern, a length. Written in whichever style the property body already uses.
+ */
+export function setPropertyFacet(
+  text: string, kind: 'nodes' | 'edges', typeName: string, propName: string,
+  facet: string, rendered: string | undefined,
+): TextEdit[] {
+  const c = ctx(text)
+  const body = typeBody(c, kind, typeName)
+  const props = body?.get('props', true)
+  if (!isMap(props)) return []
+  const item = mapItem(props, propName)
+  if (!item || !isMap(item.value)) return []
+  const pbody = item.value as YAMLMap
+
+  const existing = mapItem(pbody, facet)
+  if (existing) {
+    if (rendered === undefined) {
+      // deleteItem takes whole lines, which would swallow a whole flow-style property.
+      const e = pbody.flow ? deleteFlowItem(text, pbody, facet) : deleteItem(text, existing)
+      return e ? [e] : []
+    }
+    const vr = rangeOf(existing.value)
+    return vr ? [{ start: vr[0], end: vr[1], newText: rendered }] : []
+  }
+  if (rendered === undefined) return []
+
+  const pr = rangeOf(pbody)
+  if (!pr) return []
+  if (pbody.flow) {
+    // `{ type: int }` -> `{ type: int, min: 0 }`, inserted before the closing brace.
+    let close = text.lastIndexOf('}', pr[1])
+    if (close === -1) return []
+    let at = close
+    while (at > pr[0] && text[at - 1] === ' ') at--
+    return [{ start: at, end: at, newText: `, ${facet}: ${rendered}` }]
+  }
+  const firstKey = rangeOf(pbody.items[0]?.key)
+  const at = endOfMapBlock(text, pbody)
+  if (at === undefined || !firstKey) return []
+  return [{ start: at, end: at, newText: `\n${indentAt(text, firstKey[0])}${facet}: ${rendered}` }]
+}
+
+/** Append a named constraint, creating the block when the type has none yet. */
+export function addConstraint(
+  text: string, typeName: string, name: string, assertion: string,
+  message?: string, id?: string,
+): TextEdit[] {
+  const c = ctx(text)
+  const body = typeBody(c, 'nodes', typeName)
+  if (!body) return []
+  const firstKey = rangeOf(body.items[0]?.key)
+  if (!firstKey) return []
+  const indent = indentAt(text, firstKey[0])
+
+  const entry = [
+    `${indent}  - ${id ? `id: ${id}\n${indent}    name: ${name}` : `name: ${name}`}`,
+    `${indent}    assert: ${assertion}`,
+    ...(message ? [`${indent}    message: ${JSON.stringify(message)}`] : []),
+  ].join('\n')
+
+  const existing = body.get('constraints', true)
+  if (isSeq(existing)) {
+    const r = rangeOf(existing)
+    if (!r) return []
+    // End of the sequence, before whatever follows it.
+    let end = r[1]
+    while (end > r[0] && /\s/.test(text[end - 1] ?? '')) end--
+    return [{ start: end, end, newText: `\n${entry}` }]
+  }
+  const at = endOfMapBlock(text, body)
+  if (at === undefined) return []
+  return [{ start: at, end: at, newText: `\n${indent}constraints:\n${entry}` }]
+}
+
+export function deleteConstraint(text: string, typeName: string, name: string): TextEdit[] {
+  const c = ctx(text)
+  const body = typeBody(c, 'nodes', typeName)
+  const raw = body?.get('constraints', true)
+  if (!isSeq(raw)) return []
+  const seq = raw as YAMLSeq
+  const index = seq.items.findIndex(
+    (i: unknown) => isMap(i) && (i as YAMLMap).get('name') === name)
+  if (index === -1) return []
+  const r = rangeOf(seq.items[index])
+  if (!r) return []
+  // Take the whole entry including the leading dash and its indentation.
+  let start = startOfLine(text, r[0])
+  let end = endOfLine(text, r[1] - 1) + 1
+  // A sole remaining entry leaves an empty `constraints:` key, so remove that too.
+  if (seq.items.length === 1) {
+    const item = mapItem(body as YAMLMap, 'constraints')
+    if (item) {
+      const e = deleteItem(text, item)
+      if (e) return [e]
+    }
+  }
+  return [{ start, end }].map((x) => ({ ...x, newText: '' }))
+}
+
 /** Replace, add, or remove a scalar/sequence field on a type body. */
 function setField(
   text: string, kind: 'nodes' | 'edges', typeName: string, field: string, rendered: string | undefined,
@@ -351,6 +477,17 @@ export function setAbstractParent(text: string, typeName: string, parent: string
 
 export function setAbstract(text: string, typeName: string, abstract: boolean): TextEdit[] {
   return setField(text, 'nodes', typeName, 'abstract', abstract ? 'true' : undefined)
+}
+
+/**
+ * Set endpoint multiplicity. Both ends unbounded is the default, so it is written by
+ * removing the field rather than by spelling it out.
+ */
+export function setCardinality(
+  text: string, edgeName: string, from: string, to: string,
+): TextEdit[] {
+  const rendered = from === '*' && to === '*' ? undefined : `{ from: "${from}", to: "${to}" }`
+  return setField(text, 'edges', edgeName, 'cardinality', rendered)
 }
 
 export function setEndpoint(

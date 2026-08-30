@@ -104,7 +104,7 @@
   "$defs": {
     "id": {
       "type": "string",
-      "pattern": "^[nepmx]_[a-z0-9]+$",
+      "pattern": "^[nepmxc]_[a-z0-9]+$",
       "description": "Stable element id. Assigned by the tool; never edit or copy it."
     },
     "scalarType": {
@@ -172,6 +172,29 @@
         "enum": {
           "type": "string",
           "description": "Name of an enum this property's values are limited to. Requires a string type."
+        },
+        "min": {
+          "type": "number",
+          "description": "Inclusive lower bound. Applies to int, float, date and datetime."
+        },
+        "max": {
+          "type": "number",
+          "description": "Inclusive upper bound."
+        },
+        "pattern": {
+          "type": "string",
+          "format": "regex",
+          "description": "Regular expression a string value must match."
+        },
+        "minLength": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Minimum string length."
+        },
+        "maxLength": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Maximum string length."
         }
       }
     },
@@ -232,6 +255,17 @@
           "type": "boolean",
           "default": false,
           "description": "Whether an instance may carry properties this type does not declare. Never inherited."
+        },
+        "constraints": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/constraint"
+          },
+          "description": "Assertions spanning more than one property. Not inherited."
+        },
+        "shacl": {
+          "type": "string",
+          "description": "A raw SHACL fragment spliced into this type's shape. Portable to nothing; every other target reports that it ignored it."
         }
       }
     },
@@ -284,17 +318,142 @@
       }
     },
     "cardinality": {
-      "description": "Endpoint multiplicity, read as <from end>-to-<to end>. Defaults to many-to-many.",
-      "enum": [
-        "one-to-one",
-        "one-to-many",
-        "many-to-one",
-        "many-to-many",
-        "ONE_ONE",
-        "ONE_MANY",
-        "MANY_ONE",
-        "MANY_MANY"
+      "description": "Endpoint multiplicity. The bound at an end says how many nodes at that end may relate to one node at the other end. Either a named form or a mapping of endpoint bounds. Defaults to many-to-many.",
+      "oneOf": [
+        {
+          "enum": [
+            "one-to-one",
+            "one-to-many",
+            "many-to-one",
+            "many-to-many",
+            "ONE_ONE",
+            "ONE_MANY",
+            "MANY_ONE",
+            "MANY_MANY"
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "from": {
+              "$ref": "#/$defs/bound"
+            },
+            "to": {
+              "$ref": "#/$defs/bound"
+            }
+          }
+        }
       ]
+    },
+    "bound": {
+      "type": "string",
+      "pattern": "^(\\*|\\d+|\\d+\\s*\\.\\.\\s*(\\d+|\\*))$",
+      "description": "An endpoint bound: '*' unbounded, '2' exactly two, '1..2' a range, '1..*' a lower bound only."
+    },
+    "assertion": {
+      "type": "object",
+      "description": "Exactly one assertion. The vocabulary is closed so that every kind can be translated per target.",
+      "minProperties": 1,
+      "maxProperties": 1,
+      "additionalProperties": false,
+      "properties": {
+        "lessThan": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "lessThanOrEquals": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "equals": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "disjoint": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "atLeastOne": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 2
+        },
+        "exactlyOne": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 2
+        },
+        "count": {
+          "type": "object",
+          "required": [
+            "edge"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "edge": {
+              "type": "string",
+              "description": "Edge type to count, which must leave this node type."
+            },
+            "of": {
+              "type": "string",
+              "description": "Count only targets of this node type."
+            },
+            "min": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "max": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        }
+      }
+    },
+    "constraint": {
+      "type": "object",
+      "required": [
+        "name",
+        "assert"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "name": {
+          "type": "string",
+          "description": "Names the rule in a failure message and in a diff."
+        },
+        "assert": {
+          "$ref": "#/$defs/assertion"
+        },
+        "message": {
+          "type": "string",
+          "description": "Shown instead of the generated wording when it fails."
+        }
+      }
     }
   }
 }

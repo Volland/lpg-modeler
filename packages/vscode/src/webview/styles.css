@@ -63,3 +63,36 @@ body { margin: 0; font-family: var(--vscode-font-family, sans-serif); color: var
 .modal-body { background: var(--vscode-editorWidget-background, #252526); border: 1px solid var(--line); border-radius: 4px; padding: 14px; min-width: 280px; font-size: 12px; }
 .modal-body input, .modal-body select { background: var(--vscode-input-background, #3c3c3c); color: var(--vscode-input-foreground, #ccc); border: 1px solid var(--line); border-radius: 3px; padding: 4px 6px; margin-right: 6px; }
 .form { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+
+/* Open types and enum-constrained properties, added with the constraint work. */
+.erd-open { border-color: var(--accent); color: var(--accent); }
+.erd-enum { color: var(--accent); font-size: 10px; }
+
+/* The inspector: constraints have no place on a diagram box without crowding it. */
+.workspace { display: flex; flex: 1; min-height: 0; }
+.workspace .canvas { flex: 1; min-width: 0; }
+.inspector { width: 260px; flex: none; overflow-y: auto; padding: 10px 12px;
+  border-left: 1px solid var(--line); background: var(--panel); font-size: 11px; }
+.insp-title { font-size: 13px; margin: 0 0 8px; }
+.insp-h { font-size: 10px; text-transform: uppercase; color: var(--muted);
+  margin: 14px 0 6px; letter-spacing: .04em; }
+.insp-empty { color: var(--muted); font-style: italic; }
+.insp-dim { color: var(--muted); }
+.insp-prop { margin-bottom: 8px; }
+.insp-prop-name { font-weight: 600; }
+.insp-facets { display: grid; grid-template-columns: 1fr 1fr; gap: 3px 6px; margin-top: 3px; }
+.insp-facet { display: flex; align-items: center; gap: 4px; }
+.insp-facet span { color: var(--muted); min-width: 58px; }
+.insp-facet input { width: 100%; min-width: 0; }
+.insp-constraint { border: 1px solid var(--line); border-radius: 3px;
+  padding: 4px 6px; margin-bottom: 5px; }
+.insp-c-head { display: flex; align-items: center; justify-content: space-between; }
+.insp-c-name { font-weight: 600; }
+.insp-msg { color: var(--muted); font-style: italic; margin-top: 2px; }
+.insp-add { display: flex; flex-direction: column; gap: 5px;
+  border: 1px solid var(--accent); border-radius: 3px; padding: 6px; }
+.insp-operands { display: flex; align-items: center; gap: 5px; }
+.insp-actions { display: flex; gap: 5px; }
+.insp-raw { margin-top: 12px; padding: 6px; border-left: 2px solid var(--accent);
+  color: var(--muted); }
+.erd-constrained { border-color: var(--accent); color: var(--accent); }

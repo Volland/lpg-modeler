@@ -101,3 +101,107 @@ describe('canvas intents', () => {
     expect(emit(model, 'shacl').content).toContain('sh:targetClass demo:Person ;')
   })
 })
+
+// @lat: [[metamodel#Cardinality]]
+describe('cardinality intent', () => {
+  it('writes endpoint bounds onto the edge', () => {
+    const edits = intentToEdits(SRC(), {
+      kind: 'setCardinality', name: 'OWNS', from: '*', to: '2',
+    } as Intent, MODEL, read)
+    const out = applyEdits(SRC(), edits)
+    expect(out).toContain('cardinality: { from: "*", to: "2" }')
+    const { model } = resolveModel(MODEL, (p) => (p === MODEL ? out : read(p)))
+    expect(model.edges.find((e) => e.name === 'OWNS')!.cardinality.to).toEqual({ min: 2, max: 2 })
+  })
+
+  it('removes the field when both ends go back to unbounded', () => {
+    const withBound = applyEdits(SRC(), intentToEdits(SRC(), {
+      kind: 'setCardinality', name: 'OWNS', from: '*', to: '2',
+    } as Intent, MODEL, read))
+    const cleared = applyEdits(withBound, intentToEdits(withBound, {
+      kind: 'setCardinality', name: 'OWNS', from: '*', to: '*',
+    } as Intent, MODEL, read))
+    // Unbounded at both ends is the default, so it is written by absence.
+    expect(cleared).not.toContain('cardinality')
+  })
+})
+
+// @lat: [[architecture#Editing Surface#Inspector]]
+describe('constraint intents', () => {
+  const apply = (src: string, intent: Intent) =>
+    applyEdits(src, intentToEdits(src, intent, MODEL, read))
+  const reload = (text: string) =>
+    resolveModel(MODEL, (p) => (p === MODEL ? text : read(p))).model
+
+  it('sets a value facet inside the property it belongs to', () => {
+    const out = apply(SRC(), {
+      kind: 'setPropertyFacet', owner: 'Car', ownerKind: 'nodes', prop: 'seats',
+      facet: 'max', value: '7',
+    } as Intent)
+    const seats = reload(out).nodes.find((n) => n.name === 'Car')!
+      .props.find((p) => p.name === 'seats')!
+    expect(seats.max).toBe(7)
+    // The rest of the property is untouched.
+    expect(seats.type).toBe('int')
+  })
+
+  it('quotes a pattern and clears a facet when the value is empty', () => {
+    const withPattern = apply(SRC(), {
+      kind: 'setPropertyFacet', owner: 'Person', ownerKind: 'nodes', prop: 'email',
+      facet: 'pattern', value: '^[^@]+@[^@]+$',
+    } as Intent)
+    expect(reload(withPattern).nodes.find((n) => n.name === 'Person')!
+      .props.find((p) => p.name === 'email')!.pattern).toBe('^[^@]+@[^@]+$')
+
+    const cleared = apply(withPattern, {
+      kind: 'setPropertyFacet', owner: 'Person', ownerKind: 'nodes', prop: 'email',
+      facet: 'pattern',
+    } as Intent)
+    expect(reload(cleared).nodes.find((n) => n.name === 'Person')!
+      .props.find((p) => p.name === 'email')!.pattern).toBeUndefined()
+  })
+
+  it('adds a named constraint, creating the block when there is none', () => {
+    const out = apply(SRC(), {
+      kind: 'addConstraint', owner: 'Person', name: 'bornBeforeCreated',
+      assertion: '{ lessThan: [born, createdAt] }', message: 'born first',
+    } as Intent)
+    const person = reload(out).nodes.find((n) => n.name === 'Person')!
+    expect(person.constraints).toHaveLength(1)
+    expect(person.constraints[0]).toMatchObject({
+      name: 'bornBeforeCreated', message: 'born first',
+      assert: { kind: 'lessThan', left: 'born', right: 'createdAt' },
+    })
+  })
+
+  it('appends a second constraint to the existing block, then deletes one', () => {
+    let text = apply(SRC(), {
+      kind: 'addConstraint', owner: 'Person', name: 'first',
+      assertion: '{ lessThan: [born, createdAt] }',
+    } as Intent)
+    text = apply(text, {
+      kind: 'addConstraint', owner: 'Person', name: 'second',
+      assertion: '{ equals: [born, createdAt] }',
+    } as Intent)
+    expect(reload(text).nodes.find((n) => n.name === 'Person')!.constraints
+      .map((k) => k.name)).toEqual(['first', 'second'])
+
+    const pruned = apply(text, {
+      kind: 'deleteConstraint', owner: 'Person', name: 'first',
+    } as Intent)
+    expect(reload(pruned).nodes.find((n) => n.name === 'Person')!.constraints
+      .map((k) => k.name)).toEqual(['second'])
+  })
+
+  it('removes the block when the last constraint goes', () => {
+    const added = apply(SRC(), {
+      kind: 'addConstraint', owner: 'Person', name: 'only',
+      assertion: '{ lessThan: [born, createdAt] }',
+    } as Intent)
+    const empty = apply(added, {
+      kind: 'deleteConstraint', owner: 'Person', name: 'only',
+    } as Intent)
+    expect(empty).not.toContain('constraints')
+    expect(reload(empty).nodes.find((n) => n.name === 'Person')!.constraints).toEqual([])
+  })
+})

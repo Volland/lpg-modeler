@@ -75,6 +75,11 @@ function toProp(p: RawProperty, inheritedFrom?: string): PropertyIR {
     type: p.type,
     list: p.list,
     ...(p.enum ? { enum: p.enum } : {}),
+    ...(p.min !== undefined ? { min: p.min } : {}),
+    ...(p.max !== undefined ? { max: p.max } : {}),
+    ...(p.pattern !== undefined ? { pattern: p.pattern } : {}),
+    ...(p.minLength !== undefined ? { minLength: p.minLength } : {}),
+    ...(p.maxLength !== undefined ? { maxLength: p.maxLength } : {}),
     required: p.required,
     unique: p.unique,
     ...(inheritedFrom ? { inheritedFrom } : {}),
@@ -251,6 +256,16 @@ export function resolveModel(entry: string, readFile: ReadFile): ResolveResult {
       key,
       ...(keyInheritedFrom ? { keyInheritedFrom } : {}),
       props,
+      // Constraints are not inherited: one that reads a subtype's property would be
+      // meaningless on the parent, and silently widening a parent's contract is worse.
+      constraints: decl.raw.constraints.map((k) => ({
+        id: k.id ?? generateId('constraint'),
+        name: k.name,
+        assert: k.assert,
+        ...(k.message ? { message: k.message } : {}),
+        ...(k.loc ? { loc: k.loc } : {}),
+      })),
+      ...(decl.raw.rawShacl ? { rawShacl: decl.raw.rawShacl } : {}),
       ...(decl.raw.previousIri ? { previousIri: decl.raw.previousIri } : {}),
       ...(decl.raw.loc ? { loc: decl.raw.loc } : {}),
     }

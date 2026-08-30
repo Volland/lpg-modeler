@@ -5,8 +5,11 @@ import type { WireProperty } from '../protocol'
 export interface ErdNodeData extends Record<string, unknown> {
   name: string
   abstract: boolean
+  open: boolean
   extendsName?: string
   props: WireProperty[]
+  /** Named constraints plus a raw fragment, if any: the diagram shows only the count. */
+  constraintCount: number
   onAddProperty: (owner: string) => void
   onDeleteProperty: (owner: string, prop: string) => void
   onRename: (from: string) => void
@@ -28,7 +31,18 @@ export function ErdNode({ data }: NodeProps): React.ReactElement {
           {d.name}
         </span>
         {d.abstract && <span className="erd-badge">abstract</span>}
+        {d.open && (
+          <span className="erd-badge erd-open" title="Open: instances may carry undeclared properties">
+            open
+          </span>
+        )}
         {d.extendsName && <span className="erd-extends">▸ {d.extendsName}</span>}
+        {d.constraintCount > 0 && (
+          <span className="erd-badge erd-constrained"
+            title={`${d.constraintCount} constraint(s) — see the inspector`}>
+            ƒ{d.constraintCount}
+          </span>
+        )}
         <button className="erd-x" title="Delete type" onClick={() => d.onDelete(d.name)}>×</button>
       </div>
       <div className="erd-rows">
@@ -43,7 +57,10 @@ export function ErdNode({ data }: NodeProps): React.ReactElement {
               {p.isKey ? '🔑' : '○'}
             </button>
             <span className="erd-prop">{p.name}</span>
-            <span className="erd-type">{p.type}</span>
+            <span className="erd-type">{p.list ? `${p.type}[]` : p.type}</span>
+            {p.enum && (
+              <span className="erd-enum" title={`limited to enum ${p.enum}`}>≔{p.enum}</span>
+            )}
             {p.required && <span className="erd-flag" title="required">!</span>}
             {p.unique && <span className="erd-flag" title="unique">u</span>}
             {p.inheritedFrom

@@ -1,0 +1,34 @@
+# Exercises numeric endpoint bounds: a child has exactly two parents, and a passport
+# belongs to exactly one person.
+lpg: "1.0"
+namespace:
+  prefix: kin
+  iri: https://example.org/vocab/kin#
+
+nodes:
+  Person:
+    id: n_pers
+    key: [ssn]
+    props:
+      ssn: { id: p_ssn, type: STRING, required: true }
+
+  Passport:
+    id: n_pass
+    key: [number]
+    props:
+      number: { id: p_num, type: STRING, required: true }
+
+edges:
+  # Exactly two parents. The four named forms cannot say this.
+  HAS_PARENT:
+    id: e_par
+    from: Person
+    to: Person
+    cardinality: { to: "2" }
+
+  # At least one, no upper bound.
+  HELD_BY:
+    id: e_held
+    from: Passport
+    to: Person
+    cardinality: { from: "0..1", to: "1..*" }

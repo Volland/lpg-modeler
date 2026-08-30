@@ -1,6 +1,9 @@
 import type { Diagnostic, EdgeTypeIR, ModelIR, NodeTypeIR, PropertyIR } from '../ir'
-import { concreteNodes } from '../ir'
-import { downgrade, type Capabilities, type EmitOptions, type EmitResult } from '../capabilities'
+import { concreteNodes, describeCardinality, isUnconstrained } from '../ir'
+import {
+  downgrade, reportUnsupportedConstraints,
+  type Capabilities, type EmitOptions, type EmitResult,
+} from '../capabilities'
 
 /**
  * Neo4j is schema-optional: there is no table DDL, only constraints and indexes.
@@ -16,6 +19,9 @@ export const NEO4J_CAPABILITIES: Capabilities = {
   compositeKey: 'native',
   edgeProps: 'native',
   nestedEdges: false,
+  valueConstraints: 'unsupported',
+  namedConstraints: 'unsupported',
+  rawPassthrough: false,
   listProps: 'native',
   enums: 'unsupported',
   // Neo4j is schema-optional, so a closed type cannot be enforced either.
@@ -89,11 +95,11 @@ function edgeConstraints(edge: EdgeTypeIR, enterprise: boolean, diags: Diagnosti
   const out: string[] = []
   const e = snake(edge.name)
   out.push(`// (:${edge.from})-[:${edge.name}]->(:${edge.to})`)
-  if (edge.cardinality !== 'many-to-many') {
+  if (!isUnconstrained(edge.cardinality)) {
     downgrade(diags, 'neo4j', 'downgrade-cardinality',
-      `Edge type '${edge.name}' declares ${edge.cardinality} cardinality, which Neo4j has no constraint for: multiplicity is not part of its schema facility.`,
+      `Edge type '${edge.name}' declares ${describeCardinality(edge.cardinality)} cardinality, which Neo4j has no constraint for: multiplicity is not part of its schema facility.`,
       edge.loc)
-    out.push(`// UNENFORCED: ${edge.cardinality} in the model; Neo4j has no multiplicity constraint.`)
+    out.push(`// UNENFORCED: ${describeCardinality(edge.cardinality)} in the model; Neo4j has no multiplicity constraint.`)
   }
   for (const p of edge.props) {
     if (!p.required) continue
@@ -147,6 +153,8 @@ export function emitNeo4j(model: ModelIR, options: EmitOptions = {}): EmitResult
   for (const edge of model.edges) {
     parts.push(...edgeConstraints(edge, enterprise, diagnostics), '')
   }
+
+  reportUnsupportedConstraints(diagnostics, 'neo4j', model, NEO4J_CAPABILITIES)
 
   return { target: 'neo4j', extension: 'cypher', content: parts.join('\n'), diagnostics }
 }

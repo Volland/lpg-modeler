@@ -1,9 +1,11 @@
 import { describe, it, expect } from 'vitest'
 import { parse } from 'yaml'
-import { emit } from '../src/emit/index'
+import { capabilitiesOf, emit } from '../src/emit/index'
 import { resolveModel } from '../src/resolve'
 import { validateModel } from '../src/validate'
-import { canonicalCardinality, parsePropertyType } from '../src/ir'
+import {
+  canonicalCardinality, describeCardinality, formatBound, parseBound, parsePropertyType,
+} from '../src/ir'
 import { fixture, readFile, loadFixture } from './helpers'
 
 const features = () => loadFixture('features.lpg.yaml')
@@ -90,16 +92,51 @@ describe('open and closed types', () => {
 
 // @lat: [[metamodel#Cardinality]]
 describe('cardinality', () => {
-  it('defaults to many-to-many and accepts the LadybugDB spellings', () => {
-    expect(canonicalCardinality('MANY_ONE')).toBe('many-to-one')
-    expect(canonicalCardinality('many-to-one')).toBe('many-to-one')
-    expect(canonicalCardinality('One_To_Many')).toBe('one-to-many')
-    expect(canonicalCardinality('some')).toBeUndefined()
-    expect(features().edges[0]!.cardinality).toBe('many-to-one')
+  it('defaults to unbounded at both ends', () => {
     const { model } = inline(
       'nodes:\n  A: { key: [x], props: { x: { type: string } } }\n'
       + 'edges:\n  R: { from: A, to: A }\n')
-    expect(model.edges[0]!.cardinality).toBe('many-to-many')
+    expect(model.edges[0]!.cardinality).toEqual({
+      from: { min: 0, max: null }, to: { min: 0, max: null },
+    })
+  })
+
+  it('reads the named forms, including the LadybugDB spellings', () => {
+    expect(canonicalCardinality('MANY_ONE')).toEqual({
+      from: { min: 0, max: null }, to: { min: 0, max: 1 },
+    })
+    expect(canonicalCardinality('One_To_Many')).toEqual({
+      from: { min: 0, max: 1 }, to: { min: 0, max: null },
+    })
+    expect(canonicalCardinality('some')).toBeUndefined()
+    expect(features().edges[0]!.cardinality).toEqual(
+      { from: { min: 0, max: null }, to: { min: 0, max: 1 } })
+  })
+
+  it('reads an endpoint bound in every spelling', () => {
+    expect(parseBound('*')).toEqual({ min: 0, max: null })
+    expect(parseBound('2')).toEqual({ min: 2, max: 2 })
+    expect(parseBound('1..2')).toEqual({ min: 1, max: 2 })
+    expect(parseBound('1..*')).toEqual({ min: 1, max: null })
+    expect(parseBound('two')).toBeUndefined()
+  })
+
+  it('round-trips a bound through its display form', () => {
+    for (const w of ['*', '2', '1..2', '1..*']) {
+      expect(formatBound(parseBound(w)!)).toBe(w)
+    }
+  })
+
+  it('names a multiplicity by its named form when one fits, else by its bounds', () => {
+    expect(describeCardinality(canonicalCardinality('many-to-one')!)).toBe('many-to-one')
+    expect(describeCardinality({ from: { min: 0, max: null }, to: { min: 2, max: 2 } }))
+      .toBe('*-to-2')
+  })
+
+  it('reads an exact bound the named forms cannot express', () => {
+    const parent = loadFixture('kinship.lpg.yaml').edges.find((e) => e.name === 'HAS_PARENT')!
+    expect(parent.cardinality.to).toEqual({ min: 2, max: 2 })
+    expect(parent.cardinality.from).toEqual({ min: 0, max: null })
   })
 
   it('reports a multiplicity it does not know', () => {
@@ -108,9 +145,53 @@ describe('cardinality', () => {
       + 'edges:\n  R: { from: A, to: A, cardinality: several }\n')
     expect(codes(diagnostics)).toContain('unknown-cardinality')
   })
+
+  it('reports a bound that is not a multiplicity, and one nothing can satisfy', () => {
+    const bad = inline(
+      'nodes:\n  A: { key: [x], props: { x: { type: string } } }\n'
+      + 'edges:\n  R: { from: A, to: A, cardinality: { to: "lots" } }\n')
+    expect(codes(bad.diagnostics)).toContain('unknown-cardinality')
+    const impossible = inline(
+      'nodes:\n  A: { key: [x], props: { x: { type: string } } }\n'
+      + 'edges:\n  R: { from: A, to: A, cardinality: { to: "3..1" } }\n')
+    expect(codes(impossible.diagnostics)).toContain('impossible-cardinality')
+  })
 })
 
 describe('targets carry the additions or report them', () => {
+  it('never claims more cardinality than a target can hold', () => {
+    // LadybugDB's multiplicity keyword carries only an upper bound of one, so rounding
+    // this up to 'enforced' would be the overstatement the matrix exists to prevent.
+    expect(capabilitiesOf('ladybug')!.cardinality).toBe('upper-bound-only')
+    expect(capabilitiesOf('shacl')!.cardinality).toBe('enforced')
+    expect(capabilitiesOf('neo4j')!.cardinality).toBe('unsupported')
+  })
+
+  it('shacl enforces an exact count that no database target can', () => {
+    const out = emit(loadFixture('kinship.lpg.yaml'), 'shacl').content
+    const person = out.slice(out.indexOf('kin:PersonShape'))
+    expect(person).toContain('sh:path kin:hasParent ;')
+    expect(person).toContain('sh:minCount 2 ;')
+    expect(person).toContain('sh:maxCount 2 ;')
+  })
+
+  it('ladybug emits the strongest keyword available and reports the rest', () => {
+    const out = emit(loadFixture('kinship.lpg.yaml'), 'ladybug')
+    // An exact count of two has no keyword, so nothing is claimed for it.
+    const parent = out.content.slice(out.content.indexOf('HAS_PARENT'))
+    expect(parent.slice(0, parent.indexOf(');'))).not.toContain('MANY_ONE')
+    expect(parent).toContain("UNENFORCED: a minimum of 2 on 'to'")
+    // A bound of one on the 'from' end does have a keyword, so it is emitted.
+    expect(out.content).toContain('ONE_MANY')
+    expect(codes(out.diagnostics)).toContain('downgrade-cardinality')
+  })
+
+  it('never leaves a separator before a closing parenthesis', () => {
+    // A comment is not an entry, so it must not be where the comma is stripped.
+    const out = emit(loadFixture('kinship.lpg.yaml'), 'ladybug').content
+    expect(out).not.toMatch(/,\s*\n(\s*\/\/[^\n]*\n)*\s*\)/)
+  })
+
   // @lat: [[emitters#Ladybug Target]]
   it('ladybug emits a list column and the multiplicity keyword', () => {
     const out = emit(features(), 'ladybug')

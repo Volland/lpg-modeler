@@ -7,11 +7,13 @@ import {
 import ELK from 'elkjs/lib/elk.bundled.js'
 import type { HostMessage, Intent, Projection, ViewMessage } from '../protocol'
 import { ErdNode, type ErdNodeData } from './nodes'
+import { Inspector } from './inspector'
 
 declare function acquireVsCodeApi(): { postMessage(m: ViewMessage): void }
 const vscode = acquireVsCodeApi()
 const post = (m: ViewMessage) => vscode.postMessage(m)
 const intent = (i: Intent) => post({ type: 'intent', intent: i })
+
 
 const elk = new ELK()
 const NODE_TYPES = { erd: ErdNode }
@@ -92,19 +94,30 @@ function App(): React.ReactElement {
         type: 'erd',
         position: positions[n.id] ?? { x: 0, y: 0 },
         data: {
-          name: n.name, abstract: n.abstract, extendsName: n.extends, props: n.props, ...handlers,
+          name: n.name, abstract: n.abstract, open: n.open, extendsName: n.extends,
+          props: n.props, constraintCount: n.constraints.length + (n.hasRawShacl ? 1 : 0),
+          ...handlers,
         } satisfies ErdNodeData as unknown as Record<string, unknown>,
       })))
       setEdges(projection.edges.map((e): Edge => {
         const from = projection.nodes.find((n) => n.name === e.from)
         const to = projection.nodes.find((n) => n.name === e.to)
+        // Multiplicity rides in the label rather than as endpoint markers: React Flow's
+        // default edge has one label, and a wrong-looking crow's foot is worse than a
+        // correct number. Editing happens on click.
+        const props = e.props.length > 0 ? ` {${e.props.map((p) => p.name).join(', ')}}` : ''
+        const mult = e.cardinality.constrained
+          ? `  [${e.cardinality.from} → ${e.cardinality.to}]`
+          : ''
         return {
           id: e.id,
           source: from?.id ?? '',
           target: to?.id ?? '',
-          label: e.props.length > 0 ? `${e.name} {${e.props.map((p) => p.name).join(', ')}}` : e.name,
+          label: `${e.name}${props}${mult}`,
           labelStyle: { fontSize: 11 },
+          labelBgStyle: e.cardinality.constrained ? { fill: 'var(--vscode-editor-background)' } : undefined,
           animated: false,
+          data: { edgeName: e.name, cardinality: e.cardinality },
         }
       }).filter((e) => e.source && e.target))
     })()
@@ -119,6 +132,28 @@ function App(): React.ReactElement {
         post({ type: 'move', elementId: change.id, x: change.position.x, y: change.position.y })
       }
     }
+  }, [])
+
+  const [selected, setSelected] = React.useState<string | undefined>(undefined)
+
+  const onNodeClick = React.useCallback((_: React.MouseEvent, n: Node) => {
+    setSelected(n.id)
+  }, [])
+
+  const onPaneClick = React.useCallback(() => setSelected(undefined), [])
+
+  const onEdgeClick = React.useCallback((_: React.MouseEvent, edge: Edge) => {
+    const d = edge.data as { edgeName?: string; cardinality?: { from: string; to: string } } | undefined
+    if (!d?.edgeName || !d.cardinality) return
+    const from = window.prompt(
+      `${d.edgeName}: how many ${'sources'} per target?\n`
+      + `'*' any, '2' exactly two, '1..2' a range, '1..*' at least one.`,
+      d.cardinality.from)
+    if (from === null) return
+    const to = window.prompt(
+      `${d.edgeName}: how many targets per source?`, d.cardinality.to)
+    if (to === null) return
+    intent({ kind: 'setCardinality', name: d.edgeName, from: from.trim(), to: to.trim() })
   }, [])
 
   const onConnect = React.useCallback((c: Connection) => {
@@ -208,6 +243,7 @@ function App(): React.ReactElement {
         </div>
       )}
 
+      <div className="workspace">
       <div className="canvas">
         <ReactFlow
           nodes={nodes}
@@ -215,12 +251,20 @@ function App(): React.ReactElement {
           nodeTypes={NODE_TYPES}
           onNodesChange={onNodesChange}
           onConnect={onConnect}
+          onEdgeClick={onEdgeClick}
+          onNodeClick={onNodeClick}
+          onPaneClick={onPaneClick}
           fitView
           proOptions={{ hideAttribution: true }}
         >
           <Background />
           <Controls />
         </ReactFlow>
+      </div>
+      <Inspector
+        node={projection.nodes.find((n) => n.id === selected)}
+        emit={intent}
+      />
       </div>
     </div>
   )

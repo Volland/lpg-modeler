@@ -1,6 +1,7 @@
 import {
   addEdgeType, addNodeType, addProperty, applyEdits, deleteProperty, deleteType,
-  renameProperty, renameType, resolveModel, setAbstractParent, setEndpoint, setKey,
+  addConstraint, deleteConstraint, renameProperty, renameType, resolveModel,
+  setAbstractParent, setCardinality, setEndpoint, setKey, setPropertyFacet,
   setPreviousIri, type ScalarType, type TextEdit,
 } from '@lpg/core'
 import type { Intent } from './protocol'
@@ -53,6 +54,23 @@ export function intentToEdits(
       return deleteType(text, 'edges', intent.name)
     case 'setEndpoint':
       return setEndpoint(text, intent.name, intent.which, intent.target)
+    case 'setCardinality':
+      return setCardinality(text, intent.name, intent.from, intent.to)
+
+    case 'setPropertyFacet': {
+      // A pattern is a string and has to stay quoted; a bound is a number.
+      const quoted = intent.facet === 'pattern'
+      const rendered = intent.value === undefined || intent.value === ''
+        ? undefined
+        : quoted ? JSON.stringify(intent.value) : intent.value
+      return setPropertyFacet(
+        text, intent.ownerKind, intent.owner, intent.prop, intent.facet, rendered)
+    }
+
+    case 'addConstraint':
+      return addConstraint(text, intent.owner, intent.name, intent.assertion, intent.message)
+    case 'deleteConstraint':
+      return deleteConstraint(text, intent.owner, intent.name)
   }
 }
 

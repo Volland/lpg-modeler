@@ -1,6 +1,9 @@
 import type { Diagnostic, EdgeTypeIR, ModelIR, NodeTypeIR, PropertyIR } from '../ir'
-import { GQL_TYPES, concreteNodes } from '../ir'
-import { downgrade, type Capabilities, type EmitOptions, type EmitResult } from '../capabilities'
+import { GQL_TYPES, concreteNodes, describeCardinality, isUnconstrained } from '../ir'
+import {
+  downgrade, reportUnsupportedConstraints,
+  type Capabilities, type EmitOptions, type EmitResult,
+} from '../capabilities'
 import { lowerCamel } from './reify'
 
 /**
@@ -21,6 +24,9 @@ export const GQL_CAPABILITIES: Capabilities = {
   compositeKey: 'unsupported',
   edgeProps: 'native',
   nestedEdges: false,
+  valueConstraints: 'unsupported',
+  namedConstraints: 'unsupported',
+  rawPassthrough: false,
   listProps: 'native',
   enums: 'unsupported',
   openTypes: 'unsupported',
@@ -99,11 +105,11 @@ function nodeElementType(node: NodeTypeIR, diags: Diagnostic[]): string {
 
 function edgeElementType(edge: EdgeTypeIR, diags: Diagnostic[]): string {
   const comments: string[] = []
-  if (edge.cardinality !== 'many-to-many') {
+  if (!isUnconstrained(edge.cardinality)) {
     downgrade(diags, 'gql', 'downgrade-cardinality',
-      `Edge type '${edge.name}' declares ${edge.cardinality} cardinality, which a GQL element type has no way to express.`,
+      `Edge type '${edge.name}' declares ${describeCardinality(edge.cardinality)} cardinality, which a GQL element type has no way to express.`,
       edge.loc)
-    comments.push(`    // UNENFORCED: ${edge.cardinality} in the model.`)
+    comments.push(`    // UNENFORCED: ${describeCardinality(edge.cardinality)} in the model.`)
   }
   const entries = edge.props.map((p) => propertyEntry(edge.name, p, '', diags))
   const block = propertyBlock(entries, comments)
@@ -136,6 +142,8 @@ export function emitGql(model: ModelIR, _options: EmitOptions = {}): EmitResult 
     ...model.edges.map((e) => edgeElementType(e, diagnostics)),
   ]
   parts.push(elements.join(',\n'), '}')
+
+  reportUnsupportedConstraints(diagnostics, 'gql', model, GQL_CAPABILITIES)
 
   return { target: 'gql', extension: 'gql', content: parts.join('\n') + '\n', diagnostics }
 }

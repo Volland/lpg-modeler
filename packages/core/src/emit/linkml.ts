@@ -1,6 +1,9 @@
 import type { Diagnostic, EdgeTypeIR, ModelIR, NodeTypeIR, PropertyIR, ScalarType } from '../ir'
-import { downgrade, type Capabilities, type EmitOptions, type EmitResult } from '../capabilities'
-import { endpointIsSingular } from '../ir'
+import {
+  constraintDowngrade, downgrade,
+  type Capabilities, type EmitOptions, type EmitResult,
+} from '../capabilities'
+import { describeCardinality, endpointIsSingular } from '../ir'
 import { collectPrefixes, mapEdges, term, type EdgeMapping } from './reify'
 
 /**
@@ -22,6 +25,9 @@ export const LINKML_CAPABILITIES: Capabilities = {
   compositeKey: 'native',
   edgeProps: 'reified',
   nestedEdges: false,
+  valueConstraints: 'partial',
+  namedConstraints: 'unsupported',
+  rawPassthrough: false,
   listProps: 'native',
   enums: 'enforced',
   openTypes: 'unsupported',
@@ -54,6 +60,16 @@ function attribute(
   // An enum is a LinkML range in its own right, so it replaces the scalar range.
   lines.push(`        range: ${p.enum ?? RANGES[p.type]}`)
   if (p.list) lines.push('        multivalued: true')
+  // LinkML has value bounds and a pattern, but no string length.
+  if (p.min !== undefined) lines.push(`        minimum_value: ${p.min}`)
+  if (p.max !== undefined) lines.push(`        maximum_value: ${p.max}`)
+  if (p.pattern !== undefined) lines.push(`        pattern: ${JSON.stringify(p.pattern)}`)
+  if (p.minLength !== undefined || p.maxLength !== undefined) {
+    constraintDowngrade(diags, 'linkml', 'downgrade-value-constraint',
+      `Property '${owner}.${p.name}' bounds its length, which LinkML has no slot facet for.`,
+      p.loc)
+    lines.push(`        # DOWNGRADE: length bound unenforced; LinkML has no facet for it.`)
+  }
   // identifier already implies required and unique, so do not restate them.
   // identifier already implies required and unique. Uniqueness of anything else is a
   // class-level unique_keys entry, which is the only mechanism LinkML has for it.
@@ -88,6 +104,17 @@ function classBlock(
     lines.push(`    # DOWNGRADE: '${node.name}' is open in the model; this class is not.`)
   }
   if (node.extends) lines.push(`    is_a: ${node.extends}`)
+  if (node.constraints.length > 0) {
+    constraintDowngrade(diags, 'linkml', 'downgrade-named-constraint',
+      `Node type '${node.name}' declares ${node.constraints.length} named constraint(s), which LinkML has no cross-slot assertion for. The SHACL artifact carries them.`,
+      node.loc)
+    lines.push(`    # DOWNGRADE: ${node.constraints.map((k) => k.name).join(', ')} unenforced here.`)
+  }
+  if (node.rawShacl) {
+    constraintDowngrade(diags, 'linkml', 'downgrade-raw-shacl',
+      `Node type '${node.name}' carries a raw SHACL fragment, which only the shacl target can use.`,
+      node.loc)
+  }
   if (node.mixins.length > 0) {
     lines.push('    mixins:')
     for (const m of node.mixins) lines.push(`      - ${m}`)
@@ -121,14 +148,22 @@ function classBlock(
     if (!mapping || mapping.kind !== 'plain') continue
     // A relation slot must not collide with a property of the same name.
     const name = taken.has(mapping.property) ? `${mapping.property}Rel` : mapping.property
-    // many-to-one and one-to-one bound the target end at one, which is exactly what
-    // a single-valued slot says.
+    // A slot carries an upper bound of one, as `multivalued: false`, and a lower bound
+    // of one, as `required`. An exact count beyond that has no LinkML spelling.
+    const b = edge.cardinality.to
     const many = !endpointIsSingular(edge.cardinality).to
     attrs.push(
       `      ${name}:`,
       `        slot_uri: ${term(edge)}`,
       `        range: ${edge.to}`,
       `        multivalued: ${many}`)
+    if (b.min > 0) attrs.push('        required: true')
+    if ((b.max !== null && b.max > 1) || b.min > 1) {
+      downgrade(diags, 'linkml', 'downgrade-cardinality',
+        `Edge type '${edge.name}' declares ${describeCardinality(edge.cardinality)} cardinality. A LinkML slot expresses only 'multivalued' and 'required', so the exact bound is unenforced.`,
+        edge.loc)
+      attrs.push(`        # DOWNGRADE: ${describeCardinality(edge.cardinality)}; exact bound unenforced.`)
+    }
   }
   if (attrs.length > 0) lines.push('    attributes:', ...attrs)
   return lines

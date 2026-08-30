@@ -46,6 +46,20 @@ The webview holds no model state. It posts a named intent, the extension host tu
 
 Deleting a node type also deletes the edge types that reference it: leaving the reference behind would produce a model that cannot resolve. Renaming a type first records its previous IRI, so the ontology can assert equivalence to the identity consumers already have.
 
+The projection carries whatever the metamodel carries, so an addition there is incomplete until the wire types grow with it: a canvas that cannot show a constraint silently invites someone to author a model that contradicts it. [[metamodel#Cardinality]] is edited on the edge rather than in a panel, because it belongs to the relationship and not to either type.
+
+### Inspector
+
+Constraints are edited in a panel beside the canvas rather than on the diagram. A type box shows only a count, so a model with rules stays readable at a glance.
+
+Bounds, patterns and [[metamodel#Named Constraints]] have no place on an ERD box without crowding out the properties, which are what the diagram is for. The panel is also what makes the closed assertion vocabulary pay off twice: every operand is a dropdown of the selected type's own properties and edges, so a constraint cannot be written against something that does not exist, and there is no expression to parse.
+
+## Examples
+
+The example models the documentation site offers for download live under `docs/`, and a test resolves and generates every one of them.
+
+Keeping them inside the published site rather than in a separate folder means there is exactly one copy, so the file a reader downloads is the file the test checked. An example that stopped parsing would be a broken promise on the front page, and it is the kind of breakage that a release otherwise finds only after it ships.
+
 ## Views
 
 A view names a subset of types plus an optional neighbourhood expansion, and layout nests under the view. One model can therefore carry an overview diagram beside several focused ones.
@@ -57,6 +71,8 @@ A single diagram of the whole model is unreadable past a few dozen types, and we
 The canvas is built on React Flow with ELK for automatic layout. Custom React nodes render an ERD box with one row per property, and per-row handles let an edge attach to the exact property it references.
 
 React Flow is DOM-based and degrades past a few hundred nodes, which is acceptable precisely because [[architecture#Views]] caps how much any one diagram shows. Note that `elkjs` is EPL-2.0 while React Flow and `dagre` are MIT.
+
+A property row shows its type with a `[]` suffix when it is a [[metamodel#Lists|list]] and the [[metamodel#Enums|enum]] it is limited to; an open type carries a badge. [[metamodel#Cardinality]] rides in the edge label rather than as crow's-foot markers at each end: React Flow's default edge carries one label, and endpoint markers would need a custom edge whose geometry cannot be checked without looking at it. A number that is certainly right beats a marker that might be drawn wrong.
 
 ## Roadmap
 
@@ -87,6 +103,14 @@ A published `.vsix` carries no `node_modules`, so a bare `require('@lpg/core')` 
 `docs/` is a hand-written static site that GitHub Pages serves verbatim from the branch folder. It is the public face of the material this knowledge graph holds, aimed at someone deciding whether to install rather than at someone changing the code.
 
 Diagrams are authored as SVG and exported to PNG beside them. Both formats are kept because the Marketplace rejects SVG in a README, while the site prefers it. Neither is generated at build time: the site has no build step at all, so a broken toolchain can never take the documentation down.
+
+The site fetches nothing from a third party. Fonts are self-hosted rather than loaded from a content delivery network, because a request to Google Fonts sends every visitor's IP address to Google, which LG München I held unlawful without consent (20.01.2022, 3 O 17493/20) and which triggered a wave of German warning letters. Both families are SIL Open Font Licence 1.1, so self-hosting is permitted. A test asserts that no page fetches a cross-origin subresource, because the privacy statement is only true while it is true, and a single convenient `<link>` would quietly make it false.
+
+### Legal pages
+
+The site carries a German Impressum, Datenschutzerklärung and Nutzungsbedingungen, linked from every footer, because the operator is a private individual resident in Germany.
+
+An Impressum is arguably not required for a free, non-commercial project — § 5 DDG binds *geschäftsmäßige* digital services — but the term is read broadly, and the cost of publishing one is far below the cost of being wrong. The pages describe what the site actually does rather than boilerplate: they name GitHub as the host and the United States as a processing location, disclose that the contact address is a Gmail account, and state that no cookie is set. A test checks that each is reachable from every page and that the statutes cited are the ones in force, since the TMG was replaced by the DDG in 2024 and the EU online dispute platform closed in 2025.
 
 ### Marketplace page
 

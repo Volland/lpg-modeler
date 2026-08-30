@@ -58,9 +58,33 @@ Closure is not inherited because a subtype that admitted extra properties would 
 
 ## Cardinality
 
-An edge type may declare endpoint multiplicity, read as `<from end>-to-<to end>`. `many-to-one` says each source node has at most one target. The default is `many-to-many`, which constrains nothing.
+An edge type may declare endpoint multiplicity, either as one of four named forms or as a bound per end. The bound written at an end says how many nodes at that end may relate to one node at the other, which is the UML reading.
 
-Cardinality earns its place because it is genuinely enforced somewhere: LadybugDB rejects a violating write, which was measured rather than assumed, and SHACL expresses both directions — the forward bound as `sh:maxCount`, the reverse as a `sh:inversePath` shape. Neo4j, GQL, and OWL each report it as a downgrade instead. The LadybugDB spellings `MANY_ONE` and the rest are accepted as aliases.
+A bound is `*` for unbounded, an exact count such as `2`, or a range such as `1..2` or `1..*`. The named forms are sugar over bounds: `many-to-one` is `{ from: "*", to: "0..1" }`. The default is unbounded at both ends, which constrains nothing, and is written by leaving the field out.
+
+Bounds replaced a four-value enum because the enum could not say the thing people actually ask for. "A child has exactly two parents" is `{ to: "2" }`, and no combination of `many` and `one` expresses it. The named forms stayed because they read better for the common cases and because every model written before bounds used them. The LadybugDB spellings `MANY_ONE` and the rest are accepted as aliases.
+
+Cardinality earns its place because it is genuinely enforced somewhere. SHACL carries it exactly, in both directions: the forward bound as `sh:minCount` and `sh:maxCount`, the reverse as the same counts under a `sh:inversePath`. LadybugDB carries only an upper bound of one per end, because its multiplicity keyword encodes nothing else, so it emits the strongest keyword that fits and reports whatever the keyword drops. Neo4j, GQL, OWL, and PG-Schema report it whole.
+
+## Value Constraints
+
+A property may bound its own values: `min` and `max` for anything ordered, and `pattern`, `minLength` and `maxLength` for a string. Each is checked against the property's type, so a pattern on an integer is an error rather than a silent no-op.
+
+These are the cheapest constraints to add and the least portable to carry. SHACL expresses all five, LinkML all but length, and the five remaining targets none — measured, not assumed: LadybugDB 0.19.1 rejects `CHECK` outright. Their value is that the model records the intent even where no database can hold it, and [[emitters#Capability Matrix|every target says which]].
+
+## Named Constraints
+
+A node type may declare constraints that span more than one property: a comparison between two of them, a choice among several, or a count over one of its edges. Each has a name, an assertion, and an optional message.
+
+The assertion vocabulary is closed — seven kinds, no expression language. That is the load-bearing decision. A closed vocabulary can be translated per target or honestly downgraded, where a raw expression could only ever be passed through to one; and it lets the canvas offer a form per kind with operands drawn from the type itself, rather than shipping a parser. See [[architecture#Editing Surface#Inspector]].
+
+Constraints are not inherited. One written against a subtype's property would be meaningless on the parent, and a subtype that silently widened its parent's contract would give the reader of the parent no way to see it — the same reasoning as [[metamodel#Open and Closed Types]].
+
+## Escape Hatch
+
+A node type may carry a raw SHACL fragment, spliced verbatim into its shape. It is the long tail: anything the closed vocabulary cannot say.
+
+The hatch exists because a closed vocabulary that cannot be escaped becomes a reason not to adopt the tool at all. It is deliberately unportable, and that is stated rather than hidden: only the SHACL target uses it, and every other target reports that it ignored it. Widening the vocabulary is always the better fix, and the hatch is what makes waiting for that bearable.
 
 ## Composition
 

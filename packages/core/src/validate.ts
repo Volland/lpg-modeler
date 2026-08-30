@@ -1,5 +1,5 @@
 import type { Diagnostic, ModelIR } from './ir'
-import { LPG_FORMAT_VERSION, err, warn } from './ir'
+import { LPG_FORMAT_VERSION, assertionOperands, err, warn } from './ir'
 import type { ViewDef } from './views'
 import { typesInNoView } from './views'
 
@@ -73,6 +73,82 @@ export function validateModel(model: ModelIR, views?: ViewDef[]): Diagnostic[] {
         out.push(err('key-unknown-property',
           `Node type '${node.name}' declares key property '${k}', which it neither declares nor inherits.`,
           node.loc))
+      }
+    }
+  }
+
+  // --- Value constraints must suit the type they constrain.
+  const NUMERIC = new Set(['int', 'float', 'date', 'datetime'])
+  for (const owner of [...model.nodes, ...model.edges]) {
+    for (const p of owner.props) {
+      const where = `'${owner.name}.${p.name}'`
+      if ((p.min !== undefined || p.max !== undefined) && !NUMERIC.has(p.type)) {
+        out.push(err('constraint-type-mismatch',
+          `Property ${where} has a min or max but type ${p.type}, which has no ordering. Bounds apply to int, float, date and datetime.`,
+          p.loc))
+      }
+      if (p.min !== undefined && p.max !== undefined && p.min > p.max) {
+        out.push(err('impossible-constraint',
+          `Property ${where} has a min above its max, so no value can satisfy it.`, p.loc))
+      }
+      const stringOnly = p.pattern !== undefined || p.minLength !== undefined || p.maxLength !== undefined
+      if (stringOnly && p.type !== 'string') {
+        out.push(err('constraint-type-mismatch',
+          `Property ${where} has a pattern or a length bound but type ${p.type}. Those apply to string.`,
+          p.loc))
+      }
+      if (p.minLength !== undefined && p.maxLength !== undefined && p.minLength > p.maxLength) {
+        out.push(err('impossible-constraint',
+          `Property ${where} has a minLength above its maxLength, so no value can satisfy it.`, p.loc))
+      }
+      if (p.pattern !== undefined) {
+        try { new RegExp(p.pattern) } catch {
+          out.push(err('malformed-pattern',
+            `Property ${where} has a pattern that is not a valid regular expression.`, p.loc))
+        }
+      }
+    }
+  }
+
+  // --- Named constraints refer to things the type actually has.
+  for (const node of model.nodes) {
+    const propNames = new Set(node.props.map((p) => p.name))
+    const seen = new Set<string>()
+    for (const k of node.constraints) {
+      if (seen.has(k.name)) {
+        out.push(err('duplicate-constraint',
+          `Node type '${node.name}' declares two constraints named '${k.name}'.`, k.loc))
+      }
+      seen.add(k.name)
+
+      for (const operand of assertionOperands(k.assert)) {
+        if (!propNames.has(operand)) {
+          out.push(err('unresolved-operand',
+            `Constraint '${node.name}.${k.name}' refers to property '${operand}', which '${node.name}' neither declares nor inherits.`,
+            k.loc))
+        }
+      }
+      // Bound to a local so the narrowing survives the lookups below.
+      const a = k.assert
+      if (a.kind !== 'count') continue
+
+      const edge = model.edges.find((e) => e.name === a.edge)
+      if (!edge) {
+        out.push(err('unresolved-operand',
+          `Constraint '${node.name}.${k.name}' counts edge '${a.edge}', which is not a known edge type.`,
+          k.loc))
+        continue
+      }
+      const reachable = new Set([node.name, ...node.ancestors])
+      if (!reachable.has(edge.from)) {
+        out.push(err('unreachable-edge',
+          `Constraint '${node.name}.${k.name}' counts edge '${edge.name}', which leaves '${edge.from}' rather than '${node.name}'.`,
+          k.loc))
+      }
+      if (a.of && !model.nodes.some((n) => n.name === a.of)) {
+        out.push(err('unresolved-operand',
+          `Constraint '${node.name}.${k.name}' qualifies on type '${a.of}', which is not a known node type.`,
+          k.loc))
       }
     }
   }

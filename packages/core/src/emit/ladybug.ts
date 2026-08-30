@@ -1,8 +1,12 @@
 import type {
   Cardinality, Diagnostic, EdgeTypeIR, ModelIR, NodeTypeIR, PropertyIR, ScalarType,
 } from '../ir'
+import { describeCardinality, endpointIsSingular, isUnconstrained } from '../ir'
 import { concreteDescendants, concreteNodes } from '../ir'
-import { downgrade, type Capabilities, type EmitOptions, type EmitResult } from '../capabilities'
+import {
+  downgrade, reportUnsupportedConstraints,
+  type Capabilities, type EmitOptions, type EmitResult,
+} from '../capabilities'
 
 /**
  * Verified against LadybugDB 0.19.1: NOT NULL is not accepted by the parser, composite
@@ -18,12 +22,17 @@ export const LADYBUG_CAPABILITIES: Capabilities = {
   compositeKey: 'synthesized',
   edgeProps: 'native',
   nestedEdges: false,
+  valueConstraints: 'unsupported',
+  namedConstraints: 'unsupported',
+  rawPassthrough: false,
   listProps: 'native',
   // Measured against LadybugDB 0.19.1: rel multiplicity is rejected on write, unlike
   // NOT NULL. The schema is mandatory and closed, and there is no enum type.
   enums: 'unsupported',
   openTypes: 'unsupported',
-  cardinality: 'enforced',
+  // The multiplicity keyword says only that an end holds at most one. A minimum or an
+  // exact count has no spelling, so claiming 'enforced' here would overstate it.
+  cardinality: 'upper-bound-only',
 }
 
 const TYPES: Record<ScalarType, string> = {
@@ -31,12 +40,29 @@ const TYPES: Record<ScalarType, string> = {
   date: 'DATE', datetime: 'TIMESTAMP', uuid: 'UUID', json: 'STRING',
 }
 
-/** LadybugDB spells multiplicity as a trailing keyword; MANY_MANY is the default. */
-const MULTIPLICITY: Record<Cardinality, string | undefined> = {
-  'one-to-one': 'ONE_ONE',
-  'one-to-many': 'ONE_MANY',
-  'many-to-one': 'MANY_ONE',
-  'many-to-many': undefined,
+/**
+ * LadybugDB spells multiplicity as a trailing keyword, and it encodes only the upper
+ * bound of each end: there is no way to say a minimum or an exact count. The keyword
+ * is emitted whenever an end is bounded at one, and whatever it cannot carry is
+ * reported rather than dropped.
+ */
+function multiplicity(c: Cardinality): string | undefined {
+  const { from, to } = endpointIsSingular(c)
+  if (from && to) return 'ONE_ONE'
+  if (from) return 'ONE_MANY'
+  if (to) return 'MANY_ONE'
+  return undefined
+}
+
+/** The part of a bound the keyword cannot express: any minimum, any maximum above one. */
+function unexpressible(c: Cardinality): string[] {
+  const out: string[] = []
+  for (const end of ['from', 'to'] as const) {
+    const b = c[end]
+    if (b.min > 0) out.push(`a minimum of ${b.min} on '${end}'`)
+    if (b.max !== null && b.max > 1) out.push(`a maximum of ${b.max} on '${end}'`)
+  }
+  return out
 }
 
 /** A column type, with the `[]` suffix LadybugDB uses for a list. */
@@ -148,14 +174,26 @@ function relTable(model: ModelIR, edge: EdgeTypeIR, diags: Diagnostic[]): string
 
   // Multiplicity is a trailing keyword inside the parentheses, and it is one of the
   // few things LadybugDB really does reject on write.
-  const multiplicity = MULTIPLICITY[edge.cardinality]
-  if (multiplicity) {
-    lines.push(`  // ${edge.cardinality}: enforced on write.`)
-    lines.push(`  ${multiplicity},`)
+  const keyword = multiplicity(edge.cardinality)
+  const described = describeCardinality(edge.cardinality)
+  if (keyword) {
+    lines.push(`  // ${described}: enforced on write.`)
+    lines.push(`  ${keyword},`)
+  }
+  const lost = unexpressible(edge.cardinality)
+  if (lost.length > 0) {
+    downgrade(diags, 'ladybug', 'downgrade-cardinality',
+      `Edge type '${edge.name}' declares ${described} cardinality. LadybugDB multiplicity encodes only an upper bound of one per end, so ${lost.join(' and ')} ${lost.length > 1 ? 'are' : 'is'} unenforced.`,
+      edge.loc)
+    lines.push(`  // UNENFORCED: ${lost.join(' and ')}.`)
+  } else if (!keyword && !isUnconstrained(edge.cardinality)) {
+    lines.push(`  // ${described}: nothing to enforce.`)
   }
 
-  const last = lines.length - 1
-  lines[last] = (lines[last] ?? '').replace(/,$/, '')
+  // The separator belongs to the last real entry, not to a trailing comment: a comma
+  // before the closing parenthesis is a parse error.
+  const last = lines.map((l) => l.trim().startsWith('//')).lastIndexOf(false)
+  if (last >= 0) lines[last] = (lines[last] ?? '').replace(/,$/, '')
   lines.push(');')
   return lines.join('\n')
 }
@@ -183,6 +221,8 @@ export function emitLadybug(model: ModelIR, _options: EmitOptions = {}): EmitRes
     const t = relTable(model, edge, diagnostics)
     if (t) parts.push(t, '')
   }
+
+  reportUnsupportedConstraints(diagnostics, 'ladybug', model, LADYBUG_CAPABILITIES)
 
   return { target: 'ladybug', extension: 'cypher', content: parts.join('\n'), diagnostics }
 }

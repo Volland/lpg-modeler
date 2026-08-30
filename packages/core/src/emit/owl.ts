@@ -1,6 +1,9 @@
 import type { Diagnostic, ModelIR, PropertyIR } from '../ir'
-import { findEnum } from '../ir'
-import { downgrade, type Capabilities, type EmitOptions, type EmitResult } from '../capabilities'
+import { describeCardinality, findEnum, isUnconstrained } from '../ir'
+import {
+  downgrade, reportUnsupportedConstraints,
+  type Capabilities, type EmitOptions, type EmitResult,
+} from '../capabilities'
 import { LOSSY_TYPES, XSD, mapEdges, prefixHeader, term } from './reify'
 
 /**
@@ -17,6 +20,9 @@ export const OWL_CAPABILITIES: Capabilities = {
   compositeKey: 'native',
   edgeProps: 'reified',
   nestedEdges: false,
+  valueConstraints: 'unsupported',
+  namedConstraints: 'unsupported',
+  rawPassthrough: false,
   listProps: 'native',
   enums: 'enforced',
   // OWL is open-world by construction, so closure is not something it can assert.
@@ -113,9 +119,9 @@ export function emitOwl(model: ModelIR, _options: EmitOptions = {}): EmitResult 
 
   // --- Edges, by gradual reification.
   for (const m of mapEdges(model)) {
-    if (m.edge.cardinality !== 'many-to-many') {
+    if (!isUnconstrained(m.edge.cardinality)) {
       downgrade(diagnostics, 'owl', 'downgrade-cardinality',
-        `Edge type '${m.edge.name}' declares ${m.edge.cardinality} cardinality. A cardinality restriction is deliberately not emitted here, because it would state an inference rule rather than a constraint; the SHACL artifact carries it.`,
+        `Edge type '${m.edge.name}' declares ${describeCardinality(m.edge.cardinality)} cardinality. A cardinality restriction is deliberately not emitted here, because it would state an inference rule rather than a constraint; the SHACL artifact carries it.`,
         m.edge.loc)
     }
     if (m.kind === 'plain') {
@@ -141,6 +147,8 @@ export function emitOwl(model: ModelIR, _options: EmitOptions = {}): EmitResult 
     }
     parts.push('')
   }
+
+  reportUnsupportedConstraints(diagnostics, 'owl', model, OWL_CAPABILITIES)
 
   return { target: 'owl', extension: 'ttl', content: parts.join('\n'), diagnostics }
 }

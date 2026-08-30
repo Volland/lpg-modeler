@@ -10,6 +10,10 @@ The set covers the hierarchy, identity, and edge properties, plus [[metamodel#Li
 
 A downgrade is reported only when a model actually uses the feature. A target that cannot enforce closure says so in the capability set, but does not raise a diagnostic on every closed type, which would be noise on every model rather than information.
 
+Constraint downgrades are reported at `info` rather than `warning`. Five of the seven targets can carry no [[metamodel#Value Constraints|value]] or [[metamodel#Named Constraints|named]] constraint at all, so a warning apiece would bury the downgrades that are genuinely surprising — a `required` property that silently vanishes is a different class of problem from SHACL being the only place a regular expression can live. One shared reporter emits them, so the five cannot drift apart in what they say.
+
+A capability value is not always a yes or a no. LadybugDB declares [[metamodel#Cardinality]] as `upper-bound-only`, because its multiplicity keyword says an end holds at most one and nothing else. Collapsing that to `enforced` would be the exact overstatement the matrix exists to prevent, so the partial case gets its own value rather than being rounded up.
+
 A comment is also injected at the lossy site in the generated file, so an operator reading the DDL sees the same information as the author reading the editor.
 
 Three lossiness cases exist before a line of emitter code is written: Ladybug has no multi-label nodes, Neo4j existence and node-key constraints are Enterprise-only, and generic Cypher engines have no schema facility at all. Silent best-effort was rejected because a `required` constraint that quietly vanishes is a data-integrity bug that surfaces in production. This declared capability set is also the seam the deferred public plugin API will expose — see [[architecture#Modularity]].
@@ -21,6 +25,10 @@ LadybugDB, formerly Kuzu, is an embedded Cypher property graph database with a m
 An abstract hierarchy is flattened to one node table per concrete leaf type, with inherited columns copied down. The cost is that an edge declared on an abstract endpoint expands to a cross-product of endpoint pairs, and adding a subtype becomes a schema migration.
 
 Two features are carried natively. A [[metamodel#Lists|list]] property becomes a `STRING[]` column, and [[metamodel#Cardinality]] becomes the trailing multiplicity keyword — `MANY_ONE` and its siblings — which, measured against a running instance, really is rejected on write. It is one of the few constraints this target enforces rather than reports.
+
+The keyword encodes only an upper bound of one per end. A minimum, or a maximum above one, has no spelling at all, so a bound like `{ to: "2" }` emits no keyword and is reported instead. Because a downgrade is written as a comment where a column would go, the separator has to be attached to the last real entry rather than the last line: a comma before the closing parenthesis is a parse error, which the execution test caught and a golden file would not have.
+
+Measured against LadybugDB 0.19.1, `CHECK` constraints, non-key `UNIQUE`, and an `ENUM` column type are all rejected by the parser. Richer constraints therefore have nowhere to go on this target, and belong to [[emitters#RDF Targets#SHACL Shapes]].
 
 Measured against LadybugDB 0.19.1, the engine enforces less than the flattening suggests. `NOT NULL` is not accepted by the parser and a null non-key value inserts successfully, so a required property that is not the key is unenforceable and is reported as a downgrade. A composite `PRIMARY KEY` does not parse either, so a composite key must be emitted as a synthesized column. Only primary key uniqueness and primary key presence are actually enforced.
 
@@ -62,6 +70,8 @@ Every class and slot carries the IRI it has in this model, so identity survives 
 
 The mismatch is edges. LinkML has no binary relation that can hold properties, so [[emitters#RDF Targets#Gradual Reification]] applies here too and the reification is a reported downgrade. The shortcut property the RDF targets emit is deliberately omitted: in a schema meant to be generated from, it would imply a second place the same fact is written.
 
+A slot carries an upper bound of one as `multivalued: false` and a lower bound of one as `required`. Any other bound — an exact count, or a maximum above one — has no LinkML spelling and is reported.
+
 ## Template Targets
 
 Targets that cannot be tested against a running instance are not shipped as code. Instead the resolved IR is exposed to a user-supplied template, so an additional dialect is a small amount of configuration rather than a feature request.
@@ -82,7 +92,11 @@ SHACL is the primary constraint artifact. It is closed-world validation, so requ
 
 Uniqueness is the exception: across all instances it needs a SPARQL-based constraint, which core SHACL cannot express, so it is reported as a downgrade rather than emitted.
 
-A closed type becomes `sh:closed`, which is only sound because a shape is emitted for every relation leaving the type as well as for every property. A shape that named only the datatype properties would reject any node that had an edge. Cardinality is emitted in both directions: the forward bound as `sh:maxCount` on the relation, the reverse as a `sh:inversePath` shape on the target.
+This is the only target that carries [[metamodel#Value Constraints]], [[metamodel#Named Constraints]], and the [[metamodel#Escape Hatch]], which is what makes it the artifact a constraint goes to when no database can hold it. Each named constraint becomes a shape of its own targeting the same class, rather than another property on the type's shape: one shape per constraint is what lets each carry its own `sh:message`, which folded together would appear to explain every rule on the type. A qualified count becomes `sh:qualifiedValueShape`, a choice becomes `sh:or`, and a comparison becomes `sh:lessThan` and its siblings.
+
+A closed type becomes `sh:closed`, which is only sound because a shape is emitted for every relation leaving the type as well as for every property. A shape that named only the datatype properties would reject any node that had an edge.
+
+Cardinality is emitted in both directions and in full: the bound at the `to` end becomes `sh:minCount` and `sh:maxCount` on the forward relation, and the bound at the `from` end becomes the same counts under a `sh:inversePath` on the target's shape. This is the only target that expresses an exact count, which is what makes it the place a constraint goes when no database can hold it.
 
 ### OWL Subset
 

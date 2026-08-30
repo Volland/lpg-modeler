@@ -1,13 +1,31 @@
 import * as vscode from 'vscode'
 import * as path from 'node:path'
 import {
-  DEFAULT_VIEW, addToView, addView, applyEdits, backfillIdEdits, emit, parseLayout,
-  parseViews, projectView, pruneLayout, removeFromView, resolveModel, serializeLayout,
-  serializeViews, setPosition, sidecarPaths, targetNames, validateModel,
-  type Diagnostic, type Layout, type ModelIR, type TextEdit, type ViewDef,
+  DEFAULT_VIEW, addToView, addView, applyEdits, backfillIdEdits, describeCardinality,
+  emit, formatBound, isUnconstrained, parseLayout, parseViews, projectView, pruneLayout,
+  removeFromView, resolveModel, serializeLayout, serializeViews, setPosition,
+  sidecarPaths, targetNames, validateModel,
+  type Assertion, type Diagnostic, type Layout, type ModelIR, type TextEdit, type ViewDef,
 } from '@lpg/core'
 import type { HostMessage, Intent, Projection, ViewMessage, WireProperty } from './protocol'
 import { intentToEdits } from './intents'
+
+/** A constraint in one line, for the inspector list. */
+function summarise(a: Assertion): string {
+  switch (a.kind) {
+    case 'lessThan': return `${a.left} < ${a.right}`
+    case 'lessThanOrEquals': return `${a.left} <= ${a.right}`
+    case 'equals': return `${a.left} = ${a.right}`
+    case 'disjoint': return `${a.left} <> ${a.right}`
+    case 'atLeastOne': return `at least one of ${a.props.join(', ')}`
+    case 'exactlyOne': return `exactly one of ${a.props.join(', ')}`
+    default: {
+      const bound = [a.min !== undefined ? `min ${a.min}` : '', a.max !== undefined ? `max ${a.max}` : '']
+        .filter(Boolean).join(', ')
+      return `${a.edge}${a.of ? ` of ${a.of}` : ''}: ${bound}`
+    }
+  }
+}
 
 const MODEL_GLOB = '**/*.lpg.{yaml,yml}'
 const isModelFile = (doc: vscode.TextDocument) => /\.lpg\.ya?ml$/.test(doc.uri.fsPath)
@@ -133,7 +151,13 @@ class Canvas {
     const wireProps = (props: ModelIR['nodes'][number]['props'], key: string[]): WireProperty[] =>
       props.map((p) => ({
         id: p.id, name: p.name, type: p.type, required: p.required, unique: p.unique,
-        isKey: key.includes(p.name),
+        isKey: key.includes(p.name), list: p.list,
+        ...(p.enum ? { enum: p.enum } : {}),
+        ...(p.min !== undefined ? { min: p.min } : {}),
+        ...(p.max !== undefined ? { max: p.max } : {}),
+        ...(p.pattern !== undefined ? { pattern: p.pattern } : {}),
+        ...(p.minLength !== undefined ? { minLength: p.minLength } : {}),
+        ...(p.maxLength !== undefined ? { maxLength: p.maxLength } : {}),
         ...(p.inheritedFrom ? { inheritedFrom: p.inheritedFrom } : {}),
       }))
 
@@ -141,12 +165,24 @@ class Canvas {
       views: views.map((v) => v.name),
       activeView: this.activeView,
       nodes: projection.nodes.map((n) => ({
-        id: n.id, name: n.name, abstract: n.abstract,
+        id: n.id, name: n.name, abstract: n.abstract, open: n.open,
         ...(n.extends ? { extends: n.extends } : {}),
         props: wireProps(n.props, n.key),
+        constraints: n.constraints.map((k) => ({
+          id: k.id, name: k.name, kind: k.assert.kind, summary: summarise(k.assert),
+          ...(k.message ? { message: k.message } : {}),
+        })),
+        hasRawShacl: n.rawShacl !== undefined,
       })),
       edges: projection.edges.map((e) => ({
-        id: e.id, name: e.name, from: e.from, to: e.to, props: wireProps(e.props, []),
+        id: e.id, name: e.name, from: e.from, to: e.to,
+        cardinality: {
+          from: formatBound(e.cardinality.from),
+          to: formatBound(e.cardinality.to),
+          label: describeCardinality(e.cardinality),
+          constrained: !isUnconstrained(e.cardinality),
+        },
+        props: wireProps(e.props, []),
       })),
       positions: layout[this.activeView] ?? {},
       diagnostics: all.map((d) => ({

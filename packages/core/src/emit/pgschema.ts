@@ -1,6 +1,9 @@
 import type { Diagnostic, EdgeTypeIR, ModelIR, MixinIR, NodeTypeIR, PropertyIR } from '../ir'
-import { GQL_TYPES } from '../ir'
-import { downgrade, type Capabilities, type EmitOptions, type EmitResult } from '../capabilities'
+import { GQL_TYPES, describeCardinality, isUnconstrained } from '../ir'
+import {
+  downgrade, reportUnsupportedConstraints,
+  type Capabilities, type EmitOptions, type EmitResult,
+} from '../capabilities'
 import { lowerCamel } from './reify'
 
 /**
@@ -18,6 +21,9 @@ export const PGSCHEMA_CAPABILITIES: Capabilities = {
   compositeKey: 'native',
   edgeProps: 'native',
   nestedEdges: false,
+  valueConstraints: 'unsupported',
+  namedConstraints: 'unsupported',
+  rawPassthrough: false,
   listProps: 'native',
   enums: 'unsupported',
   openTypes: 'native',
@@ -76,13 +82,13 @@ function nodeType(node: NodeTypeIR, diags: Diagnostic[]): string {
 
 function edgeType(edge: EdgeTypeIR, diags: Diagnostic[]): string[] {
   const lines: string[] = []
-  if (edge.cardinality !== 'many-to-many') {
+  if (!isUnconstrained(edge.cardinality)) {
     // PG-Keys can state participation constraints, but this emitter does not generate
     // them: the syntax is not settled enough to emit something a reader could rely on.
     downgrade(diags, 'pgschema', 'downgrade-cardinality',
-      `Edge type '${edge.name}' declares ${edge.cardinality} cardinality. It is written as a comment rather than a PG-Keys participation constraint.`,
+      `Edge type '${edge.name}' declares ${describeCardinality(edge.cardinality)} cardinality. It is written as a comment rather than a PG-Keys participation constraint.`,
       edge.loc)
-    lines.push(`  // UNENFORCED: ${edge.name} is ${edge.cardinality} in the model.`)
+    lines.push(`  // UNENFORCED: ${edge.name} is ${describeCardinality(edge.cardinality)} in the model.`)
   }
   const props = propertyList(edge.name, edge.props, diags)
   const body = props.length > 0 ? ` {${props}}` : ''
@@ -141,6 +147,8 @@ export function emitPgSchema(model: ModelIR, _options: EmitOptions = {}): EmitRe
   const last = body.length - 1
   if (last >= 0) body[last] = body[last]!.replace(/,$/, '')
   parts.push(...body, '}')
+
+  reportUnsupportedConstraints(diagnostics, 'pgschema', model, PGSCHEMA_CAPABILITIES)
 
   return { target: 'pgschema', extension: 'pgs', content: parts.join('\n') + '\n', diagnostics }
 }

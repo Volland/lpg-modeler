@@ -1,9 +1,8 @@
 import { parseDocument, Document, isMap, isSeq, isScalar, YAMLMap, Node } from 'yaml'
-import type { Diagnostic, Loc, ScalarType } from './ir'
-import type { Cardinality } from './ir'
+import type { Assertion, Cardinality, Diagnostic, Loc, ScalarType } from './ir'
 import {
-  CARDINALITY_NAMES, DEFAULT_CARDINALITY, SCALAR_SPELLING_NAMES,
-  canonicalCardinality, parsePropertyType, err,
+  ASSERTION_KINDS, CARDINALITY_NAMES, COMPARISON_KINDS, DEFAULT_CARDINALITY,
+  SCALAR_SPELLING_NAMES, canonicalCardinality, parseBound, parsePropertyType, err,
 } from './ir'
 
 /** The raw shape of a model file, before imports or inheritance are resolved. */
@@ -13,8 +12,21 @@ export interface RawProperty {
   type: ScalarType
   list: boolean
   enum?: string
+  min?: number
+  max?: number
+  pattern?: string
+  minLength?: number
+  maxLength?: number
   required: boolean
   unique: boolean
+  loc?: Loc
+}
+
+export interface RawConstraint {
+  id?: string
+  name: string
+  assert: Assertion
+  message?: string
   loc?: Loc
 }
 
@@ -23,6 +35,8 @@ export interface RawNode {
   name: string
   abstract: boolean
   open: boolean
+  constraints: RawConstraint[]
+  rawShacl?: string
   extends?: string
   mixins: string[]
   key: string[]
@@ -105,6 +119,11 @@ function scalarText(map: YAMLMap, key: string): string | undefined {
   return undefined
 }
 
+function num(map: YAMLMap, key: string): number | undefined {
+  const v = map.get(key, true)
+  return isScalar(v) && typeof v.value === 'number' ? v.value : undefined
+}
+
 function bool(map: YAMLMap, key: string): boolean {
   const v = map.get(key, true)
   return isScalar(v) && v.value === true
@@ -117,6 +136,12 @@ function strList(map: YAMLMap, key: string): string[] {
   }
   if (isScalar(v) && typeof v.value === 'string') return [v.value]
   return []
+}
+
+/** Spread-friendly reader, so an absent bound stays absent rather than becoming undefined. */
+function numeric(body: YAMLMap, key: string): Record<string, number> {
+  const v = num(body, key)
+  return v === undefined ? {} : { [key]: v }
 }
 
 function parseProps(file: string, owner: YAMLMap, diags: Diagnostic[]): RawProperty[] {
@@ -152,9 +177,163 @@ function parseProps(file: string, owner: YAMLMap, diags: Diagnostic[]): RawPrope
       type: parsed.type,
       list,
       ...(enumRef ? { enum: enumRef } : {}),
+      ...numeric(body, 'min'), ...numeric(body, 'max'),
+      ...numeric(body, 'minLength'), ...numeric(body, 'maxLength'),
+      ...(str(body, 'pattern') !== undefined ? { pattern: str(body, 'pattern')! } : {}),
       required: bool(body, 'required'),
       unique: bool(body, 'unique'),
       loc,
+    })
+  }
+  return out
+}
+
+
+/**
+ * Cardinality is either one of the named forms or a mapping of endpoint bounds:
+ * `many-to-one`, or `{ to: "2" }`. An omitted end is unbounded.
+ */
+function parseCardinality(
+  file: string, body: YAMLMap, edgeName: string, diags: Diagnostic[], loc: Loc | undefined,
+): Cardinality {
+  const node = body.get('cardinality', true)
+  if (node === undefined || node === null) return DEFAULT_CARDINALITY()
+
+  if (isScalar(node) && typeof node.value === 'string') {
+    const named = canonicalCardinality(node.value)
+    if (named) return named
+    diags.push(err('unknown-cardinality',
+      `Edge type '${edgeName}' declares cardinality '${node.value}', which is not a known multiplicity. Use one of ${CARDINALITY_NAMES.join(', ')}, or endpoint bounds such as { to: "2" }.`,
+      locOf(file, node as Node) ?? loc))
+    return DEFAULT_CARDINALITY()
+  }
+
+  if (!isMap(node)) {
+    diags.push(err('malformed-cardinality',
+      `Edge type '${edgeName}' must declare cardinality as a named multiplicity or a mapping of endpoint bounds.`,
+      locOf(file, node as Node) ?? loc))
+    return DEFAULT_CARDINALITY()
+  }
+
+  const out = DEFAULT_CARDINALITY()
+  for (const end of ['from', 'to'] as const) {
+    const written = str(node, end)
+    if (written === undefined) continue
+    const bound = parseBound(written)
+    if (!bound) {
+      diags.push(err('unknown-cardinality',
+        `Edge type '${edgeName}' declares a '${end}' bound of '${written}', which is not a multiplicity. Write '*', an exact count such as '2', or a range such as '1..*'.`,
+        locOf(file, node as Node) ?? loc))
+      continue
+    }
+    if (bound.max !== null && bound.min > bound.max) {
+      diags.push(err('impossible-cardinality',
+        `Edge type '${edgeName}' declares a '${end}' bound of '${written}', whose minimum exceeds its maximum, so nothing can satisfy it.`,
+        locOf(file, node as Node) ?? loc))
+      continue
+    }
+    out[end] = bound
+  }
+  return out
+}
+
+
+/**
+ * Read one assertion. The vocabulary is closed, so an unknown kind is an error rather
+ * than something passed through to a target that could not translate it anyway.
+ */
+function parseAssertion(
+  file: string, body: YAMLMap, owner: string, cname: string, diags: Diagnostic[],
+): Assertion | undefined {
+  const loc = locOf(file, body as Node)
+  const kinds = body.items
+    .filter((i) => isScalar(i.key) && typeof i.key.value === 'string')
+    .map((i) => String((i.key as { value: unknown }).value))
+  if (kinds.length !== 1) {
+    diags.push(err('malformed-constraint',
+      `Constraint '${owner}.${cname}' must assert exactly one thing. Known kinds: ${ASSERTION_KINDS.join(', ')}.`, loc))
+    return undefined
+  }
+  const kind = kinds[0]!
+  if (!(ASSERTION_KINDS as readonly string[]).includes(kind)) {
+    diags.push(err('unknown-assertion',
+      `Constraint '${owner}.${cname}' asserts '${kind}', which is not a known kind. Known kinds: ${ASSERTION_KINDS.join(', ')}.`, loc))
+    return undefined
+  }
+
+  if (COMPARISON_KINDS.includes(kind)) {
+    const pair = strList(body, kind)
+    if (pair.length !== 2) {
+      diags.push(err('malformed-constraint',
+        `Constraint '${owner}.${cname}' asserts '${kind}', which compares exactly two properties.`, loc))
+      return undefined
+    }
+    return { kind, left: pair[0]!, right: pair[1]! } as Assertion
+  }
+
+  if (kind === 'atLeastOne' || kind === 'exactlyOne') {
+    const props = strList(body, kind)
+    if (props.length < 2) {
+      diags.push(err('malformed-constraint',
+        `Constraint '${owner}.${cname}' asserts '${kind}' over ${props.length} propert${props.length === 1 ? 'y' : 'ies'}. It needs at least two to be a choice.`, loc))
+      return undefined
+    }
+    return { kind, props }
+  }
+
+  const spec = body.get('count', true)
+  if (!isMap(spec)) {
+    diags.push(err('malformed-constraint',
+      `Constraint '${owner}.${cname}' asserts 'count', which needs an edge and a bound.`, loc))
+    return undefined
+  }
+  const edge = str(spec, 'edge')
+  if (!edge) {
+    diags.push(err('malformed-constraint',
+      `Constraint '${owner}.${cname}' asserts 'count' without naming an edge.`, loc))
+    return undefined
+  }
+  const of = str(spec, 'of')
+  const min = num(spec, 'min')
+  const max = num(spec, 'max')
+  if (min === undefined && max === undefined) {
+    diags.push(err('malformed-constraint',
+      `Constraint '${owner}.${cname}' asserts 'count' on '${edge}' without a min or a max, so it constrains nothing.`, loc))
+    return undefined
+  }
+  return {
+    kind: 'count', edge,
+    ...(of ? { of } : {}), ...(min !== undefined ? { min } : {}), ...(max !== undefined ? { max } : {}),
+  }
+}
+
+function parseConstraints(
+  file: string, owner: YAMLMap, ownerName: string, diags: Diagnostic[],
+): RawConstraint[] {
+  const seq = owner.get('constraints', true)
+  if (!isSeq(seq)) return []
+  const out: RawConstraint[] = []
+  for (const item of seq.items) {
+    if (!isMap(item)) continue
+    const loc = locOf(file, item as Node)
+    const name = str(item, 'name')
+    if (!name) {
+      diags.push(err('malformed-constraint',
+        `A constraint on '${ownerName}' has no name. A name is what a failure message and a diff refer to.`, loc))
+      continue
+    }
+    const assertBody = item.get('assert', true)
+    if (!isMap(assertBody)) {
+      diags.push(err('malformed-constraint',
+        `Constraint '${ownerName}.${name}' has no assert block.`, loc))
+      continue
+    }
+    const assertion = parseAssertion(file, assertBody, ownerName, name, diags)
+    if (!assertion) continue
+    out.push({
+      id: str(item, 'id'), name, assert: assertion,
+      ...(str(item, 'message') !== undefined ? { message: str(item, 'message')! } : {}),
+      ...(loc ? { loc } : {}),
     })
   }
   return out
@@ -268,6 +447,8 @@ export function parseModel(file: string, text: string): ParseResult {
         name,
         abstract: bool(item.value, 'abstract'),
         open: bool(item.value, 'open'),
+        constraints: parseConstraints(file, item.value, name, diags),
+        ...(str(item.value, 'shacl') !== undefined ? { rawShacl: str(item.value, 'shacl')! } : {}),
         extends: str(item.value, 'extends'),
         mixins: strList(item.value, 'mixins'),
         key: strList(item.value, 'key'),
@@ -288,16 +469,7 @@ export function parseModel(file: string, text: string): ParseResult {
         diags.push(err('malformed-edge', `Edge type '${name}' must be a mapping.`, loc))
         continue
       }
-      const rawCard = str(item.value, 'cardinality')
-      let cardinality = DEFAULT_CARDINALITY
-      if (rawCard !== undefined) {
-        const resolved = canonicalCardinality(rawCard)
-        if (resolved) cardinality = resolved
-        else {
-          diags.push(err('unknown-cardinality',
-            `Edge type '${name}' declares cardinality '${rawCard}', which is not a known multiplicity. Known: ${CARDINALITY_NAMES.join(', ')}.`, loc))
-        }
-      }
+      const cardinality = parseCardinality(file, item.value, name, diags, loc)
       raw.edges.push({
         id: str(item.value, 'id'),
         name,

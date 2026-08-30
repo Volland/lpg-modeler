@@ -79,6 +79,40 @@ describe('ladybug emitter, executed', () => {
     expect((await r.getAll())[0]?.s).toBe('nonsense')
   })
 
+  // @lat: [[metamodel#Cardinality]]
+  it('executes DDL carrying a bound no keyword can express', async () => {
+    const conn = await connect()
+    // The exact count of two produces a comment where an entry would be; the DDL has to
+    // stay parseable, which a golden file alone would not prove.
+    await conn.query(emit(loadFixture('kinship.lpg.yaml'), 'ladybug').content)
+    const r = await conn.query('CALL show_tables() RETURN name ORDER BY name')
+    expect((await r.getAll()).map((row: Record<string, unknown>) => row.name))
+      .toEqual(['HAS_PARENT', 'HELD_BY', 'Passport', 'Person'])
+  })
+
+  it('enforces the one end of a bound it could express', async () => {
+    const conn = await connect()
+    await conn.query(emit(loadFixture('kinship.lpg.yaml'), 'ladybug').content)
+    await conn.query("CREATE (:Person {ssn:'a'}), (:Passport {number:'p1'}), (:Passport {number:'p2'})")
+    await conn.query("MATCH (p:Passport {number:'p1'}), (q:Person) CREATE (p)-[:HELD_BY]->(q)")
+    // 'from' is bounded at one, which ONE_MANY does carry.
+    await expect(
+      conn.query("MATCH (p:Passport {number:'p2'}), (q:Person) CREATE (p)-[:HELD_BY]->(q)"))
+      .rejects.toThrow()
+  })
+
+  it('confirms the exact-count downgrade is real: a third parent is accepted', async () => {
+    const conn = await connect()
+    await conn.query(emit(loadFixture('kinship.lpg.yaml'), 'ladybug').content)
+    await conn.query("CREATE (:Person {ssn:'c'}), (:Person {ssn:'m'}), (:Person {ssn:'f'}), (:Person {ssn:'x'})")
+    for (const p of ['m', 'f', 'x']) {
+      await conn.query(`MATCH (c:Person {ssn:'c'}), (p:Person {ssn:'${p}'}) CREATE (c)-[:HAS_PARENT]->(p)`)
+    }
+    // Exactly two is unenforceable here, which is why it is reported rather than claimed.
+    const r = await conn.query("MATCH (:Person {ssn:'c'})-[h:HAS_PARENT]->() RETURN count(h) AS n")
+    expect((await r.getAll())[0]?.n).toBe(3)
+  })
+
   it('accepts an expanded abstract endpoint on both concrete sides', async () => {
     const conn = await connect()
     await conn.query(emit(loadFixture('social.lpg.yaml'), 'ladybug').content)

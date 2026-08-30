@@ -62,31 +62,95 @@ export const GQL_TYPES: Record<ScalarType, string> = {
 }
 
 /**
- * Endpoint multiplicity, read as `<from end>-to-<to end>`. `many-to-one` says each
- * source node has at most one target. See lat.md/metamodel#Cardinality.
+ * One endpoint's multiplicity. `max: null` is unbounded.
+ * See lat.md/metamodel#Cardinality.
  */
-export type Cardinality = 'one-to-one' | 'one-to-many' | 'many-to-one' | 'many-to-many'
-
-export const DEFAULT_CARDINALITY: Cardinality = 'many-to-many'
-
-/** Accepted spellings, including the LadybugDB ones, normalised to upper case. */
-const CARDINALITY_SPELLINGS: Record<string, Cardinality> = {
-  'ONE-TO-ONE': 'one-to-one', 'ONE-ONE': 'one-to-one',
-  'ONE-TO-MANY': 'one-to-many', 'ONE-MANY': 'one-to-many',
-  'MANY-TO-ONE': 'many-to-one', 'MANY-ONE': 'many-to-one',
-  'MANY-TO-MANY': 'many-to-many', 'MANY-MANY': 'many-to-many',
+export interface Bound {
+  min: number
+  max: number | null
 }
 
-export const CARDINALITY_NAMES: readonly string[] = Object.keys(CARDINALITY_SPELLINGS).sort()
+/**
+ * Endpoint multiplicity. The bound written at an end says how many nodes at that end
+ * may relate to one node at the other end, which is the UML reading: `to` bounds how
+ * many targets one source has, `from` how many sources one target has.
+ */
+export interface Cardinality {
+  from: Bound
+  to: Bound
+}
 
-/** Resolve a cardinality as written to its canonical name, ignoring case and separator. */
+const unbounded = (): Bound => ({ min: 0, max: null })
+const atMostOne = (): Bound => ({ min: 0, max: 1 })
+
+export const DEFAULT_CARDINALITY = (): Cardinality => ({ from: unbounded(), to: unbounded() })
+
+/**
+ * The four named forms, kept because they read better than bounds for the common
+ * cases and because every model written before bounds existed uses them.
+ */
+const NAMED_CARDINALITIES: Record<string, () => Cardinality> = {
+  'ONE-TO-ONE': () => ({ from: atMostOne(), to: atMostOne() }),
+  'ONE-TO-MANY': () => ({ from: atMostOne(), to: unbounded() }),
+  'MANY-TO-ONE': () => ({ from: unbounded(), to: atMostOne() }),
+  'MANY-TO-MANY': () => ({ from: unbounded(), to: unbounded() }),
+  // The LadybugDB spellings of the same four.
+  'ONE-ONE': () => ({ from: atMostOne(), to: atMostOne() }),
+  'ONE-MANY': () => ({ from: atMostOne(), to: unbounded() }),
+  'MANY-ONE': () => ({ from: unbounded(), to: atMostOne() }),
+  'MANY-MANY': () => ({ from: unbounded(), to: unbounded() }),
+}
+
+export const CARDINALITY_NAMES: readonly string[] = Object.keys(NAMED_CARDINALITIES).sort()
+
+/** Resolve a named multiplicity, ignoring case and separator. */
 export function canonicalCardinality(written: string): Cardinality | undefined {
-  return CARDINALITY_SPELLINGS[written.trim().replace(/_/g, '-').toUpperCase()]
+  return NAMED_CARDINALITIES[written.trim().replace(/_/g, '-').toUpperCase()]?.()
+}
+
+/**
+ * Read one endpoint bound: `*` unbounded, `2` exactly two, `1..2` a range, `1..*` a
+ * lower bound only.
+ */
+export function parseBound(written: string): Bound | undefined {
+  const t = written.trim()
+  if (t === '*') return unbounded()
+  const exact = /^\d+$/.exec(t)
+  if (exact) { const n = Number(t); return { min: n, max: n } }
+  const range = /^(\d+)\s*\.\.\s*(\d+|\*)$/.exec(t)
+  if (!range) return undefined
+  const min = Number(range[1])
+  const max = range[2] === '*' ? null : Number(range[2])
+  return { min, max }
+}
+
+export function formatBound(b: Bound): string {
+  if (b.min === 0 && b.max === null) return '*'
+  if (b.max === null) return `${b.min}..*`
+  if (b.min === b.max) return String(b.min)
+  return `${b.min}..${b.max}`
+}
+
+/** The name of a multiplicity, preferring a named form when one fits exactly. */
+export function describeCardinality(c: Cardinality): string {
+  for (const [name, make] of Object.entries(NAMED_CARDINALITIES)) {
+    if (!name.includes('-TO-')) continue
+    const n = make()
+    if (sameBound(n.from, c.from) && sameBound(n.to, c.to)) return name.toLowerCase()
+  }
+  return `${formatBound(c.from)}-to-${formatBound(c.to)}`
+}
+
+const sameBound = (a: Bound, b: Bound) => a.min === b.min && a.max === b.max
+
+/** Whether the multiplicity says nothing at all, which is the default. */
+export function isUnconstrained(c: Cardinality): boolean {
+  return c.from.min === 0 && c.from.max === null && c.to.min === 0 && c.to.max === null
 }
 
 /** Whether each end admits at most one node. */
 export function endpointIsSingular(c: Cardinality): { from: boolean; to: boolean } {
-  return { from: c.startsWith('one-'), to: c.endsWith('-one') }
+  return { from: c.from.max === 1, to: c.to.max === 1 }
 }
 
 /** A property type as written: the scalar, and whether it holds a list of them. */
@@ -119,11 +183,55 @@ export interface Loc {
   range: [number, number]
 }
 
+/**
+ * A closed set of assertions about a type, each of which SHACL can carry. The set is
+ * closed rather than an expression language so that every kind can be translated per
+ * target, and so the canvas can offer a form per kind rather than a parser.
+ * See lat.md/metamodel#Named Constraints.
+ */
+export type Assertion =
+  /** Two properties compared, e.g. startDate before endDate. */
+  | { kind: 'lessThan'; left: string; right: string }
+  | { kind: 'lessThanOrEquals'; left: string; right: string }
+  | { kind: 'equals'; left: string; right: string }
+  | { kind: 'disjoint'; left: string; right: string }
+  /** At least one of these properties must be present. */
+  | { kind: 'atLeastOne'; props: string[] }
+  /** Exactly one of these properties must be present. */
+  | { kind: 'exactlyOne'; props: string[] }
+  /** How many of an edge's targets must be of a given type. */
+  | { kind: 'count'; edge: string; of?: string; min?: number; max?: number }
+
+export const ASSERTION_KINDS = [
+  'lessThan', 'lessThanOrEquals', 'equals', 'disjoint',
+  'atLeastOne', 'exactlyOne', 'count',
+] as const
+
+/** The two-property comparisons, which share a shape and a SHACL spelling. */
+export const COMPARISON_KINDS: readonly string[] =
+  ['lessThan', 'lessThanOrEquals', 'equals', 'disjoint']
+
+export interface ConstraintIR {
+  id: string
+  name: string
+  assert: Assertion
+  /** Shown instead of the generated wording when the constraint fails. */
+  message?: string
+  loc?: Loc
+}
+
 export interface PropertyIR {
   /** Stable element id. See lat.md/metamodel#Stable Element IDs. */
   id: string
   name: string
   type: ScalarType
+  /** Inclusive bounds on the value itself. See lat.md/metamodel#Value Constraints. */
+  min?: number
+  max?: number
+  /** Constraints on a string value's shape. */
+  pattern?: string
+  minLength?: number
+  maxLength?: number
   /** Whether the property holds a list of its type rather than a single value. */
   list: boolean
   /** Name of the enum constraining this property's values. See lat.md/metamodel#Enums. */
@@ -159,6 +267,13 @@ export interface NodeTypeIR {
   key: string[]
   keyInheritedFrom?: string
   props: PropertyIR[]
+  /** Assertions spanning more than one property. See lat.md/metamodel#Named Constraints. */
+  constraints: ConstraintIR[]
+  /**
+   * A raw SHACL fragment spliced into this type's shape verbatim. Portable to nothing,
+   * and reported as such. See lat.md/metamodel#Escape Hatch.
+   */
+  rawShacl?: string
   /** Previous IRI, when this type has been renamed. lat.md/metamodel#Namespaces */
   previousIri?: string
   loc?: Loc
@@ -270,4 +385,17 @@ export function concreteDescendants(model: ModelIR, name: string): NodeTypeIR[] 
 
 export function findEnum(model: ModelIR, name: string): EnumIR | undefined {
   return model.enums.find((e) => e.name === name)
+}
+
+/** Whether a property carries any bound or shape constraint on its values. */
+export function hasValueConstraints(p: PropertyIR): boolean {
+  return p.min !== undefined || p.max !== undefined || p.pattern !== undefined
+    || p.minLength !== undefined || p.maxLength !== undefined
+}
+
+/** Property names an assertion refers to, for validation and for the canvas. */
+export function assertionOperands(a: Assertion): string[] {
+  if ('left' in a) return [a.left, a.right]
+  if ('props' in a) return a.props
+  return []
 }

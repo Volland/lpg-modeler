@@ -6,11 +6,11 @@ import type { RawModel } from './parse'
 
 const ALPHABET = 'abcdefghijklmnopqrstuvwxyz0123456789'
 
-export type ElementKind = 'node' | 'edge' | 'prop' | 'mixin' | 'enum'
+export type ElementKind = 'node' | 'edge' | 'prop' | 'mixin' | 'enum' | 'constraint'
 
 // 'e' is taken by edge, so an enum id is prefixed 'x'.
 const PREFIX: Record<ElementKind, string> = {
-  node: 'n', edge: 'e', prop: 'p', mixin: 'm', enum: 'x',
+  node: 'n', edge: 'e', prop: 'p', mixin: 'm', enum: 'x', constraint: 'c',
 }
 
 /** Random source, injectable so tests can generate deterministic ids. */
@@ -32,6 +32,7 @@ export function collectIds(raw: RawModel): string[] {
   for (const n of raw.nodes) { push(n.id); n.props.forEach((p) => push(p.id)) }
   for (const e of raw.edges) { push(e.id); e.props.forEach((p) => push(p.id)) }
   for (const x of raw.enums) push(x.id)
+  for (const n of raw.nodes) n.constraints.forEach((k) => push(k.id))
   return ids
 }
 
@@ -49,6 +50,7 @@ export function duplicateIdDiagnostics(raw: RawModel): Diagnostic[] {
   for (const n of raw.nodes) { note(n.id, `node ${n.name}`); n.props.forEach((p) => note(p.id, `${n.name}.${p.name}`)) }
   for (const e of raw.edges) { note(e.id, `edge ${e.name}`); e.props.forEach((p) => note(p.id, `${e.name}.${p.name}`)) }
   for (const x of raw.enums) note(x.id, `enum ${x.name}`)
+  for (const n of raw.nodes) n.constraints.forEach((k) => note(k.id, `${n.name}.${k.name}`))
 
   const out: Diagnostic[] = []
   for (const [id, owners] of seen) {
