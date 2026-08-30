@@ -44,8 +44,8 @@ code --install-extension pavlyshyn.lpg-modeler
 The CLI, for continuous integration:
 
 ```bash
-npx lpg check model/domain.lpg.yaml
-npx lpg emit model/domain.lpg.yaml --target ladybug --out schema
+npx lpg-modeler-cli check model/domain.lpg.yaml
+npx lpg-modeler-cli emit model/domain.lpg.yaml --target ladybug --out schema
 ```
 
 ## Repository layout

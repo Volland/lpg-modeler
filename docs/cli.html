@@ -147,10 +147,10 @@ jobs:
       - run: npm ci
 
       <span class="c-com"># Fails the build on any model error.</span>
-      - run: npx lpg check model/domain.lpg.yaml
+      - run: npx lpg-modeler-cli check model/domain.lpg.yaml
 
       <span class="c-com"># Regenerate and fail if the committed artifacts drifted.</span>
-      - run: npx lpg emit model/domain.lpg.yaml --target ladybug --target shacl --out schema
+      - run: npx lpg-modeler-cli emit model/domain.lpg.yaml --target ladybug --target shacl --out schema
       - run: git diff --exit-code schema</code></pre>
   <p>
     The second step is the one that matters over time. It turns "someone forgot to regenerate

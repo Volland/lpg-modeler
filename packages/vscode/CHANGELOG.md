@@ -4,6 +4,34 @@ All notable changes to LPG Modeler are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] — 2026-08-30
+
+### Added
+
+- **Three standards targets.** `gql` (GQL graph types, ISO/IEC 39075), `pgschema` (PG-Schema)
+  and `linkml` — seven generators in total from one model.
+- **Endpoint bounds.** `cardinality: { to: "2" }` says a child has exactly two parents, which
+  the four named multiplicities could not express. The named forms still work unchanged.
+- **Constraints.** Bounds and patterns on values (`min`, `max`, `pattern`, `minLength`,
+  `maxLength`); named assertions across properties (`lessThan`, `atLeastOne`, a qualified
+  `count` over an edge); and a raw SHACL escape hatch for the long tail.
+- **An inspector panel** beside the canvas for editing all of it, with a constraint builder
+  whose operands are dropdowns of the selected type's own properties.
+- **Lists, enums and open types**, plus a `lpg:` format version, a `prefixes:` map, and the
+  GQL spelling of every scalar type accepted alongside the original.
+- **Downloadable examples** on the documentation site.
+
+### Changed
+
+- The model JSON Schema is now JSON Schema 2020-12.
+- Constraint downgrades are reported at `info` rather than `warning`, so they do not bury
+  the downgrades that are genuinely surprising.
+
+### Fixed
+
+- A trailing separator in generated LadybugDB DDL, where a downgrade comment left a comma
+  before the closing parenthesis.
+
 ## [0.1.0] — 2026-08-29
 
 First release. A visual modeler: the full compiler pipeline plus a canvas that authors the

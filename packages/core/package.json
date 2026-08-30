@@ -1,6 +1,6 @@
 {
   "name": "@lpg/core",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "commonjs",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -9,5 +9,7 @@
   },
   "dependencies": {
     "yaml": "^2.6.0"
-  }
+  },
+  "private": true,
+  "description": "Parsing, IR, validation and generators for LPG Modeler. Bundled into the CLI and the extension rather than published."
 }

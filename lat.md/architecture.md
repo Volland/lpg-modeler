@@ -98,6 +98,8 @@ The extension is published to the Visual Studio Marketplace as a self-contained 
 
 A published `.vsix` carries no `node_modules`, so a bare `require('@lpg/core')` would not resolve inside it. The extension host entry is therefore bundled by esbuild over the `tsc` output, inlining `core` and leaving only `vscode` external — which is what makes `vsce package --no-dependencies` correct rather than a shortcut.
 
+The CLI ships to npm the same way, as a single self-contained package, so `core` is never published at all and is marked private to keep it that way. Bundling also settles a naming problem rather than working around it: the `@lpg` scope is not ours, and a published package carrying a bare workspace dependency would not install. The published names differ by necessity — the extension owns `lpg-modeler` as its Marketplace id, so the CLI is `lpg-modeler-cli` — and `npx lpg` is deliberately not advertised, because an unrelated package already holds that name on npm.
+
 ### Documentation site
 
 `docs/` is a hand-written static site that GitHub Pages serves verbatim from the branch folder. It is the public face of the material this knowledge graph holds, aimed at someone deciding whether to install rather than at someone changing the code.

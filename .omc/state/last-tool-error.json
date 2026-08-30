@@ -1,7 +1,7 @@
 {
   "tool_name": "Bash",
-  "tool_input_preview": "{\"command\":\"curl -s -X POST \\\"https://marketplace.visualstudio.com/_apis/public/gallery/extensionquery\\\" -H \\\"Accept: application/json;api-version=3.0-preview.1\\\" -H \\\"Content-Type: application/json\\\"...",
-  "error": "Exit code 1\nTraceback (most recent call last):\n  File \"<string>\", line 3, in <module>\n    e=json.load(sys.stdin)['results'][0]['extensions'][0]\n      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^\nIndexError: list index out of range",
-  "timestamp": "2026-08-29T11:01:18.317Z",
+  "tool_input_preview": "{\"command\":\"cd /Users/volodymyrpavlyshyn/Documents/work/lpg-modeler; npm run build >/dev/null 2>&1; git add -A -- . ':!.omc' && git commit --quiet -F - <<'MSG' && git log --oneline -3\\nrelease: 0.2.0,...",
+  "error": "Exit code 1\nThe following paths are ignored by one of your .gitignore files:\n.omc\nhint: Use -f if you really want to add them.\nhint: Disable this message with \"git config set advice.addIgnoredFile false\"",
+  "timestamp": "2026-08-30T18:59:15.955Z",
   "retry_count": 1
 }

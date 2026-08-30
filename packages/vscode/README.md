@@ -190,10 +190,10 @@ The same resolution and validation the editor runs is available as a command, so
 request can be gated on the model being valid:
 
 ```bash
-npx lpg check model/domain.lpg.yaml
+npx lpg-modeler-cli check model/domain.lpg.yaml
 
 # Regenerate and fail the build if the committed schema drifted.
-npx lpg emit model/domain.lpg.yaml --target ladybug --target shacl --out schema
+npx lpg-modeler-cli emit model/domain.lpg.yaml --target ladybug --target shacl --out schema
 git diff --exit-code schema
 ```
 

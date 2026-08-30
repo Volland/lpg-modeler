@@ -1,14 +1,55 @@
 {
-  "name": "@lpg/cli",
-  "version": "0.1.0",
+  "name": "lpg-modeler-cli",
+  "version": "0.2.0",
   "type": "commonjs",
   "bin": {
     "lpg": "./dist/cli.js"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json"
+    "build": "tsc -p tsconfig.json && node scripts/bundle.mjs",
+    "prepublishOnly": "npm run build"
   },
-  "dependencies": {
-    "@lpg/core": "*"
+  "description": "Design a property graph once. Generate every schema from it: LadybugDB, Neo4j, GQL, PG-Schema, SHACL, OWL and LinkML.",
+  "license": "MIT",
+  "homepage": "https://volland.github.io/lpg-modeler/",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Volland/lpg-modeler.git",
+    "directory": "packages/cli"
+  },
+  "bugs": {
+    "url": "https://github.com/Volland/lpg-modeler/issues"
+  },
+  "keywords": [
+    "graph",
+    "property graph",
+    "labeled property graph",
+    "lpg",
+    "schema",
+    "neo4j",
+    "cypher",
+    "ladybugdb",
+    "kuzu",
+    "gql",
+    "pg-schema",
+    "linkml",
+    "shacl",
+    "owl",
+    "rdf",
+    "ontology",
+    "data modeling",
+    "ddl"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "devDependencies": {
+    "@lpg/core": "*",
+    "esbuild": "^0.24.0"
   }
 }
