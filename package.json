@@ -1,7 +1,7 @@
 {
   "name": "lpg-modeler-workspace",
   "private": true,
-  "version": "0.2.0",
+  "version": "0.3.0",
   "scripts": {
     "build": "npm run build --workspaces --if-present",
     "test": "vitest run",
