@@ -1,6 +1,7 @@
 export * from './ir'
 export * from './parse'
 export * from './ids'
+export * from './scaffold'
 export * from './resolve'
 export * from './validate'
 export * from './views'

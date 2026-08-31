@@ -52,7 +52,8 @@
   ],
   "main": "./out/extension.js",
   "activationEvents": [
-    "onLanguage:yaml"
+    "onLanguage:yaml",
+    "onCommand:lpg.newModel"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json && node scripts/build-webview.mjs",
@@ -61,6 +62,10 @@
   },
   "contributes": {
     "commands": [
+      {
+        "command": "lpg.newModel",
+        "title": "LPG: New Model"
+      },
       {
         "command": "lpg.openCanvas",
         "title": "LPG: Open Canvas"

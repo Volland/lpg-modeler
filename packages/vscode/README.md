@@ -154,6 +154,9 @@ nodes:
 
 **2.** Run **LPG: Open Canvas** from the command palette. The diagram opens beside the file.
 
+*Starting from nothing?* Run **LPG: New Model** instead. It asks for a prefix and a base IRI,
+writes the file, and opens the canvas on it — no need to know the shape of a model file first.
+
 **3.** Run **LPG: Generate Schema** and pick a target. The artifact is written next to the
 model and opened beside it.
 
@@ -165,6 +168,7 @@ That is the whole loop. Nothing here needs a running database.
 
 | Command | What it does |
 | --- | --- |
+| `LPG: New Model` | Creates a model file, opens it, and opens the canvas on it |
 | `LPG: Open Canvas` | Opens the diagram beside the active model file |
 | `LPG: Generate Schema` | Prompts for a target and writes the artifact next to the model |
 

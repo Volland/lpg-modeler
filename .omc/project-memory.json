@@ -1,19 +1,38 @@
 {
   "version": "1.0.0",
-  "lastScanned": 1787991069190,
+  "lastScanned": 1788162411356,
   "projectRoot": "/Users/volodymyrpavlyshyn/Documents/work/lpg-modeler",
   "techStack": {
-    "languages": [],
-    "frameworks": [],
-    "packageManager": null,
+    "languages": [
+      {
+        "name": "JavaScript/TypeScript",
+        "version": null,
+        "confidence": "high",
+        "markers": [
+          "package.json"
+        ]
+      }
+    ],
+    "frameworks": [
+      {
+        "name": "vitest",
+        "version": "2.1.3",
+        "category": "testing"
+      }
+    ],
+    "packageManager": "npm",
     "runtime": null
   },
   "build": {
-    "buildCommand": null,
-    "testCommand": null,
-    "lintCommand": null,
+    "buildCommand": "npm run build",
+    "testCommand": "npm test",
+    "lintCommand": "npm run lint",
     "devCommand": null,
-    "scripts": {}
+    "scripts": {
+      "build": "npm run build --workspaces --if-present",
+      "test": "vitest run",
+      "lint": "eslint packages --ext .ts,.tsx"
+    }
   },
   "conventions": {
     "namingStyle": null,
@@ -22,29 +41,78 @@
     "fileOrganization": null
   },
   "structure": {
-    "isMonorepo": false,
-    "workspaces": [],
-    "mainDirectories": [],
+    "isMonorepo": true,
+    "workspaces": [
+      "packages/*"
+    ],
+    "mainDirectories": [
+      "docs"
+    ],
     "gitBranches": null
   },
   "customNotes": [],
   "directoryMap": {
+    "docs": {
+      "path": "docs",
+      "purpose": "Documentation",
+      "fileCount": 12,
+      "lastAccessed": 1788162411318,
+      "keyFiles": [
+        "CNAME",
+        "agb.html",
+        "architecture.html",
+        "cli.html",
+        "datenschutz.html"
+      ]
+    },
     "lat.md": {
       "path": "lat.md",
       "purpose": null,
-      "fileCount": 1,
-      "lastAccessed": 1787991069181,
+      "fileCount": 4,
+      "lastAccessed": 1788162411318,
       "keyFiles": [
-        "lat.md"
+        "architecture.md",
+        "emitters.md",
+        "lat.md",
+        "metamodel.md"
       ]
     },
     "openspec": {
       "path": "openspec",
       "purpose": null,
       "fileCount": 1,
-      "lastAccessed": 1787991069181,
+      "lastAccessed": 1788162411327,
       "keyFiles": [
         "config.yaml"
+      ]
+    },
+    "packages": {
+      "path": "packages",
+      "purpose": null,
+      "fileCount": 0,
+      "lastAccessed": 1788162411351,
+      "keyFiles": []
+    },
+    "docs/assets": {
+      "path": "docs/assets",
+      "purpose": "Static assets",
+      "fileCount": 4,
+      "lastAccessed": 1788162411352,
+      "keyFiles": [
+        "fonts.css",
+        "icon.png",
+        "icon.svg"
+      ]
+    },
+    "docs/examples": {
+      "path": "docs/examples",
+      "purpose": "Example code",
+      "fileCount": 4,
+      "lastAccessed": 1788162411352,
+      "keyFiles": [
+        "booking.lpg.yaml",
+        "catalog.lpg.yaml",
+        "kinship.lpg.yaml"
       ]
     }
   },

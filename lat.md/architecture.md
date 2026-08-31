@@ -34,6 +34,14 @@ The canvas is a companion webview opened beside the YAML editor, in the manner o
 
 Registering the canvas as a `CustomTextEditorProvider` was rejected: it would become the default editor for model files and hide the YAML, forfeiting the schema-driven completion that motivated choosing YAML. Canvas edits reach the file as `WorkspaceEdit`s, so VS Code owns undo and dirty state.
 
+### Creating a Model
+
+`LPG: New Model` asks for a prefix and a base IRI, writes the file, opens it, and opens the canvas beside it. The template lives in `core`, not in the extension.
+
+Every other entry point needs a model file to already exist — the canvas, and every CLI verb — so without this the first step was to know the shape of a file nobody had shown you yet. The template carries stable ids and one seeded node type with a key, because a model that generates nothing on its first run reads as a broken tool rather than an empty one. The seed is named `Thing` rather than after the model, so that it reads as a placeholder to rename.
+
+The file suffix is forced to `.lpg.yaml` whatever the save dialog returns. A model saved as plain `.yaml` gets no schema validation and no canvas, which looks like the extension failing rather than a naming mistake. Keeping the template in `core` is what lets a test resolve it, validate it, and generate all seven targets from it without an editor.
+
 ### Targeted edits
 
 Every canvas action becomes a set of targeted text splices computed from the YAML syntax tree, never a re-serialization of the document.

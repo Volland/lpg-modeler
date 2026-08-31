@@ -4,6 +4,21 @@ All notable changes to LPG Modeler are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **`LPG: New Model`.** A command that creates a model file: it asks for a namespace prefix
+  and a base IRI, writes the file, opens it, and opens the canvas beside it. Every other
+  entry point — the canvas and all four CLI verbs — needs a model file to already exist, so
+  the first step used to be knowing the shape of a file nobody had shown you.
+
+  The file it writes carries stable ids and one seeded node type with a key, so it validates
+  and generates every target on the first run rather than reporting a missing key. The
+  suffix is forced to `.lpg.yaml` whatever the save dialog returns, because a model saved as
+  plain `.yaml` gets no schema validation and no canvas — which reads as the extension
+  failing rather than as a naming mistake.
+
 ## [0.2.0] — 2026-08-30
 
 ### Added

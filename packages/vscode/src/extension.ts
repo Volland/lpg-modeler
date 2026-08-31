@@ -4,7 +4,7 @@ import {
   DEFAULT_VIEW, addToView, addView, applyEdits, backfillIdEdits, describeCardinality,
   emit, formatBound, isUnconstrained, parseLayout, parseViews, projectView, pruneLayout,
   removeFromView, resolveModel, serializeLayout, serializeViews, setPosition,
-  sidecarPaths, targetNames, validateModel,
+  isValidPrefix, newModelSource, sidecarPaths, targetNames, validateModel,
   type Assertion, type Diagnostic, type Layout, type ModelIR, type TextEdit, type ViewDef,
 } from '@lpg/core'
 import type { HostMessage, Intent, Projection, ViewMessage, WireProperty } from './protocol'
@@ -335,9 +335,61 @@ async function generate(modelPath: string, target: string): Promise<void> {
 
 export function activate(context: vscode.ExtensionContext): void {
   const diagnostics = vscode.languages.createDiagnosticCollection('lpg')
+  const newModel = async () => {
+    const entered = await vscode.window.showInputBox({
+      title: 'New LPG model',
+      prompt: 'Namespace prefix. It names the model and qualifies every type it declares.',
+      placeHolder: 'social',
+      validateInput: (v) => {
+        const t = v.trim()
+        if (t === '') return 'A prefix is required.'
+        return isValidPrefix(t)
+          ? undefined
+          : 'Letters, digits, hyphen and underscore, starting with a letter.'
+      },
+    })
+    if (entered === undefined) return
+    const prefix = entered.trim()
+
+    const iri = await vscode.window.showInputBox({
+      title: 'New LPG model',
+      prompt: 'Base IRI. This is the global identity of every type, not the file path.',
+      value: `https://example.org/vocab/${prefix}#`,
+      validateInput: (v) => (v.trim() === '' ? 'A base IRI is required.' : undefined),
+    })
+    if (iri === undefined) return
+
+    const folder = vscode.workspace.workspaceFolders?.[0]
+    const chosen = await vscode.window.showSaveDialog({
+      title: 'Create model file',
+      saveLabel: 'Create model',
+      filters: { 'LPG model': ['yaml', 'yml'] },
+      ...(folder ? { defaultUri: vscode.Uri.joinPath(folder.uri, `${prefix}.lpg.yaml`) } : {}),
+    })
+    if (!chosen) return
+
+    const target = withModelSuffix(chosen)
+    const source = newModelSource({ prefix, iri })
+    await vscode.workspace.fs.writeFile(target, new TextEncoder().encode(source))
+
+    const doc = await vscode.workspace.openTextDocument(target)
+    await vscode.window.showTextDocument(doc, vscode.ViewColumn.One)
+    // Straight onto the canvas: the point of the tool is that you draw the rest.
+    await openCanvas(target)
+  }
+
   context.subscriptions.push(diagnostics)
 
   const canvases = new Map<string, Canvas>()
+
+/**
+ * Force the suffix the extension matches on. A model saved as plain `.yaml` would get
+ * no schema validation and no canvas, which looks like the tool is broken.
+ */
+function withModelSuffix(uri: vscode.Uri): vscode.Uri {
+  if (/\.lpg\.ya?ml$/.test(uri.fsPath)) return uri
+  return vscode.Uri.file(`${uri.fsPath.replace(/\.ya?ml$/, '')}.lpg.yaml`)
+}
 
   const openCanvas = async (uri?: vscode.Uri) => {
     const target = uri ?? vscode.window.activeTextEditor?.document.uri
@@ -359,6 +411,7 @@ export function activate(context: vscode.ExtensionContext): void {
   }
 
   context.subscriptions.push(
+    vscode.commands.registerCommand('lpg.newModel', () => void newModel()),
     vscode.commands.registerCommand('lpg.openCanvas', () => void openCanvas()),
     vscode.commands.registerCommand('lpg.generate', async () => {
       const uri = vscode.window.activeTextEditor?.document.uri

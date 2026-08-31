@@ -81,6 +81,16 @@ npx @vscode/vsce package --no-dependencies <span class="c-com"># run inside pack
     </li>
 
     <li>
+      <h3>Or let the extension write the file</h3>
+      <p>Run <strong>LPG: New Model</strong> from the command palette. It asks for a
+      namespace prefix and a base IRI, writes the file, opens it, and opens the canvas on
+      it — so you never have to know the shape of a model file to get started.</p>
+      <p>The file it writes already carries stable element ids and one seeded node type
+      with a key, so <code>lpg check</code> passes and every target generates on the first
+      run. Rename the seeded type or delete it from the canvas.</p>
+    </li>
+
+    <li>
       <h3>Open the canvas</h3>
       <p>Run <strong>LPG: Open Canvas</strong> from the command palette. The diagram opens
       beside the file, with an ERD box per node type and one row per property.</p>
@@ -144,6 +154,7 @@ npx @lpg/cli emit  catalog.lpg.yaml --target ladybug --out ./schema</code></pre>
     <table>
       <thead><tr><th>Command</th><th>What it does</th></tr></thead>
       <tbody>
+        <tr><td><code>LPG: New Model</code></td><td>Asks for a prefix and a base IRI, writes the model file, and opens the canvas on it. Works with nothing open.</td></tr>
         <tr><td><code>LPG: Open Canvas</code></td><td>Opens the diagram beside the active model file. Requires a <code>.lpg.yaml</code> file in the active editor.</td></tr>
         <tr><td><code>LPG: Generate Schema</code></td><td>Prompts for a target and writes the artifact next to the model.</td></tr>
       </tbody>

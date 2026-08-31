@@ -4,6 +4,14 @@ All notable changes to LPG Modeler are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **`LPG: New Model`** — creates a model file, opens it, and opens the canvas on it. Asks
+  only for a namespace prefix and a base IRI. Works with nothing open, so getting started no
+  longer means knowing the shape of a model file first.
+
 ## [0.2.0] — 2026-08-30
 
 ### Added
