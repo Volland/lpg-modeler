@@ -12,6 +12,10 @@ out/protocol.*
 out/intents.*
 out/webview/**
 
-# Repository noise.
+# Repository noise. Agent tooling drops state directories here; they are gitignored,
+# which is why vsce -- which reads only its own ignore file -- would otherwise ship them.
 .eslintrc.json
 **/.DS_Store
+.omc/**
+.gstack/**
+*.vsix

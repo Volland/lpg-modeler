@@ -42,6 +42,12 @@ Every other entry point needs a model file to already exist — the canvas, and 
 
 The file suffix is forced to `.lpg.yaml` whatever the save dialog returns. A model saved as plain `.yaml` gets no schema validation and no canvas, which looks like the extension failing rather than a naming mistake. Keeping the template in `core` is what lets a test resolve it, validate it, and generate all seven targets from it without an editor.
 
+### Command failures
+
+Every palette command runs its async body through a wrapper that catches and reports. A handler that discards its promise turns any failure into silence.
+
+`registerCommand('lpg.newModel', () => void newModel())` was the original form: the editor never sees the rejection, so a failure anywhere in the flow presents as a palette entry that does nothing at all — indistinguishable from an extension that never activated, and the one symptom a user cannot report usefully. Returning the promise also lets VS Code treat the command as still running. The extension host entry is driven end to end in tests against a stub `vscode` module, which is what makes a silent handler a test failure rather than a support ticket.
+
 ### Targeted edits
 
 Every canvas action becomes a set of targeted text splices computed from the YAML syntax tree, never a re-serialization of the document.

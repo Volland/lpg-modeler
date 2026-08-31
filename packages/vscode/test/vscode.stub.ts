@@ -1,0 +1,171 @@
+/**
+ * Enough of the `vscode` module to drive the extension host entry point in a test.
+ * Only the surface `src/extension.ts` actually touches is implemented; anything the
+ * extension calls that is missing here fails loudly, which is the point.
+ */
+import * as fs from 'node:fs'
+import * as nodePath from 'node:path'
+
+export class Uri {
+  private constructor(readonly fsPath: string) {}
+  static file(p: string): Uri { return new Uri(p) }
+  static joinPath(base: Uri, ...parts: string[]): Uri {
+    return new Uri(nodePath.join(base.fsPath, ...parts))
+  }
+  get path(): string { return this.fsPath }
+  toString(): string { return `file://${this.fsPath}` }
+}
+
+export class Position {
+  constructor(readonly line: number, readonly character: number) {}
+}
+
+export class Range {
+  readonly start: Position
+  readonly end: Position
+  constructor(a: number, b: number, c: number, d: number) {
+    this.start = new Position(a, b)
+    this.end = new Position(c, d)
+  }
+}
+
+export enum DiagnosticSeverity { Error = 0, Warning = 1, Information = 2, Hint = 3 }
+export enum ViewColumn { One = 1, Beside = -2 }
+
+export class Diagnostic {
+  source?: string
+  code?: string
+  constructor(readonly range: Range, readonly message: string, readonly severity: DiagnosticSeverity) {}
+}
+
+export class WorkspaceEdit {
+  readonly edits: { uri: Uri; range: Range; newText: string }[] = []
+  replace(uri: Uri, range: Range, newText: string): void { this.edits.push({ uri, range, newText }) }
+}
+
+class TextDocument {
+  constructor(readonly uri: Uri, private text: string) {}
+  getText(): string { return this.text }
+  get lineCount(): number { return this.text.split('\n').length }
+  lineAt(line: number): { text: string } { return { text: this.text.split('\n')[line] ?? '' } }
+  positionAt(offset: number): Position {
+    const before = this.text.slice(0, offset).split('\n')
+    return new Position(before.length - 1, (before.at(-1) ?? '').length)
+  }
+  offsetAt(p: Position): number {
+    const lines = this.text.split('\n')
+    return lines.slice(0, p.line).reduce((n, l) => n + l.length + 1, 0) + p.character
+  }
+}
+
+/** Everything the test steers: queued answers, and a record of what the extension did. */
+export const harness = {
+  commands: new Map<string, (...args: unknown[]) => unknown>(),
+  inputs: [] as (string | undefined)[],
+  saveDialog: undefined as Uri | undefined,
+  quickPick: undefined as string | undefined,
+  errors: [] as string[],
+  warnings: [] as string[],
+  openedEditors: [] as string[],
+  panels: [] as FakePanel[],
+  workspaceRoot: undefined as string | undefined,
+  reset(root: string) {
+    this.commands.clear()
+    this.inputs = []
+    this.saveDialog = undefined
+    this.quickPick = undefined
+    this.errors = []
+    this.warnings = []
+    this.openedEditors = []
+    this.panels = []
+    this.workspaceRoot = root
+  },
+}
+
+class FakePanel {
+  disposed = false
+  readonly messages: unknown[] = []
+  private readonly listeners: ((m: unknown) => void)[] = []
+  readonly webview = {
+    html: '',
+    cspSource: 'vscode-webview:',
+    asWebviewUri: (u: Uri) => u,
+    postMessage: (m: unknown) => { this.messages.push(m); return Promise.resolve(true) },
+    onDidReceiveMessage: (cb: (m: unknown) => void) => { this.listeners.push(cb); return { dispose() {} } },
+  }
+  constructor(readonly viewType: string, readonly title: string) {}
+  onDidDispose(_cb: () => void): { dispose(): void } { return { dispose() {} } }
+  /** Drive the webview -> host direction the way the real bundle does on load. */
+  send(message: unknown): void { for (const cb of this.listeners) cb(message) }
+}
+
+export const commands = {
+  registerCommand(id: string, handler: (...args: unknown[]) => unknown) {
+    harness.commands.set(id, handler)
+    return { dispose() {} }
+  },
+  executeCommand(id: string, ...args: unknown[]) {
+    const handler = harness.commands.get(id)
+    if (!handler) throw new Error(`command not registered: ${id}`)
+    return handler(...args)
+  },
+}
+
+export const languages = {
+  createDiagnosticCollection(_name: string) {
+    const store = new Map<string, Diagnostic[]>()
+    return {
+      set: (uri: Uri, items: Diagnostic[]) => store.set(uri.fsPath, items),
+      clear: () => store.clear(),
+      dispose: () => store.clear(),
+      get entries() { return [...store] },
+    }
+  },
+}
+
+export const window = {
+  activeTextEditor: undefined as { document: TextDocument } | undefined,
+  showInputBox: (_opts?: unknown) => Promise.resolve(harness.inputs.shift()),
+  showSaveDialog: (_opts?: unknown) => Promise.resolve(harness.saveDialog),
+  showQuickPick: (_items: unknown, _opts?: unknown) => Promise.resolve(harness.quickPick),
+  showErrorMessage: (m: string) => { harness.errors.push(m); return Promise.resolve(undefined) },
+  showWarningMessage: (m: string) => { harness.warnings.push(m); return Promise.resolve(undefined) },
+  showTextDocument: (doc: TextDocument, _opts?: unknown) => {
+    harness.openedEditors.push(doc.uri.fsPath)
+    window.activeTextEditor = { document: doc }
+    return Promise.resolve({ document: doc })
+  },
+  createWebviewPanel(viewType: string, title: string, _column: ViewColumn, _opts?: unknown) {
+    const panel = new FakePanel(viewType, title)
+    harness.panels.push(panel)
+    return panel
+  },
+}
+
+const noop = () => ({ dispose() {} })
+
+export const workspace = {
+  get workspaceFolders() {
+    return harness.workspaceRoot ? [{ uri: Uri.file(harness.workspaceRoot), index: 0, name: 'test' }] : undefined
+  },
+  textDocuments: [] as TextDocument[],
+  fs: {
+    writeFile: async (uri: Uri, content: Uint8Array) => {
+      await fs.promises.mkdir(nodePath.dirname(uri.fsPath), { recursive: true })
+      await fs.promises.writeFile(uri.fsPath, content)
+    },
+    readFile: async (uri: Uri) => fs.promises.readFile(uri.fsPath),
+  },
+  openTextDocument: async (target: Uri | string) => {
+    const p = typeof target === 'string' ? target : target.fsPath
+    const doc = new TextDocument(Uri.file(p), await fs.promises.readFile(p, 'utf8'))
+    workspace.textDocuments = [...workspace.textDocuments.filter((d) => d.uri.fsPath !== p), doc]
+    return doc
+  },
+  applyEdit: async (_edit: WorkspaceEdit) => true,
+  findFiles: async (_glob: string, _exclude?: string) => [] as Uri[],
+  getConfiguration: (_section?: string) => ({ get: <T>(_key: string, fallback: T) => fallback }),
+  onDidChangeTextDocument: noop,
+  onDidOpenTextDocument: noop,
+  onDidSaveTextDocument: noop,
+}

@@ -331,6 +331,22 @@ async function generate(modelPath: string, target: string): Promise<void> {
   await vscode.window.showTextDocument(doc, { preview: true, viewColumn: vscode.ViewColumn.Beside })
 }
 
+/**
+ * Command bodies are async. A handler that discards its promise turns any failure into
+ * silence -- the palette entry runs and nothing at all appears. Returning the promise
+ * also lets the editor show the command as still running.
+ */
+function reporting(label: string, body: () => Promise<void>): () => Promise<void> {
+  return async () => {
+    try {
+      await body()
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error)
+      void vscode.window.showErrorMessage(`${label} failed: ${detail}`)
+    }
+  }
+}
+
 // --- Activation --------------------------------------------------------------
 
 export function activate(context: vscode.ExtensionContext): void {
@@ -411,9 +427,9 @@ function withModelSuffix(uri: vscode.Uri): vscode.Uri {
   }
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('lpg.newModel', () => void newModel()),
-    vscode.commands.registerCommand('lpg.openCanvas', () => void openCanvas()),
-    vscode.commands.registerCommand('lpg.generate', async () => {
+    vscode.commands.registerCommand('lpg.newModel', reporting('LPG: New Model', newModel)),
+    vscode.commands.registerCommand('lpg.openCanvas', reporting('LPG: Open Canvas', () => openCanvas())),
+    vscode.commands.registerCommand('lpg.generate', reporting('LPG: Generate Schema', async () => {
       const uri = vscode.window.activeTextEditor?.document.uri
       if (!uri || !/\.lpg\.ya?ml$/.test(uri.fsPath)) {
         void vscode.window.showErrorMessage('Open a .lpg.yaml model file first.')
@@ -421,7 +437,7 @@ function withModelSuffix(uri: vscode.Uri): vscode.Uri {
       }
       const target = await vscode.window.showQuickPick(targetNames(), { title: 'Generate schema for' })
       if (target) await generate(uri.fsPath, target)
-    }),
+    })),
   )
 
   // Typing in the model file re-renders the canvas: the file is the source of truth.
