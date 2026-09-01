@@ -63,7 +63,10 @@ export const harness = {
   commands: new Map<string, (...args: unknown[]) => unknown>(),
   inputs: [] as (string | undefined)[],
   saveDialog: undefined as Uri | undefined,
-  quickPick: undefined as string | undefined,
+  /** Answers to successive quick picks, in order: a flow can ask more than once. */
+  quickPicks: [] as (string | undefined)[],
+  /** What `findFiles` returns, i.e. the model files the workspace holds. */
+  foundFiles: [] as Uri[],
   errors: [] as string[],
   warnings: [] as string[],
   openedEditors: [] as string[],
@@ -73,17 +76,21 @@ export const harness = {
     this.commands.clear()
     this.inputs = []
     this.saveDialog = undefined
-    this.quickPick = undefined
+    this.quickPicks = []
+    this.foundFiles = []
     this.errors = []
     this.warnings = []
     this.openedEditors = []
     this.panels = []
     this.workspaceRoot = root
+    window.activeTextEditor = undefined
   },
 }
 
 class FakePanel {
   disposed = false
+  /** A real panel takes focus on creation; a test says so explicitly instead. */
+  active = false
   readonly messages: unknown[] = []
   private readonly listeners: ((m: unknown) => void)[] = []
   readonly webview = {
@@ -127,7 +134,7 @@ export const window = {
   activeTextEditor: undefined as { document: TextDocument } | undefined,
   showInputBox: (_opts?: unknown) => Promise.resolve(harness.inputs.shift()),
   showSaveDialog: (_opts?: unknown) => Promise.resolve(harness.saveDialog),
-  showQuickPick: (_items: unknown, _opts?: unknown) => Promise.resolve(harness.quickPick),
+  showQuickPick: (_items: unknown, _opts?: unknown) => Promise.resolve(harness.quickPicks.shift()),
   showErrorMessage: (m: string) => { harness.errors.push(m); return Promise.resolve(undefined) },
   showWarningMessage: (m: string) => { harness.warnings.push(m); return Promise.resolve(undefined) },
   showTextDocument: (doc: TextDocument, _opts?: unknown) => {
@@ -163,7 +170,7 @@ export const workspace = {
     return doc
   },
   applyEdit: async (_edit: WorkspaceEdit) => true,
-  findFiles: async (_glob: string, _exclude?: string) => [] as Uri[],
+  findFiles: async (_glob: string, _exclude?: string) => harness.foundFiles,
   getConfiguration: (_section?: string) => ({ get: <T>(_key: string, fallback: T) => fallback }),
   onDidChangeTextDocument: noop,
   onDidOpenTextDocument: noop,

@@ -28,7 +28,8 @@ function summarise(a: Assertion): string {
 }
 
 const MODEL_GLOB = '**/*.lpg.{yaml,yml}'
-const isModelFile = (doc: vscode.TextDocument) => /\.lpg\.ya?ml$/.test(doc.uri.fsPath)
+const isModelPath = (p: string) => /\.lpg\.ya?ml$/.test(p)
+const isModelFile = (doc: vscode.TextDocument) => isModelPath(doc.uri.fsPath)
 
 /** Read through open editors first, so an unsaved buffer is what the canvas shows. */
 function makeReader(): (p: string) => string | undefined {
@@ -94,6 +95,9 @@ class Canvas {
   }
 
   get modelPath(): string { return this.modelUri.fsPath }
+
+  /** True while this canvas is the focused tab, which is when `activeTextEditor` is not. */
+  get isActive(): boolean { return this.panel.active }
 
   private post(message: HostMessage): void {
     void this.panel.webview.postMessage(message)
@@ -336,7 +340,7 @@ async function generate(modelPath: string, target: string): Promise<void> {
  * silence -- the palette entry runs and nothing at all appears. Returning the promise
  * also lets the editor show the command as still running.
  */
-function reporting(label: string, body: () => Promise<void>): () => Promise<void> {
+function reporting<T>(label: string, body: () => Promise<T>): () => Promise<void> {
   return async () => {
     try {
       await body()
@@ -351,7 +355,7 @@ function reporting(label: string, body: () => Promise<void>): () => Promise<void
 
 export function activate(context: vscode.ExtensionContext): void {
   const diagnostics = vscode.languages.createDiagnosticCollection('lpg')
-  const newModel = async () => {
+  const newModel = async (): Promise<vscode.Uri | undefined> => {
     const entered = await vscode.window.showInputBox({
       title: 'New LPG model',
       prompt: 'Namespace prefix. It names the model and qualifies every type it declares.',
@@ -364,7 +368,7 @@ export function activate(context: vscode.ExtensionContext): void {
           : 'Letters, digits, hyphen and underscore, starting with a letter.'
       },
     })
-    if (entered === undefined) return
+    if (entered === undefined) return undefined
     const prefix = entered.trim()
 
     const iri = await vscode.window.showInputBox({
@@ -373,7 +377,7 @@ export function activate(context: vscode.ExtensionContext): void {
       value: `https://example.org/vocab/${prefix}#`,
       validateInput: (v) => (v.trim() === '' ? 'A base IRI is required.' : undefined),
     })
-    if (iri === undefined) return
+    if (iri === undefined) return undefined
 
     const folder = vscode.workspace.workspaceFolders?.[0]
     const chosen = await vscode.window.showSaveDialog({
@@ -382,7 +386,7 @@ export function activate(context: vscode.ExtensionContext): void {
       filters: { 'LPG model': ['yaml', 'yml'] },
       ...(folder ? { defaultUri: vscode.Uri.joinPath(folder.uri, `${prefix}.lpg.yaml`) } : {}),
     })
-    if (!chosen) return
+    if (!chosen) return undefined
 
     const target = withModelSuffix(chosen)
     const source = newModelSource({ prefix, iri })
@@ -392,6 +396,7 @@ export function activate(context: vscode.ExtensionContext): void {
     await vscode.window.showTextDocument(doc, vscode.ViewColumn.One)
     // Straight onto the canvas: the point of the tool is that you draw the rest.
     await openCanvas(target)
+    return target
   }
 
   context.subscriptions.push(diagnostics)
@@ -407,12 +412,31 @@ function withModelSuffix(uri: vscode.Uri): vscode.Uri {
   return vscode.Uri.file(`${uri.fsPath.replace(/\.ya?ml$/, '')}.lpg.yaml`)
 }
 
+  /**
+   * The model a command acts on. See lat.md/architecture#Editing Surface#Reaching a model.
+   */
+  const modelForCommand = async (): Promise<vscode.Uri | undefined> => {
+    const active = vscode.window.activeTextEditor?.document.uri
+    if (active && isModelPath(active.fsPath)) return active
+
+    const focused = [...canvases.values()].find((c) => c.isActive)
+    if (focused) return vscode.Uri.file(focused.modelPath)
+
+    const found = await vscode.workspace.findFiles(MODEL_GLOB, '**/node_modules/**')
+    if (found.length === 0) return newModel()
+    if (found.length === 1) return found[0]
+
+    const folder = vscode.workspace.workspaceFolders?.[0]
+    const byLabel = new Map(found.map((u) =>
+      [folder ? path.relative(folder.uri.fsPath, u.fsPath) : u.fsPath, u] as const))
+    const picked = await vscode.window.showQuickPick([...byLabel.keys()].sort(),
+      { title: 'Which model?' })
+    return picked === undefined ? undefined : byLabel.get(picked)
+  }
+
   const openCanvas = async (uri?: vscode.Uri) => {
-    const target = uri ?? vscode.window.activeTextEditor?.document.uri
-    if (!target || !/\.lpg\.ya?ml$/.test(target.fsPath)) {
-      void vscode.window.showErrorMessage('Open a .lpg.yaml model file first.')
-      return
-    }
+    const target = uri ?? await modelForCommand()
+    if (!target) return
     const existing = canvases.get(target.fsPath)
     if (existing) { await existing.refresh(); return }
 
@@ -430,11 +454,8 @@ function withModelSuffix(uri: vscode.Uri): vscode.Uri {
     vscode.commands.registerCommand('lpg.newModel', reporting('LPG: New Model', newModel)),
     vscode.commands.registerCommand('lpg.openCanvas', reporting('LPG: Open Canvas', () => openCanvas())),
     vscode.commands.registerCommand('lpg.generate', reporting('LPG: Generate Schema', async () => {
-      const uri = vscode.window.activeTextEditor?.document.uri
-      if (!uri || !/\.lpg\.ya?ml$/.test(uri.fsPath)) {
-        void vscode.window.showErrorMessage('Open a .lpg.yaml model file first.')
-        return
-      }
+      const uri = await modelForCommand()
+      if (!uri) return
       const target = await vscode.window.showQuickPick(targetNames(), { title: 'Generate schema for' })
       if (target) await generate(uri.fsPath, target)
     })),

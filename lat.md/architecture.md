@@ -42,6 +42,14 @@ Every other entry point needs a model file to already exist — the canvas, and 
 
 The file suffix is forced to `.lpg.yaml` whatever the save dialog returns. A model saved as plain `.yaml` gets no schema validation and no canvas, which looks like the extension failing rather than a naming mistake. Keeping the template in `core` is what lets a test resolve it, validate it, and generate all seven targets from it without an editor.
 
+### Reaching a model
+
+A command that needs a model file looks for one instead of refusing: the active editor, then a focused canvas, then the workspace, and when the workspace holds none, the scaffold flow.
+
+`activeTextEditor` is undefined whenever a webview has focus, so `LPG: Generate Schema` invoked from the canvas — the one place a user is looking at a model when they want a schema from it — reported that no model was open, beside the diagram of the model that was. A canvas therefore answers for itself while it is the focused tab.
+
+A workspace holding exactly one model needs no question; more than one is a quick pick over workspace-relative paths. A workspace holding none runs [[architecture#Editing Surface#Creating a Model]] and carries on with the file it wrote, so the first use of the command teaches the format rather than demanding it.
+
 ### Command failures
 
 Every palette command runs its async body through a wrapper that catches and reports. A handler that discards its promise turns any failure into silence.
