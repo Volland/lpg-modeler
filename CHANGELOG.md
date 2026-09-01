@@ -4,6 +4,41 @@ All notable changes to LPG Modeler are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **Twenty-one scalar types, drawn from what LadybugDB stores.** A property may now take the
+  integer widths (`int8`, `int16`, `int32`, `int128`), their unsigned variants, `float32`,
+  `decimal` — optionally with a precision and scale, written `"DECIMAL(18,3)"` — `duration`,
+  `blob` and `zoneddatetime`, alongside the eight types that existed. Each also answers to its
+  GQL and LadybugDB spellings, and the JSON Schema the editor completes from now offers exactly
+  the set the parser accepts, checked by a test.
+
+  Every one of them is a native LadybugDB column type, so that target reports no type downgrade
+  at all. RDF names all but `uuid` and `json`; GQL carries the same; LinkML collapses the widths
+  onto one `integer` and reports `duration` and `blob`. `STRUCT`, `MAP`, `UNION`, the fixed-size
+  `ARRAY` and `SERIAL` are deliberately not included — the first four need a nested type syntax
+  in the file format, and the last is a generated value rather than a value type.
+
+- **The canvas offers the metamodel's own type set.** The property dropdown and the inspector's
+  facet rules are sent by the extension host instead of living as a list inside the webview,
+  which could drift from what validation enforces. A parameterised decimal reads as
+  `decimal(18,3)` on the diagram.
+
+### Changed
+
+- **`zoneddatetime` is now its own type, split from `datetime`.** `ZONED_DATETIME` and
+  `TIMESTAMP_TZ` mean a timestamp that carries an offset and generate `TIMESTAMP_TZ` for
+  LadybugDB; `TIMESTAMP` and `LOCAL_DATETIME` mean the naive one and generate `LOCAL DATETIME`
+  for GQL and PG-Schema. The single type contradicted itself — it emitted a naive column while
+  declaring a zoned type — so a model written with `ZONED_DATETIME` now generates a column that
+  can hold the offset it claims.
+
+- **`json` is stored as LadybugDB's `JSON`, not `STRING`.** Measured against 0.19.1, the engine
+  has a real JSON column type that reads the value back as a value. It is no longer reported as
+  a downgrade on that target.
+
 ## [0.3.1] — 2026-09-01
 
 ### Fixed

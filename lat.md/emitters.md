@@ -24,7 +24,9 @@ LadybugDB, formerly Kuzu, is an embedded Cypher property graph database with a m
 
 An abstract hierarchy is flattened to one node table per concrete leaf type, with inherited columns copied down. The cost is that an edge declared on an abstract endpoint expands to a cross-product of endpoint pairs, and adding a subtype becomes a schema migration.
 
-Two features are carried natively. A [[metamodel#Lists|list]] property becomes a `STRING[]` column, and [[metamodel#Cardinality]] becomes the trailing multiplicity keyword — `MANY_ONE` and its siblings — which, measured against a running instance, really is rejected on write. It is one of the few constraints this target enforces rather than reports.
+Every scalar in [[metamodel#Scalar Types]] is a native column type here, which is not a coincidence: the metamodel's type set was drawn from what this engine stores. The integer widths, the unsigned variants, `DECIMAL` with its parameters, `INTERVAL`, `BLOB` and `JSON` all exist, so this target reports no type downgrade at all. Measured against 0.19.1, `json` is a real column type that reads back as a value rather than as text, where it used to be stored as `STRING`.
+
+Two more features are carried natively. A [[metamodel#Lists|list]] property becomes a `STRING[]` column, and [[metamodel#Cardinality]] becomes the trailing multiplicity keyword — `MANY_ONE` and its siblings — which, measured against a running instance, really is rejected on write. It is one of the few constraints this target enforces rather than reports.
 
 The keyword encodes only an upper bound of one per end. A minimum, or a maximum above one, has no spelling at all, so a bound like `{ to: "2" }` emits no keyword and is reported instead. Because a downgrade is written as a comment where a column would go, the separator has to be attached to the last real entry rather than the last line: a comma before the closing parenthesis is a parse error, which the execution test caught and a golden file would not have.
 
@@ -71,6 +73,8 @@ Every class and slot carries the IRI it has in this model, so identity survives 
 The mismatch is edges. LinkML has no binary relation that can hold properties, so [[emitters#RDF Targets#Gradual Reification]] applies here too and the reification is a reported downgrade. The shortcut property the RDF targets emit is deliberately omitted: in a schema meant to be generated from, it would imply a second place the same fact is written.
 
 A slot carries an upper bound of one as `multivalued: false` and a lower bound of one as `required`. Any other bound — an exact count, or a maximum above one — has no LinkML spelling and is reported.
+
+LinkML has one `integer`, so every [[metamodel#Scalar Types#Integer Widths|width]] lands on it: a width is a storage detail there rather than a different type, and reporting each as a downgrade would bury the four that are real ones — `uuid`, `json`, `duration` and `blob`, none of which LinkML has a range for.
 
 ## Template Targets
 

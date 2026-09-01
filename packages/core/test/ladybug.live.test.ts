@@ -47,6 +47,33 @@ describe('ladybug emitter, executed', () => {
     expect((await r.getAll())[0]?.n).toBe(1)
   })
 
+  // @lat: [[metamodel#Scalar Types]]
+  it('creates a table with every scalar the metamodel has, and reads each value back', async () => {
+    const conn = await connect()
+    await conn.query(emit(loadFixture('types.lpg.yaml'), 'ladybug').content)
+    await conn.query(`CREATE (:Reading {
+      id: 'r1', tiny: 7, small: 300, medium: 70000, big: 5000000000,
+      huge: 170141183460469231731687303715884105, utiny: 200, usmall: 60000,
+      umedium: 4000000000, ubig: 9000000000000000000,
+      ratio: 1.5, precise: 2.25, amount: 3.142,
+      ok: true, day: DATE('2024-01-02'), at: TIMESTAMP('2024-01-02 03:04:05'),
+      atZoned: TIMESTAMP('2024-01-02 03:04:05+02'), took: INTERVAL('1 day'),
+      ref: UUID('a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11'), raw: BLOB('\\xAA'),
+      payload: '{"k": 1}', samples: [1.25, 2.50]
+    })`)
+    const r = await conn.query(`MATCH (x:Reading) RETURN
+      x.tiny AS tiny, x.amount AS amount, x.took AS took, x.payload AS payload,
+      x.raw AS raw, x.samples AS samples, x.atZoned AS atZoned`)
+    const row = (await r.getAll())[0]!
+    expect(row.tiny).toBe(7)
+    expect(Number(row.amount)).toBeCloseTo(3.142)
+    expect(row.payload).toEqual({ k: 1 })
+    expect(row.samples.map(Number)).toEqual([1.25, 2.5])
+    expect(row.took).toBeDefined()
+    expect(row.raw).toBeDefined()
+    expect(row.atZoned).toBeDefined()
+  })
+
   // @lat: [[metamodel#Lists]]
   it('round-trips a list-valued property', async () => {
     const conn = await connect()

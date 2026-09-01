@@ -4,11 +4,42 @@
  */
 
 export type ScalarType =
-  | 'string' | 'int' | 'float' | 'boolean' | 'date' | 'datetime' | 'uuid' | 'json'
+  | 'string'
+  | 'int8' | 'int16' | 'int32' | 'int' | 'int128'
+  | 'uint8' | 'uint16' | 'uint32' | 'uint64'
+  | 'float32' | 'float' | 'decimal'
+  | 'boolean'
+  | 'date' | 'datetime' | 'zoneddatetime' | 'duration'
+  | 'uuid' | 'blob' | 'json'
 
+/**
+ * Every scalar a property may take, in the order the canvas offers them. The set is
+ * what LadybugDB stores natively minus what is not a value type — see
+ * lat.md/metamodel#Scalar Types.
+ */
 export const SCALAR_TYPES: readonly ScalarType[] = [
-  'string', 'int', 'float', 'boolean', 'date', 'datetime', 'uuid', 'json',
+  'string',
+  'int8', 'int16', 'int32', 'int', 'int128',
+  'uint8', 'uint16', 'uint32', 'uint64',
+  'float32', 'float', 'decimal',
+  'boolean',
+  'date', 'datetime', 'zoneddatetime', 'duration',
+  'uuid', 'blob', 'json',
 ]
+
+/**
+ * Scalars that carry an ordering, so `min` and `max` mean something on them. Validation
+ * and the inspector both read this, rather than each keeping its own list.
+ */
+export const ORDERED_TYPES: ReadonlySet<ScalarType> = new Set<ScalarType>([
+  'int8', 'int16', 'int32', 'int', 'int128',
+  'uint8', 'uint16', 'uint32', 'uint64',
+  'float32', 'float', 'decimal',
+  'date', 'datetime', 'zoneddatetime', 'duration',
+])
+
+/** Scalars that carry text, so a pattern or a length bound means something on them. */
+export const TEXT_TYPES: ReadonlySet<ScalarType> = new Set<ScalarType>(['string'])
 
 /**
  * The model format version this build reads. A file declares its own with a top-level
@@ -25,12 +56,25 @@ export const LPG_FORMAT_VERSION = '1.0'
  */
 const SCALAR_SPELLINGS: Record<string, ScalarType> = {
   STRING: 'string',
-  INT: 'int', INTEGER: 'int', INT64: 'int',
+  INT8: 'int8', TINYINT: 'int8',
+  INT16: 'int16', SMALLINT: 'int16',
+  INT32: 'int32',
+  // `INT` keeps its original 64-bit meaning: models were written against it before the
+  // narrower widths existed, and SQL's 32-bit reading would silently change them.
+  INT: 'int', INTEGER: 'int', INT64: 'int', BIGINT: 'int',
+  INT128: 'int128', HUGEINT: 'int128',
+  UINT8: 'uint8', UINT16: 'uint16', UINT32: 'uint32', UINT64: 'uint64',
+  FLOAT32: 'float32', REAL: 'float32',
   FLOAT: 'float', FLOAT64: 'float', DOUBLE: 'float',
+  DECIMAL: 'decimal', NUMERIC: 'decimal',
   BOOL: 'boolean', BOOLEAN: 'boolean',
   DATE: 'date',
-  DATETIME: 'datetime', TIMESTAMP: 'datetime', 'ZONED DATETIME': 'datetime',
+  DATETIME: 'datetime', TIMESTAMP: 'datetime', 'LOCAL DATETIME': 'datetime',
+  ZONEDDATETIME: 'zoneddatetime', 'ZONED DATETIME': 'zoneddatetime',
+  'TIMESTAMP TZ': 'zoneddatetime', TIMESTAMPTZ: 'zoneddatetime',
+  DURATION: 'duration', INTERVAL: 'duration',
   UUID: 'uuid',
+  BLOB: 'blob', BYTES: 'blob', BINARY: 'blob',
   JSON: 'json',
 }
 
@@ -52,11 +96,24 @@ export function canonicalScalar(written: string): ScalarType | undefined {
 /** The GQL (ISO/IEC 39075) value type each scalar is generated as. */
 export const GQL_TYPES: Record<ScalarType, string> = {
   string: 'STRING',
+  int8: 'INT8',
+  int16: 'INT16',
+  int32: 'INT32',
   int: 'INTEGER',
+  int128: 'INT128',
+  uint8: 'UINT8',
+  uint16: 'UINT16',
+  uint32: 'UINT32',
+  uint64: 'UINT64',
+  float32: 'FLOAT32',
   float: 'FLOAT',
+  decimal: 'DECIMAL',
   boolean: 'BOOLEAN',
   date: 'DATE',
-  datetime: 'ZONED DATETIME',
+  datetime: 'LOCAL DATETIME',
+  zoneddatetime: 'ZONED DATETIME',
+  duration: 'DURATION',
+  blob: 'BYTES',
   uuid: 'STRING',
   json: 'STRING',
 }
@@ -153,10 +210,30 @@ export function endpointIsSingular(c: Cardinality): { from: boolean; to: boolean
   return { from: c.from.max === 1, to: c.to.max === 1 }
 }
 
-/** A property type as written: the scalar, and whether it holds a list of them. */
+/** A property type as written: the scalar, its parameters, and whether it is a list. */
 export interface ParsedType {
   type: ScalarType
   list: boolean
+  /** Total digits of a `decimal`, when it was written with them. */
+  precision?: number
+  /** Digits after the point of a `decimal`. */
+  scale?: number
+}
+
+/**
+ * A scalar with its parameters, e.g. `DECIMAL(18, 3)`. Only `decimal` takes any: a
+ * precision on anything else is a mistake, and reads better as an unknown type than as
+ * a silently ignored parameter.
+ */
+function parseScalar(written: string): Omit<ParsedType, 'list'> | undefined {
+  const params = /^(.+?)\s*\(\s*(\d+)\s*,\s*(\d+)\s*\)$/.exec(written.trim())
+  if (params) {
+    const base = canonicalScalar(params[1]!)
+    if (base !== 'decimal') return undefined
+    return { type: base, precision: Number(params[2]), scale: Number(params[3]) }
+  }
+  const scalar = canonicalScalar(written)
+  return scalar ? { type: scalar } : undefined
 }
 
 /**
@@ -169,11 +246,16 @@ export function parsePropertyType(written: string): ParsedType | undefined {
   if (listed) {
     // `LIST<STRING NOT NULL>` is how GQL spells a list of non-null values; the
     // nullability of the element is not something this metamodel carries.
-    const inner = canonicalScalar(listed[1]!.replace(/\s+NOT\s+NULL$/i, ''))
-    return inner ? { type: inner, list: true } : undefined
+    const inner = parseScalar(listed[1]!.replace(/\s+NOT\s+NULL$/i, ''))
+    return inner ? { ...inner, list: true } : undefined
   }
-  const scalar = canonicalScalar(trimmed)
-  return scalar ? { type: scalar, list: false } : undefined
+  const scalar = parseScalar(trimmed)
+  return scalar ? { ...scalar, list: false } : undefined
+}
+
+/** A decimal's `(precision, scale)` suffix, for the targets that spell one. */
+export function typeParams(p: { precision?: number; scale?: number }): string {
+  return p.precision === undefined || p.scale === undefined ? '' : `(${p.precision},${p.scale})`
 }
 
 /** A source location in a model file, used to anchor diagnostics. */
@@ -225,6 +307,9 @@ export interface PropertyIR {
   id: string
   name: string
   type: ScalarType
+  /** Total digits and digits after the point of a `decimal`, when it declares them. */
+  precision?: number
+  scale?: number
   /** Inclusive bounds on the value itself. See lat.md/metamodel#Value Constraints. */
   min?: number
   max?: number

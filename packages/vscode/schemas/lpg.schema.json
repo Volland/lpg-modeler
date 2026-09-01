@@ -108,38 +108,79 @@
       "description": "Stable element id. Assigned by the tool; never edit or copy it."
     },
     "scalarType": {
-      "description": "A property type. The lower-case names are the original spelling; the upper-case ones are the GQL (ISO/IEC 39075) spelling of the same type. Matching ignores case. A list is written LIST<STRING> or STRING[], or with `list: true`.",
+      "description": "A property type. The lower-case names are the original spelling; the upper-case ones are the GQL (ISO/IEC 39075) and LadybugDB spellings of the same type. Matching ignores case and reads an underscore as a space. A decimal may carry parameters, as DECIMAL(18,3). A list is written LIST<STRING> or STRING[], or with `list: true`.",
       "anyOf": [
         {
           "enum": [
-            "string",
-            "int",
-            "float",
+            "BIGINT",
+            "BINARY",
+            "BLOB",
+            "BOOL",
+            "BOOLEAN",
+            "BYTES",
+            "DATE",
+            "DATETIME",
+            "DECIMAL",
+            "DOUBLE",
+            "DURATION",
+            "FLOAT",
+            "FLOAT32",
+            "FLOAT64",
+            "HUGEINT",
+            "INT",
+            "INT128",
+            "INT16",
+            "INT32",
+            "INT64",
+            "INT8",
+            "INTEGER",
+            "INTERVAL",
+            "JSON",
+            "LOCAL DATETIME",
+            "LOCAL_DATETIME",
+            "NUMERIC",
+            "REAL",
+            "SMALLINT",
+            "STRING",
+            "TIMESTAMP",
+            "TIMESTAMP TZ",
+            "TIMESTAMPTZ",
+            "TIMESTAMP_TZ",
+            "TINYINT",
+            "UINT16",
+            "UINT32",
+            "UINT64",
+            "UINT8",
+            "UUID",
+            "ZONED DATETIME",
+            "ZONEDDATETIME",
+            "ZONED_DATETIME",
+            "blob",
             "boolean",
             "date",
             "datetime",
-            "uuid",
+            "decimal",
+            "duration",
+            "float",
+            "float32",
+            "int",
+            "int128",
+            "int16",
+            "int32",
+            "int8",
             "json",
-            "STRING",
-            "INT",
-            "INTEGER",
-            "INT64",
-            "FLOAT",
-            "FLOAT64",
-            "DOUBLE",
-            "BOOL",
-            "BOOLEAN",
-            "DATE",
-            "DATETIME",
-            "TIMESTAMP",
-            "ZONED_DATETIME",
-            "UUID",
-            "JSON"
+            "string",
+            "uint16",
+            "uint32",
+            "uint64",
+            "uint8",
+            "uuid",
+            "zoneddatetime"
           ]
         },
         {
           "type": "string",
-          "pattern": "^([Ll][Ii][Ss][Tt]\\s*<[^>]+>|[^\\[\\]]+\\[\\s*\\])$"
+          "pattern": "^([Ll][Ii][Ss][Tt]\\s*<[^>]+>|[^\\[\\]]+\\[\\s*\\]|[Dd][Ee][Cc][Ii][Mm][Aa][Ll]\\s*\\(\\s*[0-9]+\\s*,\\s*[0-9]+\\s*\\))$"
         }
       ]
     },
@@ -167,7 +208,7 @@
         "list": {
           "type": "boolean",
           "default": false,
-          "description": "Whether the property holds a list of its type. Equivalent to writing the type as LIST<\u2026>."
+          "description": "Whether the property holds a list of its type. Equivalent to writing the type as LIST<…>."
         },
         "enum": {
           "type": "string",
@@ -175,7 +216,7 @@
         },
         "min": {
           "type": "number",
-          "description": "Inclusive lower bound. Applies to int, float, date and datetime."
+          "description": "Inclusive lower bound. Applies to the numeric and temporal types."
         },
         "max": {
           "type": "number",

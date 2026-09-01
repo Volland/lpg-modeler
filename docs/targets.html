@@ -61,6 +61,13 @@
     declared on an abstract endpoint expands to a cross-product of endpoint pairs, and adding a
     subtype becomes a schema migration.
   </p>
+  <h3>Types</h3>
+  <p>
+    Every scalar the model format has is a native column type here &mdash; the integer widths,
+    the unsigned variants, <code>DECIMAL</code> with its parameters, <code>INTERVAL</code>,
+    <code>BLOB</code> and <code>JSON</code>. That is not a coincidence: the type set was drawn
+    from what this engine stores, so this target reports no type downgrade at all.
+  </p>
   <h3>What it will not enforce</h3>
   <p>
     Measured against LadybugDB 0.19.1, the engine enforces less than the flattening suggests:
@@ -208,7 +215,7 @@ CREATE CONSTRAINT person_key_unique IF NOT EXISTS
     about the hierarchy is flattened. Output extension: <code>.pgs</code>.
   </p>
 <pre><code>CREATE GRAPH TYPE socialType STRICT {
-  ABSTRACT (timestampedType {createdAt ZONED DATETIME}),
+  ABSTRACT (timestampedType {createdAt LOCAL DATETIME}),
   ABSTRACT (partyType: Party {id STRING}),
   (personType: partyType &amp; timestampedType &amp; Person {email STRING, OPTIONAL born DATE}),
   (:partyType)-[ownsType: OWNS {OPTIONAL since DATE}]-&gt;(:carType),

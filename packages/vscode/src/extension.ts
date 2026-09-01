@@ -5,6 +5,7 @@ import {
   emit, formatBound, isUnconstrained, parseLayout, parseViews, projectView, pruneLayout,
   removeFromView, resolveModel, serializeLayout, serializeViews, setPosition,
   isValidPrefix, newModelSource, sidecarPaths, targetNames, validateModel,
+  ORDERED_TYPES, SCALAR_TYPES, TEXT_TYPES,
   type Assertion, type Diagnostic, type Layout, type ModelIR, type TextEdit, type ViewDef,
 } from '@lpg/core'
 import type { HostMessage, Intent, Projection, ViewMessage, WireProperty } from './protocol'
@@ -156,6 +157,8 @@ class Canvas {
       props.map((p) => ({
         id: p.id, name: p.name, type: p.type, required: p.required, unique: p.unique,
         isKey: key.includes(p.name), list: p.list,
+        ...(p.precision !== undefined ? { precision: p.precision } : {}),
+        ...(p.scale !== undefined ? { scale: p.scale } : {}),
         ...(p.enum ? { enum: p.enum } : {}),
         ...(p.min !== undefined ? { min: p.min } : {}),
         ...(p.max !== undefined ? { max: p.max } : {}),
@@ -194,6 +197,12 @@ class Canvas {
         ...(d.target ? { target: d.target } : {}),
       })),
       targets: targetNames(),
+      // The canvas offers what the metamodel has, rather than a list of its own.
+      scalars: SCALAR_TYPES.map((name) => ({
+        name,
+        facets: ORDERED_TYPES.has(name) ? 'ordered' as const
+          : TEXT_TYPES.has(name) ? 'text' as const : 'none' as const,
+      })),
     }
     this.post({ type: 'projection', projection: this.lastValid })
   }

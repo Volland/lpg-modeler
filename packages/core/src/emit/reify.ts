@@ -82,12 +82,26 @@ export function term(t: NodeTypeIR | EdgeTypeIR, localName?: string): string {
 
 export const XSD: Record<ScalarType, string> = {
   string: 'xsd:string',
+  int8: 'xsd:byte',
+  int16: 'xsd:short',
+  int32: 'xsd:int',
   int: 'xsd:integer',
+  int128: 'xsd:integer',
+  uint8: 'xsd:unsignedByte',
+  uint16: 'xsd:unsignedShort',
+  uint32: 'xsd:unsignedInt',
+  uint64: 'xsd:unsignedLong',
+  float32: 'xsd:float',
   float: 'xsd:double',
+  decimal: 'xsd:decimal',
   boolean: 'xsd:boolean',
   date: 'xsd:date',
   datetime: 'xsd:dateTime',
+  // XSD has no separate zoned form: the offset lives in the lexical value either way.
+  zoneddatetime: 'xsd:dateTime',
+  duration: 'xsd:duration',
   uuid: 'xsd:string',
+  blob: 'xsd:base64Binary',
   json: 'xsd:string',
 }
 

@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { Handle, Position, type NodeProps } from '@xyflow/react'
-import type { WireProperty } from '../protocol'
+import { displayType, type WireProperty } from '../protocol'
 
 export interface ErdNodeData extends Record<string, unknown> {
   name: string
@@ -57,7 +57,7 @@ export function ErdNode({ data }: NodeProps): React.ReactElement {
               {p.isKey ? '🔑' : '○'}
             </button>
             <span className="erd-prop">{p.name}</span>
-            <span className="erd-type">{p.list ? `${p.type}[]` : p.type}</span>
+            <span className="erd-type">{displayType(p)}</span>
             {p.enum && (
               <span className="erd-enum" title={`limited to enum ${p.enum}`}>≔{p.enum}</span>
             )}

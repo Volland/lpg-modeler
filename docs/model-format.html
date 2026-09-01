@@ -140,12 +140,16 @@
 
   <h2>Properties</h2>
 <pre><code>email: { type: string, required: true, unique: true }</code></pre>
-  <p>Eight scalar types, chosen because every target can carry all of them:</p>
+  <p>Twenty-one scalar types, drawn from what LadybugDB stores natively, so an attribute
+    you can write is one the database can hold:</p>
   <p>
-    <span class="pill pill-off">string</span> <span class="pill pill-off">int</span>
-    <span class="pill pill-off">float</span> <span class="pill pill-off">boolean</span>
-    <span class="pill pill-off">date</span> <span class="pill pill-off">datetime</span>
-    <span class="pill pill-off">uuid</span> <span class="pill pill-off">json</span>
+    <span class="pill pill-off">string</span> <span class="pill pill-off">int8</span> <span class="pill pill-off">int16</span> <span class="pill pill-off">int32</span> <span class="pill pill-off">int</span> <span class="pill pill-off">int128</span> <span class="pill pill-off">uint8</span> <span class="pill pill-off">uint16</span> <span class="pill pill-off">uint32</span> <span class="pill pill-off">uint64</span> <span class="pill pill-off">float32</span> <span class="pill pill-off">float</span> <span class="pill pill-off">decimal</span> <span class="pill pill-off">boolean</span> <span class="pill pill-off">date</span> <span class="pill pill-off">datetime</span> <span class="pill pill-off">zoneddatetime</span> <span class="pill pill-off">duration</span> <span class="pill pill-off">uuid</span> <span class="pill pill-off">blob</span> <span class="pill pill-off">json</span>
+  </p>
+  <p>
+    <code>decimal</code> may carry a precision and a scale — <code>"DECIMAL(18,3)"</code>,
+    quoted because a comma would otherwise end the flow mapping. Nothing else takes
+    parameters. <code>int</code> is 64-bit; the narrower widths are named explicitly.
+    <code>datetime</code> has no offset and <code>zoneddatetime</code> carries one.
   </p>
   <p>
     Each one also answers to its <strong>GQL</strong> name, so a model can read the way the
@@ -154,7 +158,8 @@
     mean exactly the same thing — this is vocabulary, not a second type system.
   </p>
 <pre><code>copies:  { type: INTEGER }         <span class="c-com"># same as int</span>
-pressed: { type: ZONED_DATETIME }  <span class="c-com"># same as datetime</span>
+pressed: { type: ZONED_DATETIME }  <span class="c-com"># same as zoneddatetime</span>
+took:    { type: INTERVAL }        <span class="c-com"># same as duration</span>
 shipped: { type: BOOL }            <span class="c-com"># same as boolean</span></code></pre>
   <p>
     The mapping is not total in the other direction: <code>uuid</code> and <code>json</code>

@@ -10,6 +10,9 @@ export interface RawProperty {
   id?: string
   name: string
   type: ScalarType
+  /** Parameters of a `decimal` type, when it was written with them. */
+  precision?: number
+  scale?: number
   list: boolean
   enum?: string
   min?: number
@@ -175,6 +178,8 @@ function parseProps(file: string, owner: YAMLMap, diags: Diagnostic[]): RawPrope
       id: str(body, 'id'),
       name,
       type: parsed.type,
+      ...(parsed.precision !== undefined ? { precision: parsed.precision } : {}),
+      ...(parsed.scale !== undefined ? { scale: parsed.scale } : {}),
       list,
       ...(enumRef ? { enum: enumRef } : {}),
       ...numeric(body, 'min'), ...numeric(body, 'max'),

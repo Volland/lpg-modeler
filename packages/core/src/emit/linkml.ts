@@ -35,12 +35,22 @@ export const LINKML_CAPABILITIES: Capabilities = {
 }
 
 const RANGES: Record<ScalarType, string> = {
-  string: 'string', int: 'integer', float: 'float', boolean: 'boolean',
-  date: 'date', datetime: 'datetime', uuid: 'string', json: 'string',
+  string: 'string',
+  int8: 'integer', int16: 'integer', int32: 'integer', int: 'integer', int128: 'integer',
+  uint8: 'integer', uint16: 'integer', uint32: 'integer', uint64: 'integer',
+  float32: 'float', float: 'float', decimal: 'decimal',
+  boolean: 'boolean',
+  date: 'date', datetime: 'datetime', zoneddatetime: 'datetime',
+  duration: 'string',
+  uuid: 'string', blob: 'string', json: 'string',
 }
 
-/** Scalar types LinkML has no dedicated range for; each is a reported downgrade. */
-const LOSSY_TYPES = new Set<ScalarType>(['uuid', 'json'])
+/**
+ * Scalar types LinkML has no dedicated range for; each is a reported downgrade. The
+ * integer widths are not among them: LinkML has one `integer`, and a width is a storage
+ * detail there rather than a different type.
+ */
+const LOSSY_TYPES = new Set<ScalarType>(['uuid', 'json', 'duration', 'blob'])
 
 /** Properties this class declares itself. `is_a` and `mixins` bring in the rest. */
 const ownProps = (props: PropertyIR[]) => props.filter((p) => !p.inheritedFrom)

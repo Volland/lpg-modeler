@@ -1,7 +1,7 @@
 import type {
   Cardinality, Diagnostic, EdgeTypeIR, ModelIR, NodeTypeIR, PropertyIR, ScalarType,
 } from '../ir'
-import { describeCardinality, endpointIsSingular, isUnconstrained } from '../ir'
+import { describeCardinality, endpointIsSingular, isUnconstrained, typeParams } from '../ir'
 import { concreteDescendants, concreteNodes } from '../ir'
 import {
   downgrade, reportUnsupportedConstraints,
@@ -35,9 +35,19 @@ export const LADYBUG_CAPABILITIES: Capabilities = {
   cardinality: 'upper-bound-only',
 }
 
+/**
+ * Every scalar this metamodel has is a LadybugDB type: the widths, the unsigned
+ * variants, DECIMAL, INTERVAL, BLOB and JSON are all stored natively, so nothing here
+ * is a downgrade. Verified against 0.19.1. See lat.md/metamodel#Scalar Types.
+ */
 const TYPES: Record<ScalarType, string> = {
-  string: 'STRING', int: 'INT64', float: 'DOUBLE', boolean: 'BOOL',
-  date: 'DATE', datetime: 'TIMESTAMP', uuid: 'UUID', json: 'STRING',
+  string: 'STRING',
+  int8: 'INT8', int16: 'INT16', int32: 'INT32', int: 'INT64', int128: 'INT128',
+  uint8: 'UINT8', uint16: 'UINT16', uint32: 'UINT32', uint64: 'UINT64',
+  float32: 'FLOAT', float: 'DOUBLE', decimal: 'DECIMAL',
+  boolean: 'BOOL',
+  date: 'DATE', datetime: 'TIMESTAMP', zoneddatetime: 'TIMESTAMP_TZ', duration: 'INTERVAL',
+  uuid: 'UUID', blob: 'BLOB', json: 'JSON',
 }
 
 /**
@@ -66,7 +76,7 @@ function unexpressible(c: Cardinality): string[] {
 }
 
 /** A column type, with the `[]` suffix LadybugDB uses for a list. */
-const columnType = (p: PropertyIR) => `${TYPES[p.type]}${p.list ? '[]' : ''}`
+const columnType = (p: PropertyIR) => `${TYPES[p.type]}${typeParams(p)}${p.list ? '[]' : ''}`
 
 /** Column name for a synthesized composite key. */
 export function syntheticKeyColumn(node: NodeTypeIR): string {
@@ -78,12 +88,6 @@ function columnLines(node: NodeTypeIR, diags: Diagnostic[]): string[] {
   const isKey = (p: PropertyIR) => node.key.length === 1 && node.key[0] === p.name
 
   for (const p of node.props) {
-    if (p.type === 'json') {
-      downgrade(diags, 'ladybug', 'downgrade-type',
-        `Property '${node.name}.${p.name}' has type json, which LadybugDB has no native column type for. Emitted as STRING.`,
-        p.loc)
-      lines.push(`  // DOWNGRADE: '${p.name}' is json in the model; stored as STRING.`)
-    }
     if (p.required && !isKey(p)) {
       downgrade(diags, 'ladybug', 'downgrade-required',
         `Property '${node.name}.${p.name}' is required, which LadybugDB cannot enforce: it has no NOT NULL and only the primary key is non-null.`,

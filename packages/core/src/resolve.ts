@@ -73,6 +73,8 @@ function toProp(p: RawProperty, inheritedFrom?: string): PropertyIR {
     id: p.id ?? generateId('prop'),
     name: p.name,
     type: p.type,
+    ...(p.precision !== undefined ? { precision: p.precision } : {}),
+    ...(p.scale !== undefined ? { scale: p.scale } : {}),
     list: p.list,
     ...(p.enum ? { enum: p.enum } : {}),
     ...(p.min !== undefined ? { min: p.min } : {}),

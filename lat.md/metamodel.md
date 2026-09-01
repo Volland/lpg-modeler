@@ -30,11 +30,39 @@ A model file may declare the format version it is written against with a top-lev
 
 Self-description is what lets a file be validated outside the editor that produced it, and it is the cheapest thing a format can do for interoperability. A newer major version is a warning rather than an error: the keys this build knows still resolve, so a model from a future version stays readable instead of becoming opaque. The file may also carry a `$schema` key pointing at the JSON Schema, so a generic validator finds it without VS Code's contribution.
 
+## Scalar Types
+
+A property takes one of twenty-one scalars: five integer widths and four unsigned ones, two floats and a decimal, boolean, four temporal types, and `uuid`, `blob` and `json`.
+
+The set is what LadybugDB stores natively, minus what is not a value type. Taking the primary target's own vocabulary as the ceiling means an attribute a model can write is an attribute that target can hold without a downgrade, while every other target either has the type or says honestly that it does not: RDF names all of them but `uuid` and `json`, GQL carries the same, and LinkML collapses the widths onto one `integer` and reports `duration` and `blob`. See [[emitters#Capability Matrix]].
+
+Three things LadybugDB has are deliberately not types here. `SERIAL` is a generated value rather than a value type, and the metamodel has no notion of a generated column. `TIMESTAMP_NS`, `TIMESTAMP_MS` and `TIMESTAMP_SEC` are storage precisions of one instant, not distinct types. `STRUCT`, `MAP`, `UNION` and the fixed-size `ARRAY` are composite: admitting them means a nested type syntax in the file format and a reification path in every RDF emitter, which is work on the scale of [[metamodel#Composition]] rather than a row in a type table.
+
+### Parameters
+
+`decimal` may carry a precision and a scale, written as part of the type: `DECIMAL(18,3)`. Nothing else takes parameters.
+
+Without them a decimal is whatever the target defaults to; with them, the same digits reach LadybugDB, GQL and PG-Schema, which each spell the parameters the same way. A precision on any other type is reported as an unknown type rather than ignored, because a silently dropped width is worse than a rejected one. In YAML flow style the type has to be quoted — `type: "DECIMAL(18,3)"` — since a comma would otherwise end the mapping it sits in.
+
+### Integer Widths
+
+`int` stays 64-bit, and `INT`, `INTEGER` and `BIGINT` all spell it. The narrower widths are named explicitly: `int8`, `int16`, `int32`.
+
+SQL reads a bare `INT` as 32-bit, so the widths could have been introduced by redefining it to match. Every model written before the widths existed would then have silently narrowed on its next generation, which is the one kind of change a schema tool must never make quietly.
+
+### Zoned and Naive Timestamps
+
+`datetime` is an instant with no offset and `zoneddatetime` is one that carries it. `TIMESTAMP` and `LOCAL_DATETIME` spell the first; `ZONED_DATETIME` and `TIMESTAMP_TZ` spell the second.
+
+They were a single type until LadybugDB's `TIMESTAMP_TZ` was admitted, and that type contradicted itself: it generated a naive `TIMESTAMP` column while declaring `ZONED DATETIME` in GQL. Splitting them changes what an existing model saying `ZONED_DATETIME` generates, which is the point — it now gets a column that can hold the offset it claims.
+
 ## Type Spellings
 
-Every scalar type has two accepted spellings: the original lower-case name and the GQL (ISO/IEC 39075) name. Matching ignores case and reads an underscore as a space, so `ZONED_DATETIME` and `zoned datetime` are one type.
+Every scalar type has at least two accepted spellings: the original lower-case name, and the GQL (ISO/IEC 39075) or LadybugDB name. Matching ignores case and reads an underscore as a space, so `ZONED_DATETIME` and `zoned datetime` are one type.
 
 Both spellings resolve to the same canonical name in the IR, so nothing downstream has to know which was written. Adopting the standard's vocabulary where it costs nothing means a model reads the way the schema it generates does. The reverse mapping is not total — `uuid` and `json` have no GQL value type and stay reported downgrades, as they already were for RDF.
+
+The set the parser accepts is also the set the JSON Schema offers, checked by a test: a spelling the editor rejects but the CLI takes would make a valid model look broken in the one place most models are written.
 
 ## Lists
 

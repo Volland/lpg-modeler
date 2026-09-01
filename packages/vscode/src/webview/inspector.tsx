@@ -1,5 +1,5 @@
 import * as React from 'react'
-import type { Intent, WireNode, WireProperty } from '../protocol'
+import { displayType, type Intent, type WireNode, type WireProperty, type WireScalar } from '../protocol'
 
 /**
  * The panel beside the canvas. Value constraints and named constraints have no place
@@ -10,22 +10,27 @@ import type { Intent, WireNode, WireProperty } from '../protocol'
 const FACETS = ['min', 'max', 'minLength', 'maxLength', 'pattern'] as const
 type Facet = (typeof FACETS)[number]
 
-/** Which facets suit which type: a pattern on an int would never be enforced. */
-function facetsFor(type: string): readonly Facet[] {
-  const t = type.toLowerCase()
-  if (t === 'string') return ['minLength', 'maxLength', 'pattern']
-  if (['int', 'float', 'date', 'datetime'].includes(t)) return ['min', 'max']
+/**
+ * Which facets suit which type: a pattern on an int would never be enforced. The host
+ * says which is which, so the panel cannot disagree with what validation enforces.
+ */
+function facetsFor(type: string, scalars: WireScalar[]): readonly Facet[] {
+  const kind = scalars.find((s) => s.name === type.toLowerCase())?.facets
+  if (kind === 'text') return ['minLength', 'maxLength', 'pattern']
+  if (kind === 'ordered') return ['min', 'max']
   return []
 }
 
 function PropertyFacets(
-  { node, prop, emit }: { node: WireNode; prop: WireProperty; emit: (i: Intent) => void },
+  { node, prop, scalars, emit }: {
+    node: WireNode; prop: WireProperty; scalars: WireScalar[]; emit: (i: Intent) => void
+  },
 ): React.ReactElement | null {
-  const facets = facetsFor(prop.type)
+  const facets = facetsFor(prop.type, scalars)
   if (facets.length === 0 || prop.inheritedFrom) return null
   return (
     <div className="insp-prop">
-      <div className="insp-prop-name">{prop.name}<span className="insp-dim"> {prop.type}</span></div>
+      <div className="insp-prop-name">{prop.name}<span className="insp-dim"> {displayType(prop)}</span></div>
       <div className="insp-facets">
         {facets.map((f) => (
           <label key={f} className="insp-facet">
@@ -113,7 +118,9 @@ function AddConstraint(
 }
 
 export function Inspector(
-  { node, emit }: { node: WireNode | undefined; emit: (i: Intent) => void },
+  { node, scalars, emit }: {
+    node: WireNode | undefined; scalars: WireScalar[]; emit: (i: Intent) => void
+  },
 ): React.ReactElement {
   const [adding, setAdding] = React.useState(false)
   React.useEffect(() => { setAdding(false) }, [node?.id])
@@ -126,7 +133,7 @@ export function Inspector(
     )
   }
   const constrainable = node.props.filter(
-    (p) => !p.inheritedFrom && facetsFor(p.type).length > 0)
+    (p) => !p.inheritedFrom && facetsFor(p.type, scalars).length > 0)
 
   return (
     <aside className="inspector">
@@ -136,7 +143,7 @@ export function Inspector(
       {constrainable.length === 0
         ? <div className="insp-empty">No property here takes a bound.</div>
         : constrainable.map((p) => (
-          <PropertyFacets key={p.id} node={node} prop={p} emit={emit} />
+          <PropertyFacets key={p.id} node={node} prop={p} scalars={scalars} emit={emit} />
         ))}
 
       <h3 className="insp-h">Constraints</h3>

@@ -20,7 +20,7 @@ CREATE GRAPH TYPE socialGraphType AS {
   (personType: Person => :Party {
     email :: STRING NOT NULL IS NODE UNIQUE,
     born :: DATE,
-    createdAt :: ZONED DATETIME NOT NULL,
+    createdAt :: LOCAL DATETIME NOT NULL,
     id :: STRING NOT NULL IS NODE KEY
   }),
   (:Person)-[knowsType: KNOWS => {

@@ -4,6 +4,9 @@ export interface WireProperty {
   id: string
   name: string
   type: string
+  /** Parameters of a decimal, when it declares them. */
+  precision?: number
+  scale?: number
   required: boolean
   unique: boolean
   isKey: boolean
@@ -69,6 +72,23 @@ export interface WireDiagnostic {
   target?: string
 }
 
+/**
+ * A scalar the canvas may offer, and which facets it admits: 'ordered' takes min and
+ * max, 'text' takes a pattern and length bounds. The host sends the set rather than the
+ * webview keeping its own copy, which would drift from the metamodel.
+ */
+export interface WireScalar {
+  name: string
+  facets: 'ordered' | 'text' | 'none'
+}
+
+/** How a property's type reads: the scalar, its parameters, and its list marker. */
+export function displayType(p: WireProperty): string {
+  const params = p.precision !== undefined && p.scale !== undefined
+    ? `(${p.precision},${p.scale})` : ''
+  return `${p.type}${params}${p.list ? '[]' : ''}`
+}
+
 export interface Projection {
   views: string[]
   activeView: string
@@ -78,6 +98,8 @@ export interface Projection {
   positions: Record<string, { x: number; y: number }>
   diagnostics: WireDiagnostic[]
   targets: string[]
+  /** Every scalar a property may take, in the order the canvas offers them. */
+  scalars: WireScalar[]
 }
 
 export type HostMessage =

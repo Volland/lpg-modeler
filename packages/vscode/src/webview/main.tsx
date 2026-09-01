@@ -5,7 +5,7 @@ import {
   type NodeChange, applyNodeChanges,
 } from '@xyflow/react'
 import ELK from 'elkjs/lib/elk.bundled.js'
-import type { HostMessage, Intent, Projection, ViewMessage } from '../protocol'
+import type { HostMessage, Intent, Projection, ViewMessage, WireScalar } from '../protocol'
 import { ErdNode, type ErdNodeData } from './nodes'
 import { Inspector } from './inspector'
 
@@ -17,7 +17,6 @@ const intent = (i: Intent) => post({ type: 'intent', intent: i })
 
 const elk = new ELK()
 const NODE_TYPES = { erd: ErdNode }
-const SCALARS = ['string', 'int', 'float', 'boolean', 'date', 'datetime', 'uuid', 'json']
 
 /** Height estimate so ELK reserves room for the property rows. */
 const heightOf = (propCount: number) => 56 + propCount * 22 + 26
@@ -234,6 +233,7 @@ function App(): React.ReactElement {
           <div className="modal-body">
             <p>New property on {adding.owner}</p>
             <PropertyForm
+              scalars={projection.scalars}
               onCancel={() => setAdding(undefined)}
               onSubmit={(name, propType) => {
                 intent({ kind: 'addProperty', owner: adding.owner, ownerKind: 'nodes', name, propType })
@@ -263,6 +263,7 @@ function App(): React.ReactElement {
       </div>
       <Inspector
         node={projection.nodes.find((n) => n.id === selected)}
+        scalars={projection.scalars}
         emit={intent}
       />
       </div>
@@ -271,7 +272,11 @@ function App(): React.ReactElement {
 }
 
 function PropertyForm(
-  { onSubmit, onCancel }: { onSubmit: (name: string, type: string) => void; onCancel: () => void },
+  { scalars, onSubmit, onCancel }: {
+    scalars: WireScalar[]
+    onSubmit: (name: string, type: string) => void
+    onCancel: () => void
+  },
 ): React.ReactElement {
   const [name, setName] = React.useState('')
   const [type, setType] = React.useState('string')
@@ -281,7 +286,7 @@ function PropertyForm(
         onChange={(e) => setName(e.target.value)}
         onKeyDown={(e) => { if (e.key === 'Enter' && name.trim()) onSubmit(name.trim(), type) }} />
       <select value={type} onChange={(e) => setType(e.target.value)}>
-        {SCALARS.map((s) => <option key={s} value={s}>{s}</option>)}
+        {scalars.map((s) => <option key={s.name} value={s.name}>{s.name}</option>)}
       </select>
       <button disabled={!name.trim()} onClick={() => onSubmit(name.trim(), type)}>add</button>
       <button onClick={onCancel}>cancel</button>

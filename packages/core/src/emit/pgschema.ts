@@ -1,5 +1,5 @@
 import type { Diagnostic, EdgeTypeIR, ModelIR, MixinIR, NodeTypeIR, PropertyIR } from '../ir'
-import { GQL_TYPES, describeCardinality, isUnconstrained } from '../ir'
+import { GQL_TYPES, describeCardinality, isUnconstrained, typeParams } from '../ir'
 import {
   downgrade, reportUnsupportedConstraints,
   type Capabilities, type EmitOptions, type EmitResult,
@@ -34,9 +34,9 @@ const typeName = (name: string) => `${lowerCamel(name)}Type`
 
 const LOSSY_TYPES = new Set(['uuid', 'json'])
 
-/** A value type, wrapped in LIST<…> when the property holds many. */
-const valueType = (p: PropertyIR) =>
-  p.list ? `LIST<${GQL_TYPES[p.type]}>` : GQL_TYPES[p.type]
+/** A value type with its parameters, wrapped in LIST<…> when the property holds many. */
+const scalarType = (p: PropertyIR) => `${GQL_TYPES[p.type]}${typeParams(p)}`
+const valueType = (p: PropertyIR) => (p.list ? `LIST<${scalarType(p)}>` : scalarType(p))
 
 /** Properties this type declares itself. Inherited ones arrive through the type ref. */
 const ownProps = (props: PropertyIR[]) => props.filter((p) => !p.inheritedFrom)

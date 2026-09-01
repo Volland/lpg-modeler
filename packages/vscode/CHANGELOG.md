@@ -4,6 +4,25 @@ All notable changes to LPG Modeler are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **Rich property types.** Alongside the original eight, a property may now be an integer of a
+  declared width (`int8`, `int16`, `int32`, `int128`) or an unsigned one, a `float32`, a
+  `decimal` with an optional precision and scale (`"DECIMAL(18,3)"`), a `duration`, a `blob` or
+  a `zoneddatetime` — twenty-one in all, each also spelled the GQL or LadybugDB way. All of them
+  are native LadybugDB column types, so generating for that target loses nothing. The canvas
+  dropdown and the schema completion in the YAML editor both offer the full set.
+
+### Changed
+
+- **`ZONED_DATETIME` now means a timestamp with an offset**, distinct from `TIMESTAMP`, and
+  generates LadybugDB's `TIMESTAMP_TZ`. Previously the two were one type that emitted a naive
+  column while calling itself zoned.
+- **`json` generates a `JSON` column** for LadybugDB rather than a `STRING`, and is no longer
+  reported as a downgrade there.
+
 ## [0.3.1] — 2026-09-01
 
 ### Fixed

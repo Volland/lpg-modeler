@@ -1,5 +1,5 @@
 import type { Diagnostic, EdgeTypeIR, ModelIR, NodeTypeIR, PropertyIR } from '../ir'
-import { GQL_TYPES, concreteNodes, describeCardinality, isUnconstrained } from '../ir'
+import { GQL_TYPES, concreteNodes, describeCardinality, isUnconstrained, typeParams } from '../ir'
 import {
   downgrade, reportUnsupportedConstraints,
   type Capabilities, type EmitOptions, type EmitResult,
@@ -39,9 +39,9 @@ const typeName = (name: string) => `${lowerCamel(name)}Type`
 /** Scalar types GQL has no dedicated value type for; each is a reported downgrade. */
 const LOSSY_TYPES = new Set(['uuid', 'json'])
 
-/** A value type, wrapped in LIST<…> when the property holds many. */
-const valueType = (p: PropertyIR) =>
-  p.list ? `LIST<${GQL_TYPES[p.type]}>` : GQL_TYPES[p.type]
+/** A value type with its parameters, wrapped in LIST<…> when the property holds many. */
+const scalarType = (p: PropertyIR) => `${GQL_TYPES[p.type]}${typeParams(p)}`
+const valueType = (p: PropertyIR) => (p.list ? `LIST<${scalarType(p)}>` : scalarType(p))
 
 /** One property record, with its downgrade comment above it and no separator. */
 function propertyEntry(

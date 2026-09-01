@@ -38,14 +38,23 @@ describe('type spellings', () => {
     expect(typeOf('label')).toBe('string')
     expect(typeOf('copies')).toBe('int')
     expect(typeOf('shipped')).toBe('boolean')
-    expect(typeOf('pressed')).toBe('datetime')
+    expect(typeOf('pressed')).toBe('zoneddatetime')
   })
 
   it('ignores case and reads an underscore as a space', () => {
-    expect(canonicalScalar('zoned_datetime')).toBe('datetime')
-    expect(canonicalScalar('ZONED DATETIME')).toBe('datetime')
+    expect(canonicalScalar('zoned_datetime')).toBe('zoneddatetime')
+    expect(canonicalScalar('ZONED DATETIME')).toBe('zoneddatetime')
     expect(canonicalScalar('Int64')).toBe('int')
     expect(canonicalScalar('nonsense')).toBeUndefined()
+  })
+
+  // @lat: [[metamodel#Scalar Types]]
+  it('separates a zoned timestamp from a naive one', () => {
+    // The two are different types in LadybugDB and in GQL, and a model that says
+    // 'timestamp' should not silently claim an offset it does not carry.
+    expect(canonicalScalar('timestamp')).toBe('datetime')
+    expect(canonicalScalar('LOCAL_DATETIME')).toBe('datetime')
+    expect(canonicalScalar('TIMESTAMP_TZ')).toBe('zoneddatetime')
   })
 
   it('names both spellings when a type is unknown', () => {
@@ -120,7 +129,7 @@ describe('pg-schema emitter', () => {
 
   it('declares a mixin as an abstract type with no label', () => {
     const out = emit(social(), 'pgschema').content
-    expect(out).toContain('ABSTRACT (timestampedType {createdAt ZONED DATETIME})')
+    expect(out).toContain('ABSTRACT (timestampedType {createdAt LOCAL DATETIME})')
     expect(out).toContain('personType: partyType & timestampedType & Person')
   })
 

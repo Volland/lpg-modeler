@@ -1,5 +1,5 @@
 import type { Diagnostic, ModelIR } from './ir'
-import { LPG_FORMAT_VERSION, assertionOperands, err, warn } from './ir'
+import { LPG_FORMAT_VERSION, ORDERED_TYPES, TEXT_TYPES, assertionOperands, err, warn } from './ir'
 import type { ViewDef } from './views'
 import { typesInNoView } from './views'
 
@@ -78,13 +78,13 @@ export function validateModel(model: ModelIR, views?: ViewDef[]): Diagnostic[] {
   }
 
   // --- Value constraints must suit the type they constrain.
-  const NUMERIC = new Set(['int', 'float', 'date', 'datetime'])
+
   for (const owner of [...model.nodes, ...model.edges]) {
     for (const p of owner.props) {
       const where = `'${owner.name}.${p.name}'`
-      if ((p.min !== undefined || p.max !== undefined) && !NUMERIC.has(p.type)) {
+      if ((p.min !== undefined || p.max !== undefined) && !ORDERED_TYPES.has(p.type)) {
         out.push(err('constraint-type-mismatch',
-          `Property ${where} has a min or max but type ${p.type}, which has no ordering. Bounds apply to int, float, date and datetime.`,
+          `Property ${where} has a min or max but type ${p.type}, which has no ordering. Bounds apply to the numeric and temporal types: ${[...ORDERED_TYPES].join(', ')}.`,
           p.loc))
       }
       if (p.min !== undefined && p.max !== undefined && p.min > p.max) {
@@ -92,7 +92,7 @@ export function validateModel(model: ModelIR, views?: ViewDef[]): Diagnostic[] {
           `Property ${where} has a min above its max, so no value can satisfy it.`, p.loc))
       }
       const stringOnly = p.pattern !== undefined || p.minLength !== undefined || p.maxLength !== undefined
-      if (stringOnly && p.type !== 'string') {
+      if (stringOnly && !TEXT_TYPES.has(p.type)) {
         out.push(err('constraint-type-mismatch',
           `Property ${where} has a pattern or a length bound but type ${p.type}. Those apply to string.`,
           p.loc))

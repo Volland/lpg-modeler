@@ -7,7 +7,7 @@
 // flattened. See lat.md/emitters#PG-Schema Target.
 
 CREATE GRAPH TYPE socialType STRICT {
-  ABSTRACT (timestampedType {createdAt ZONED DATETIME}),
+  ABSTRACT (timestampedType {createdAt LOCAL DATETIME}),
   (carType: Car {vin STRING, OPTIONAL seats INTEGER}),
   ABSTRACT (partyType: Party {id STRING}),
   (companyType: partyType & Company {OPTIONAL vat STRING}),

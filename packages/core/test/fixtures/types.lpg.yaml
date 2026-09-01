@@ -1,0 +1,35 @@
+# Every scalar the metamodel has, in one model: the integer widths, the unsigned
+# variants, a parameterised decimal, both timestamp forms, and the binary and JSON
+# types. Written in a mix of spellings on purpose.
+lpg: "1.0"
+namespace:
+  prefix: types
+  iri: https://example.org/vocab/types#
+
+nodes:
+  Reading:
+    id: n_read
+    key: [id]
+    props:
+      id:      { id: p_id, type: string, required: true }
+      tiny:    { id: p_i8, type: int8 }
+      small:   { id: p_i16, type: SMALLINT }
+      medium:  { id: p_i32, type: INT32 }
+      big:     { id: p_i64, type: int }
+      huge:    { id: p_i128, type: INT128 }
+      utiny:   { id: p_u8, type: uint8 }
+      usmall:  { id: p_u16, type: uint16 }
+      umedium: { id: p_u32, type: uint32 }
+      ubig:    { id: p_u64, type: uint64 }
+      ratio:   { id: p_f32, type: float32 }
+      precise: { id: p_f64, type: float }
+      amount:  { id: p_dec, type: "DECIMAL(18,3)" }
+      ok:      { id: p_bool, type: boolean }
+      day:     { id: p_date, type: date }
+      at:      { id: p_dt, type: datetime }
+      atZoned: { id: p_dtz, type: TIMESTAMP_TZ }
+      took:    { id: p_dur, type: duration }
+      ref:     { id: p_uuid, type: uuid }
+      raw:     { id: p_blob, type: blob }
+      payload: { id: p_json, type: json }
+      samples: { id: p_list, type: "LIST<DECIMAL(10,2)>" }
