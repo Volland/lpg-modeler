@@ -4,6 +4,21 @@ All notable changes to LPG Modeler are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.1] — 2026-09-01
+
+### Fixed
+
+- **Commands find a model instead of refusing without one.** `LPG: Generate Schema` and
+  `LPG: Open Canvas` reported "Open a .lpg.yaml model file first" whenever no text editor
+  held focus — which is exactly the case while the canvas is the focused tab, the one place
+  a user is looking at a model when they want a schema from it.
+
+  Both commands now resolve a target: the active editor, then a focused canvas, then the
+  workspace — one model is used directly, several are offered as a quick pick — and when the
+  workspace holds no model at all, the `LPG: New Model` flow writes one and the command
+  carries on with it. The first use of Generate Schema now teaches the file format rather
+  than demanding it.
+
 ## [0.3.0] — 2026-08-31
 
 ### Added
