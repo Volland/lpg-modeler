@@ -4,6 +4,66 @@ All notable changes to LPG Modeler are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] — 2026-09-05
+
+### Added
+
+- **Inheritance and mixins are visible and editable on the canvas.** The compiler has always
+  resolved `extends` and `mixins` and generated every inherited and mixed-in property into all
+  seven targets; the editor knew nothing about either. A type's box now shows what it extends,
+  a chip per mixin it applies, and marks each property with where it came from — `↑Party` for a
+  supertype, `◇Timestamped` for a mixin, because those are not the same claim about the type.
+
+  A mixin is authored from the canvas: `+ mixin` declares one, a checkbox per mixin applies it
+  to the selected type, and the mixin's own panel edits its properties — a change there reaches
+  every type applying it, which is the point. Renaming a mixin carries into every application,
+  and deleting one removes it from them, since a type left applying a mixin the model no longer
+  has would not resolve. The panel with nothing selected lists the model's mixins, because a
+  mixin no type applies has no box to be reached from.
+
+- **The inspector edits what a type is, not only its constraints.** Name, parent, and the
+  abstract flag for a node type; name, both endpoints, multiplicity, and properties for an
+  edge type. Each field commits on Enter or on blur rather than per keystroke, which would
+  rewrite the model file on every letter typed.
+
+- **An `Edges` section lists every edge a type takes part in, including inherited ones.**
+  `OWNS` declared on an abstract `Party` is drawn on `Party` alone — the diagram says where a
+  thing is written, and re-drawing it from four subtypes would suggest four declarations. The
+  reading a user needs, what can this type relate to, is a list, so the panel gives it, marked
+  with the type each edge is declared on.
+
+- **`+ edge type`, and a type created by drawing outwards.** An edge type can be added from the
+  toolbar with both endpoints as dropdowns of types that exist. A connection dropped on empty
+  canvas means "and then there is one of these": it offers to create the target type and the
+  edge in one step.
+
+- **Two diagnostics for mixins.** A mixin no node type applies is a warning — it reaches no
+  generated artifact. A property a type declares itself where a mixin also declares one is an
+  `info`: the type's own wins, which is the useful reading, but it is invisible in the file.
+
+### Fixed
+
+- **The canvas asks its questions in the document.** `+ node type` did nothing at all, a type's
+  name could not be renamed, deleting a type never confirmed, and an edge's multiplicity could
+  not be edited. Every one of those routed through `window.prompt` or `window.confirm`, which a
+  VS Code webview is a sandboxed iframe for: they return immediately without showing anything,
+  so the action did nothing and did it silently.
+
+  Each is now a dialog rendered in the page. A test asserts that no webview source reaches for
+  those three again, because the failure mode is silence — invisible to types and to any test
+  that does not run a browser.
+
+- **A type created on the canvas appears on the diagram.** A view that names its members used
+  to swallow a new type: the file gained it and the diagram in front of the user did not. The
+  host now carries a creation, rename or deletion through the views sidecar. A new box also
+  takes a free column beside the boxes already placed rather than triggering a relayout that
+  moves everything, and the canvas re-frames itself so the new type is on screen.
+
+- **Two intents posted together apply in order.** One gesture can send two — create the type,
+  then the edge reaching it — and both were spliced against the same original text, so the
+  second landed at offsets the first had already moved. The host now handles one message at a
+  time, and reports a failing canvas action instead of swallowing it.
+
 ## [0.4.0] — 2026-09-01
 
 ### Added

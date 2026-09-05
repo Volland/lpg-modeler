@@ -4,6 +4,39 @@ All notable changes to LPG Modeler are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] — 2026-09-05
+
+### Added
+
+- **Inheritance and mixins on the canvas.** A type's box shows what it extends and a chip per
+  mixin it applies, and marks each property with where it came from: `↑Party` for a supertype,
+  `◇Timestamped` for a mixin. Both already generated into every target — now you can see and
+  edit them without opening the file.
+
+- **Author a mixin without leaving the diagram.** `+ mixin` declares one, a checkbox applies it
+  to the selected type, and the mixin's own panel edits its properties — the change reaches
+  every type applying it. Renaming carries into every application; deleting removes it from
+  them.
+
+- **The inspector edits what a type is.** Name, parent and the abstract flag for a node type;
+  name, both endpoints, multiplicity and properties for an edge. An `Edges` section lists every
+  edge the type takes part in, including ones declared on an ancestor.
+
+- **`+ edge type`, and drawing outwards to a new type.** Add an edge from the toolbar with both
+  endpoints as dropdowns, or drop a connection on empty canvas to create the target type and
+  the edge in one step.
+
+### Fixed
+
+- **Canvas buttons that did nothing now work.** `+ node type`, renaming a type, deleting one and
+  editing an edge's multiplicity all went through browser dialogs that a VS Code webview
+  discards without showing anything, so each action silently did nothing. They are now dialogs
+  in the panel itself.
+
+- **A type you create appears on the diagram.** A view naming its members used to swallow the
+  new type, and a new box now takes a free space beside the others instead of rearranging the
+  diagram you had laid out.
+
 ## [0.4.0] — 2026-09-01
 
 ### Added
