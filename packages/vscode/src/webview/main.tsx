@@ -27,6 +27,16 @@ const NODE_WIDTH = 240
 /** Height estimate so ELK reserves room for the property rows. */
 const heightOf = (propCount: number) => 56 + propCount * 22 + 26
 
+/**
+ * How far out the canvas may zoom. React Flow's own floor is 0.5, which is nowhere near
+ * enough for a laid-out diagram: a few dozen ERD boxes span several thousand pixels, so
+ * `fitView` asks for about 0.15, gets clamped to 0.5, and lands in the middle of a
+ * diagram it cannot fit -- an empty patch of canvas, which reads as a model that failed
+ * to load. See lat.md/architecture#Rendering.
+ */
+const MIN_ZOOM = 0.05
+const FIT_VIEW = { padding: 0.15 }
+
 type Positions = Record<string, { x: number; y: number }>
 
 /**
@@ -166,7 +176,7 @@ function App(): React.ReactElement {
     const grew = knownIds.current !== '' && ids !== knownIds.current
       && nodes.length > knownIds.current.split(',').filter(Boolean).length
     knownIds.current = ids
-    if (grew) window.setTimeout(() => void fitView({ duration: 200, padding: 0.15 }), 0)
+    if (grew) window.setTimeout(() => void fitView({ duration: 200, ...FIT_VIEW }), 0)
   }, [nodes, fitView])
 
   const onNodesChange = React.useCallback((changes: NodeChange[]) => {
@@ -401,6 +411,8 @@ function App(): React.ReactElement {
           onNodeClick={onNodeClick}
           onPaneClick={onPaneClick}
           fitView
+          fitViewOptions={FIT_VIEW}
+          minZoom={MIN_ZOOM}
           proOptions={{ hideAttribution: true }}
         >
           <Background />

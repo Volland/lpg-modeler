@@ -4,7 +4,7 @@ import type {
 } from './ir'
 import { err } from './ir'
 import { parseModel, type RawModel, type RawNode, type RawProperty } from './parse'
-import { duplicateIdDiagnostics, generateId } from './ids'
+import { deriveId, duplicateIdDiagnostics } from './ids'
 
 /** Reading files is injected so the editor can resolve unsaved buffers. */
 export type ReadFile = (absPath: string) => string | undefined
@@ -68,9 +68,11 @@ function dedupeByNamespace(loaded: Map<string, LoadedModel>): Map<string, Loaded
   return canonical
 }
 
-function toProp(p: RawProperty, inheritedFrom?: string): PropertyIR {
+/** `owner` is the type, edge or mixin the property is declared on, which is half of what
+ * identifies it when the file gives it no id. */
+function toProp(p: RawProperty, owner: string, inheritedFrom?: string): PropertyIR {
   return {
-    id: p.id ?? generateId('prop'),
+    id: p.id ?? deriveId('prop', p.name, owner),
     name: p.name,
     type: p.type,
     ...(p.precision !== undefined ? { precision: p.precision } : {}),
@@ -155,7 +157,7 @@ export function resolveModel(entry: string, readFile: ReadFile): ResolveResult {
       if (seenEnums.has(x.name)) continue
       seenEnums.add(x.name)
       const e: EnumIR = {
-        id: x.id ?? generateId('enum'),
+        id: x.id ?? deriveId('enum', x.name),
         name: x.name,
         qname: prefix ? `${prefix}:${x.name}` : x.name,
         iri: base + x.name,
@@ -166,10 +168,10 @@ export function resolveModel(entry: string, readFile: ReadFile): ResolveResult {
       model.enums.push(e)
     }
     for (const mx of m.raw.mixins) {
-      mixinProps.set(mx.name, mx.props.map((p) => toProp(p)))
+      mixinProps.set(mx.name, mx.props.map((p) => toProp(p, mx.name)))
       model.mixins.push({
-        id: mx.id ?? generateId('mixin'), name: mx.name,
-        props: mx.props.map((p) => toProp(p)), ...(mx.loc ? { loc: mx.loc } : {}),
+        id: mx.id ?? deriveId('mixin', mx.name), name: mx.name,
+        props: mx.props.map((p) => toProp(p, mx.name)), ...(mx.loc ? { loc: mx.loc } : {}),
       })
     }
     for (const n of m.raw.nodes) {
@@ -208,7 +210,7 @@ export function resolveModel(entry: string, readFile: ReadFile): ResolveResult {
   // --- Build resolved node types.
   for (const [name, decl] of rawNodes) {
     const ancestors = ancestorsOf.get(name) ?? []
-    const own = decl.raw.props.map((p) => toProp(p))
+    const own = decl.raw.props.map((p) => toProp(p, name))
     const seenProps = new Set(own.map((p) => p.name))
     const props: PropertyIR[] = [...own]
 
@@ -222,7 +224,7 @@ export function resolveModel(entry: string, readFile: ReadFile): ResolveResult {
       for (const p of mp) {
         if (seenProps.has(p.name)) continue
         seenProps.add(p.name)
-        props.push({ ...p, id: generateId('prop'), inheritedFrom: mixinName })
+        props.push({ ...p, id: deriveId('prop', p.name, name), inheritedFrom: mixinName })
       }
     }
 
@@ -232,7 +234,7 @@ export function resolveModel(entry: string, readFile: ReadFile): ResolveResult {
       for (const p of a.raw.props) {
         if (seenProps.has(p.name)) continue
         seenProps.add(p.name)
-        props.push(toProp(p, ancestor))
+        props.push(toProp(p, ancestor, ancestor))
       }
     }
 
@@ -246,7 +248,7 @@ export function resolveModel(entry: string, readFile: ReadFile): ResolveResult {
     }
 
     const node: NodeTypeIR = {
-      id: decl.raw.id ?? generateId('node'),
+      id: decl.raw.id ?? deriveId('node', name),
       name,
       qname: decl.prefix ? `${decl.prefix}:${name}` : name,
       iri: decl.iri,
@@ -262,7 +264,7 @@ export function resolveModel(entry: string, readFile: ReadFile): ResolveResult {
       // Constraints are not inherited: one that reads a subtype's property would be
       // meaningless on the parent, and silently widening a parent's contract is worse.
       constraints: decl.raw.constraints.map((k) => ({
-        id: k.id ?? generateId('constraint'),
+        id: k.id ?? deriveId('constraint', k.name, name),
         name: k.name,
         assert: k.assert,
         ...(k.message ? { message: k.message } : {}),
@@ -294,14 +296,14 @@ export function resolveModel(entry: string, readFile: ReadFile): ResolveResult {
         }
       }
       const edge: EdgeTypeIR = {
-        id: e.id ?? generateId('edge'),
+        id: e.id ?? deriveId('edge', e.name),
         name: e.name,
         qname: prefix ? `${prefix}:${e.name}` : e.name,
         iri: base + e.name,
         prefix,
         from, to,
         cardinality: e.cardinality,
-        props: e.props.map((p) => toProp(p)),
+        props: e.props.map((p) => toProp(p, e.name)),
         ...(e.previousIri ? { previousIri: e.previousIri } : {}),
         ...(e.loc ? { loc: e.loc } : {}),
       }

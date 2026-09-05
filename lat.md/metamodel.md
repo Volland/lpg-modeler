@@ -38,6 +38,8 @@ Every node type, edge type, and property carries a short generated identifier, w
 
 Identifiers make a rename distinguishable from a drop-plus-add, which a structural diff alone cannot do — see [[emitters#Migrations]]. They also give diagram layout a stable anchor, so a rename moves nothing on screen. Because identifiers are copied along with the text, validation must reject duplicates introduced by copy-paste.
 
+A file that carries none — one written by hand, or by another tool — is read with an identifier derived from what names each element instead: its kind, and its name within its owner. Layout is keyed by identifier, so an identifier invented afresh on every read would let the canvas lay a diagram out, save those positions and then never recognise them again, and a hand-written model could never keep an arrangement. Deriving it also means the identifiers written into the file later are the ones already on screen, so writing them moves nothing. A derived identifier follows the name rather than the element, which is what the written one is for: it is the weaker guarantee a file that declares nothing can be given.
+
 ## Format Version
 
 A model file may declare the format version it is written against with a top-level `lpg:` key. A file that declares nothing is read as 1.0, which is what every model written before the key existed is.

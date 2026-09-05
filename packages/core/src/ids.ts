@@ -24,6 +24,47 @@ export function generateId(kind: ElementKind, rand: RandomFn = Math.random): str
   return `${PREFIX[kind]}_${s}`
 }
 
+/**
+ * A 32-bit FNV-1a hash written in the id alphabet. Any stable hash would serve; this one
+ * is short enough to read and gives the same five characters on every platform.
+ */
+function hash5(input: string): string {
+  let h = 0x811c9dc5
+  for (let i = 0; i < input.length; i++) {
+    h ^= input.charCodeAt(i)
+    h = Math.imul(h, 0x01000193) >>> 0
+  }
+  let s = ''
+  for (let i = 0; i < 5; i++) {
+    s += ALPHABET[h % ALPHABET.length] ?? '0'
+    h = Math.floor(h / ALPHABET.length)
+  }
+  return s
+}
+
+/**
+ * The id an element takes while the file still declares none. Derived from what names
+ * the element rather than drawn at random, so two reads of the same file agree.
+ *
+ * Layout is keyed by id, so a random id would be a different one on every read: the
+ * canvas would lay a diagram out, persist those positions, and then never recognise
+ * them again -- a model with no ids could never keep an arrangement. Deriving the id
+ * also means the ids `backfillIdEdits` later writes into the file are the ones already
+ * on screen, so writing them moves nothing. See lat.md/metamodel#Stable Element IDs.
+ *
+ * `within` names the owner for a property or a constraint, which is what makes
+ * `Person.name` and `Company.name` two elements rather than one.
+ */
+export function deriveId(
+  kind: ElementKind, name: string, within?: string, taken?: ReadonlySet<string>,
+): string {
+  const key = `${kind}:${within === undefined ? '' : `${within}.`}${name}`
+  for (let salt = 0; ; salt++) {
+    const id = `${PREFIX[kind]}_${hash5(salt === 0 ? key : `${key}#${salt}`)}`
+    if (!taken?.has(id)) return id
+  }
+}
+
 /** Every id already present in a model, used to avoid collisions when generating. */
 export function collectIds(raw: RawModel): string[] {
   const ids: string[] = []
@@ -119,7 +160,7 @@ function idEdit(text: string, body: YAMLMap, id: string): TextEdit | undefined {
  * Produce the edits that give every element an id, without touching anything else.
  * See lat.md/metamodel#Stable Element IDs.
  */
-export function backfillIdEdits(text: string, rand: RandomFn = Math.random): TextEdit[] {
+export function backfillIdEdits(text: string): TextEdit[] {
   const doc = parseDocument(text, { keepSourceTokens: true })
   const root = doc.contents
   if (!isMap(root)) return []
@@ -147,25 +188,31 @@ export function backfillIdEdits(text: string, rand: RandomFn = Math.random): Tex
     }
   }
 
-  const fresh = (kind: ElementKind) => {
-    let id = generateId(kind, rand)
-    while (taken.has(id)) id = generateId(kind, rand)
+  // Derived rather than random, and from the same key the resolver uses, so the id
+  // written into the file is the one the canvas has already drawn against.
+  const fresh = (kind: ElementKind, name: string, within?: string) => {
+    const id = deriveId(kind, name, within, taken)
     taken.add(id)
     return id
   }
+
+  /** The name an element is declared under, which is what its id is derived from. */
+  const nameOf = (key: unknown): string =>
+    isScalar(key) && typeof key.value === 'string' ? key.value : ''
 
   for (const [name, kind] of sections) {
     const sec = root.get(name, true)
     if (!isMap(sec)) continue
     for (const item of sec.items) {
       if (!isMap(item.value)) continue
-      const e = idEdit(text, item.value, fresh(kind))
+      const owner = nameOf(item.key)
+      const e = idEdit(text, item.value, fresh(kind, owner))
       if (e) edits.push(e)
       const props = item.value.get('props', true)
       if (!isMap(props)) continue
       for (const p of props.items) {
         if (!isMap(p.value)) continue
-        const pe = idEdit(text, p.value, fresh('prop'))
+        const pe = idEdit(text, p.value, fresh('prop', nameOf(p.key), owner))
         if (pe) edits.push(pe)
       }
     }

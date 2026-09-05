@@ -6,7 +6,7 @@ lpg-modeler is a VS Code extension and CLI for authoring Labeled Property Graph 
 
 The canonical artifact is a hand-editable YAML model file holding semantics only. Diagram coordinates live in a separate sidecar so rearranging a diagram never dirties the semantic diff.
 
-Layout is keyed by [[metamodel#Stable Element IDs]] rather than by type name, so renaming a type preserves its position on every diagram. Sidecar entries nest under a named view, not under the model as a whole — see [[architecture#Views]].
+Layout is keyed by [[metamodel#Stable Element IDs]] rather than by type name, so renaming a type preserves its position on every diagram. A file that carries no identifiers yet is read with derived ones, which follow the name: its positions survive a reload but not a rename, until the tool writes the identifiers in. Sidecar entries nest under a named view, not under the model as a whole — see [[architecture#Views]].
 
 ## Surface Syntax
 
@@ -113,6 +113,8 @@ The canvas is built on React Flow with ELK for automatic layout. Custom React no
 React Flow is DOM-based and degrades past a few hundred nodes, which is acceptable precisely because [[architecture#Views]] caps how much any one diagram shows. Note that `elkjs` is EPL-2.0 while React Flow and `dagre` are MIT.
 
 ELK lays out a diagram that has no saved positions at all; once boxes are placed, a newly created type takes a free column beside them instead. A relayout would move every box the user had arranged, and the point of creating a type is to see the new one, so the canvas re-frames itself and persists the position it chose rather than waiting for a drag. A connection dropped on empty canvas means "and then there is one of these": it offers to create the type as well as the edge.
+
+The canvas may zoom out far past React Flow's own floor of 0.5. A laid-out diagram of a few dozen types spans several thousand pixels, so framing it asks for roughly 0.15; clamped to 0.5 the canvas lands in the middle of a diagram it cannot fit, showing an empty patch of grid and reading as a model that failed to load.
 
 ### Inherited edges
 

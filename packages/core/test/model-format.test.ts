@@ -71,6 +71,53 @@ describe('stable element ids', () => {
     expect(out).toContain('    key: [id]')  // untouched, no flow-padding drift
   })
 
+  it('gives a file with no ids the same ids on every read', () => {
+    // Layout is keyed by id. An id drawn afresh on each read would make the canvas lay a
+    // diagram out, persist those positions and then never recognise them again, so a
+    // hand-written model could never keep an arrangement.
+    const text = [
+      'namespace: { prefix: t, iri: "https://example.org/t#" }',
+      'nodes:',
+      '  A: { key: [x], props: { x: { type: string }, y: { type: string } } }',
+      '  B: { key: [x], props: { x: { type: string } } }',
+      'edges:',
+      '  R: { from: A, to: B }',
+      '',
+    ].join('\n')
+    const read = () => resolveModel('/m.lpg.yaml', (p) => (p === '/m.lpg.yaml' ? text : undefined)).model
+    const shape = (m: ReturnType<typeof read>) => [
+      ...m.nodes.map((n) => [n.name, n.id, ...n.props.map((p) => `${p.name}=${p.id}`)]),
+      ...m.edges.map((e) => [e.name, e.id]),
+    ]
+
+    expect(shape(read())).toEqual(shape(read()))
+    // And each element still gets its own: two types sharing a property name is the case
+    // a name-blind derivation would collapse.
+    const ids = read().nodes.flatMap((n) => n.props.map((p) => p.id))
+    expect(new Set(ids).size).toBe(ids.length)
+  })
+
+  it('backfills exactly the ids the resolver had already synthesised', () => {
+    // Otherwise writing ids into a file would renumber every element and throw away the
+    // positions the canvas had just drawn against.
+    const text = [
+      'namespace: { prefix: t, iri: "https://example.org/t#" }',
+      'nodes:',
+      '  A: { key: [x], props: { x: { type: string } } }',
+      'edges:',
+      '  R: { from: A, to: A }',
+      '',
+    ].join('\n')
+    const read = (source: string) => resolveModel('/m.lpg.yaml',
+      (p) => (p === '/m.lpg.yaml' ? source : undefined)).model
+    const before = read(text)
+    const after = read(applyEdits(text, backfillIdEdits(text)))
+
+    expect(after.nodes.map((n) => n.id)).toEqual(before.nodes.map((n) => n.id))
+    expect(after.edges.map((e) => e.id)).toEqual(before.edges.map((e) => e.id))
+    expect(after.nodes[0]!.props.map((p) => p.id)).toEqual(before.nodes[0]!.props.map((p) => p.id))
+  })
+
   it('is a no-op when every element already has an id', () => {
     const text = readFile(fixture('social.lpg.yaml'))!
     expect(backfillIdEdits(text)).toEqual([])

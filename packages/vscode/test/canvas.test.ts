@@ -113,6 +113,50 @@ describe('creating types from the canvas', () => {
   })
 })
 
+// @lat: [[architecture#Source of Truth]]
+describe('laying out a model that has no sidecars', () => {
+  /** A hand-written model: no ids, no views file, no layout file. */
+  const handWritten = [
+    'namespace: { prefix: t, iri: "https://example.org/t#" }',
+    'nodes:',
+    '  A: { key: [x], props: { x: { type: string } } }',
+    '  B: { key: [x], props: { x: { type: string } } }',
+    'edges:',
+    '  R: { from: A, to: B }',
+    '',
+  ].join('\n')
+
+  it('recognises the position it saved when the diagram is read again', async () => {
+    // The canvas lays an unpositioned diagram out and persists what it chose. That is
+    // worth nothing if the next read calls the same box by a different name, which is
+    // what an id drawn at random on every parse does.
+    fs.writeFileSync(model, handWritten)
+    const c = await canvas()
+    const box = c.latest().nodes.find((n) => n.name === 'A')!
+    expect(c.latest().positions).toEqual({})
+
+    await c.send({ type: 'move', elementId: box.id, x: 120, y: 40 })
+    await c.send({ type: 'ready' })
+
+    expect(c.latest().nodes.find((n) => n.name === 'A')!.id).toBe(box.id)
+    expect(c.latest().positions).toEqual({ [box.id]: { x: 120, y: 40 } })
+  })
+
+  it('keeps that position when the ids are written into the file', async () => {
+    fs.writeFileSync(model, handWritten)
+    const c = await canvas()
+    const box = c.latest().nodes.find((n) => n.name === 'A')!
+    await c.send({ type: 'move', elementId: box.id, x: 120, y: 40 })
+
+    // Any canvas edit backfills ids. If those differed from the ones already on screen,
+    // the first property a user added would scatter the diagram they had just arranged.
+    await c.intent({ kind: 'addProperty', owner: 'B', ownerKind: 'nodes', name: 'n', propType: 'string' })
+
+    expect(fs.readFileSync(model, 'utf8')).toContain(box.id)
+    expect(c.latest().positions).toEqual({ [box.id]: { x: 120, y: 40 } })
+  })
+})
+
 // @lat: [[metamodel#Type Hierarchy#Mixins]]
 describe('authoring a hierarchy from the canvas', () => {
   it('creates a mixin, applies it, and the property lands on the type', async () => {
