@@ -101,6 +101,17 @@ npx @vscode/vsce package --no-dependencies <span class="c-com"># run inside pack
       <p>Typing in the YAML works the same way in reverse: the canvas redraws from the file on
       every keystroke. If the file stops being valid YAML mid-edit, the last good diagram stays
       on screen with a notice rather than blanking.</p>
+      <figure>
+        <img class="shot" src="assets/screenshots/canvas.png"
+          alt="The LPG Modeler canvas in VS Code. Seven ERD boxes: Asset and Vehicle drawn with a dashed border and an ABSTRACT badge, and Truck, Van, Trailer, Depot and Driver carrying diamond-marked mixin chips. Inherited property rows are italic and name their source with an up arrow; mixin properties name theirs with a diamond. Three labelled edges connect them, and the panel on the right lists the model's three mixins.">
+        <figcaption>
+          The canvas on <a href="examples/fleet.lpg.yaml" download>fleet.lpg.yaml</a>. A dashed
+          border and an <code>abstract</code> badge mark a type with no table; an italic row is
+          an inherited property, naming the supertype it came from with <code>↑</code> or the
+          mixin with <code>◇</code>. Selecting a box opens the panel on the right, where
+          <code>extends</code> is a dropdown and mixins are checkboxes.
+        </figcaption>
+      </figure>
     </li>
 
     <li>

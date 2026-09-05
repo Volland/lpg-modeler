@@ -381,6 +381,34 @@ phone: { type: string, minLength: 7, maxLength: 20 }</code></pre>
     every type that applies it, and contributes nothing to the type hierarchy — use
     <code>extends</code> when you want <code>subClassOf</code> in the ontology.
   </p>
+  <p>
+    It declares no supertype, never appears in an ancestor chain, and contributes no key —
+    though a type may name a mixin&rsquo;s property in its own <code>key</code>. A type may
+    apply any number of them, so applying one is set membership rather than a parent: the
+    canvas shows them as checkboxes for exactly that reason. Because a mixin is not a label,
+    it costs the generators nothing — its properties are flattened into every type that
+    applies it before any target sees the model, so a target with no inheritance and one with
+    rich subtyping generate the same columns.
+  </p>
+  <p>
+    <strong>The nearer declaration wins.</strong> A type&rsquo;s own property beats a
+    mixin&rsquo;s, and a mixin&rsquo;s beats an ancestor&rsquo;s. Being shadowed is reported at
+    <code>info</code>, and a mixin that no type applies at <code>warning</code> — neither is
+    visible in the file, and one silently drops a property the reader can see written while
+    the other reaches no artifact at all.
+  </p>
+  <div class="note">
+    <p><strong>Why these are two mechanisms and not one.</strong> Reuse and subtyping are
+    different needs. Conflating them produces a hierarchy shaped by which properties happen to
+    travel together rather than by what a thing is: <code>createdAt</code> on twenty types does
+    not make twenty subtypes of a <code>Timestamped</code>. The hierarchy is also the backbone
+    that makes an ontology export worth producing — without <code>subClassOf</code>, OWL
+    output degenerates into a flat list of classes.</p>
+  </div>
+  <p>
+    <a href="examples/fleet.lpg.yaml" download><code>fleet.lpg.yaml</code></a> puts both in one
+    model: a three-level abstract hierarchy and three mixins applied at different levels.
+  </p>
 
   <h2>Composition across files</h2>
 <pre><code><span class="c-key">imports</span>:

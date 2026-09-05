@@ -94,6 +94,8 @@ The example models the documentation site offers for download live under `docs/`
 
 Keeping them inside the published site rather than in a separate folder means there is exactly one copy, so the file a reader downloads is the file the test checked. An example that stopped parsing would be a broken promise on the front page, and it is the kind of breakage that a release otherwise finds only after it ships.
 
+One of them, `fleet.lpg.yaml`, carries the [[metamodel#Type Hierarchy|hierarchy]] and [[metamodel#Type Hierarchy#Mixins|mixins]] the front page explains, and is the model in every screenshot — so the picture a reader is persuaded by and the file they download are the same file. See [[architecture#Distribution#Documentation site#Screenshots]].
+
 ## Views
 
 A view names a subset of types plus an optional neighbourhood expansion, and layout nests under the view. One model can therefore carry an overview diagram beside several focused ones.
@@ -157,6 +159,14 @@ The CLI ships to npm the same way, as a single self-contained package, so `core`
 Diagrams are authored as SVG and exported to PNG beside them. Both formats are kept because the Marketplace rejects SVG in a README, while the site prefers it. Neither is generated at build time: the site has no build step at all, so a broken toolchain can never take the documentation down.
 
 The site fetches nothing from a third party. Fonts are self-hosted rather than loaded from a content delivery network, because a request to Google Fonts sends every visitor's IP address to Google, which LG München I held unlawful without consent (20.01.2022, 3 O 17493/20) and which triggered a wave of German warning letters. Both families are SIL Open Font Licence 1.1, so self-hosting is permitted. A test asserts that no page fetches a cross-origin subresource, because the privacy statement is only true while it is true, and a single convenient `<link>` would quietly make it false.
+
+#### Screenshots
+
+The site shows the canvas itself under `docs/assets/screenshots/`, not only the diagrams drawn for it, because the reader of a modelling tool's front page is deciding whether the editor is worth opening.
+
+They are captures of the real webview bundle rendering a projection the extension host produced, rather than a mock-up: a drawn interface is a promise the product has to keep afterwards, and the details a screenshot is there to carry — the `↑` against `◇` on a property row, the mixin checkboxes, the edge listed on a descendant it is not drawn on — are exactly the ones a mock-up gets subtly wrong.
+
+The model in every screenshot is a published [[architecture#Examples|example]], so the file a reader downloads is the one they were shown, and a change that broke it fails the examples test before it reaches the page. A test asserts that every screenshot a page references exists and that the model they are captured from is still published, since a missing image degrades silently to alt text. Like the diagrams, they are committed rather than generated at build time — the site still has no build step.
 
 ### Legal pages
 

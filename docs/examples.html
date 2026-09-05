@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Examples — LPG Modeler</title>
-<meta name="description" content="Four complete model files to download and start from: a starter hierarchy, enums and lists, endpoint bounds, and constraints.">
+<meta name="description" content="Five complete model files to download and start from: a starter hierarchy, inheritance and mixins, enums and lists, endpoint bounds, and constraints.">
 <link rel="icon" href="assets/icon.png">
 <link rel="stylesheet" href="assets/fonts.css">
 <link rel="stylesheet" href="assets/site.css">
@@ -30,7 +30,7 @@
 <main>
 <div class="wrap hero">
   <span class="eyebrow">Examples</span>
-  <h1>Four models to start from</h1>
+  <h1>Five models to start from</h1>
   <p class="lede">
     Each one is a complete, valid model file. Download it, drop it in a workspace, open the
     canvas beside it, and generate. Every example on this page is checked in continuous
@@ -58,6 +58,50 @@ npx lpg-modeler-cli emit  social.lpg.yaml --target shacl --out ./schema</code></
   <p class="dim">
     Shows: abstract types · inheritance · mixins · keys · edge properties · gradual
     reification in the RDF output.
+  </p>
+
+  <hr class="rule">
+
+  <h2>fleet.lpg.yaml <a class="dl" href="examples/fleet.lpg.yaml" download>download</a></h2>
+  <p>
+    <strong>Inheritance and mixins, side by side.</strong> A three-level abstract hierarchy —
+    <code>Asset</code> → <code>Vehicle</code> → <code>Truck</code> — where the key is
+    declared once, on the root, and three mixins applied at different levels. This is the
+    model in the screenshots on the <a href="index.html">front page</a>: open it on the
+    canvas and the two mechanisms are visible as two different markers.
+  </p>
+<pre><code><span class="c-key">mixins</span>:
+  Timestamped:
+    props:
+      createdAt: { type: zoneddatetime, required: true }
+
+<span class="c-key">nodes</span>:
+  Asset:
+    abstract: true
+    key: [assetTag]          <span class="c-com"># inherited by every descendant</span>
+    props:
+      assetTag: { type: string, required: true }
+
+  Truck:
+    extends: Vehicle         <span class="c-com"># which itself extends Asset</span>
+    mixins: [Timestamped, Located]
+
+<span class="c-key">edges</span>:
+  <span class="c-com"># Declared once, on the root. Drawn on Asset alone; listed on every
+  # descendant in the inspector; expanded per subtype by the targets.</span>
+  STATIONED_AT:
+    from: Asset
+    to: Depot</code></pre>
+  <p class="dim">
+    Shows: multi-level abstract types · inherited keys · inherited edges · three mixins ·
+    <code>↑</code> against <code>◇</code> on a property row · abstract endpoint expansion.
+  </p>
+  <p>
+    Generate the <code>ladybug</code> target from it and then the <code>pgschema</code> one.
+    The first flattens the hierarchy to one table per concrete type and expands
+    <code>STATIONED_AT</code> into four <code>FROM</code>/<code>TO</code> pairs; the second
+    keeps <code>ABSTRACT</code> and the inheritance as written. Same model, and the reason
+    the capability matrix exists.
   </p>
 
   <hr class="rule">

@@ -148,6 +148,8 @@ figure img {
   background: #fcfbf9;
 }
 figcaption { color: var(--muted); font-size: 13.6px; margin-top: 11px; max-width: var(--measure); }
+/* A screenshot of the editor, which is dark, rather than a diagram drawn for this page. */
+figure img.shot { background: #1f1f1f; border-color: #2b2b2b; }
 
 /* ---- code ---- */
 code, kbd, pre, .mono {

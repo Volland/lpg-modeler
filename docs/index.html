@@ -90,8 +90,30 @@
 <hr class="rule">
 
 <section class="wrap">
+  <h2>This is the editor</h2>
+  <p class="section-lede">
+    The canvas opens beside the model file, in the manner of Markdown preview. Every box is a
+    node type, every row a property, and every action on it a targeted edit to the YAML.
+  </p>
+  <figure>
+    <img class="shot" src="assets/screenshots/canvas.png"
+      alt="The LPG Modeler canvas in VS Code. Seven ERD boxes: Asset and Vehicle drawn with a dashed border and an ABSTRACT badge, and Truck, Van, Trailer, Depot and Driver carrying diamond-marked mixin chips. Inherited property rows are italic and name their source with an up arrow; mixin properties name theirs with a diamond. Three labelled edges connect them, and the panel on the right lists the model's three mixins.">
+    <figcaption>
+      <a href="examples/fleet.lpg.yaml" download>fleet.lpg.yaml</a>, one of the
+      <a href="examples.html">downloadable examples</a>. <code>Asset</code> and
+      <code>Vehicle</code> are abstract: dashed border, no table, no instances.
+      <code>Truck</code> sits three levels down — <code>assetTag</code> arrives from
+      <code>Asset</code>, <code>vin</code> from <code>Vehicle</code>, and each inherited row
+      names its source.
+    </figcaption>
+  </figure>
+</section>
+
+<hr class="rule">
+
+<section class="wrap">
   <h2>What you get</h2>
-  <p class="section-lede">Six things the extension does that a diagram tool or a hand-written DDL file cannot.</p>
+  <p class="section-lede">Eight things the extension does that a diagram tool or a hand-written DDL file cannot.</p>
 
   <div class="grid grid-2">
     <div class="card feature">
@@ -105,6 +127,13 @@
       <span class="v">Edits are computed as text splices, never as a re-serialization.
       Renaming a type changes exactly the lines that name it. Diagram coordinates live in a
       separate sidecar, so rearranging a diagram produces no semantic diff at all.</span>
+    </div>
+    <div class="card feature">
+      <span class="k">Inheritance and mixins, kept apart</span>
+      <span class="v">An abstract label hierarchy says what a thing <em>is</em>, contributing
+      keys, properties and edges to every descendant. A mixin says what a thing
+      <em>carries</em> — a bag of properties, no supertype, no identity of its own. Both are
+      flattened before any generator sees the model.</span>
     </div>
     <div class="card feature">
       <span class="k">Four generators, one model</span>
@@ -130,7 +159,91 @@
       One model can carry an overview beside several focused diagrams, and validation tells
       you which types have fallen out of every view.</span>
     </div>
+    <div class="card feature">
+      <span class="k">The same checks, with no editor</span>
+      <span class="v">Resolution and validation run as a command, so a pull request can be
+      gated on the model being valid — and on the committed schema still matching it.
+      Regenerate in CI and fail the build on a diff: "someone forgot to regenerate the DDL"
+      becomes a red build rather than an incident.</span>
+    </div>
   </div>
+</section>
+
+<hr class="rule">
+
+<section class="wrap">
+  <h2>Inheritance and mixins are different tools</h2>
+  <p class="section-lede">
+    They look alike — both put properties on a type that the type did not declare — and they
+    answer different questions. Conflating them produces a hierarchy shaped by which
+    properties happen to travel together rather than by what a thing is, and that hierarchy
+    exports an ontology nobody can use.
+  </p>
+
+  <figure>
+    <img class="shot" src="assets/screenshots/inspector.png"
+      alt="The inspector panel with the Truck type selected. It shows an Extends dropdown set to Vehicle, an Abstract checkbox, a Mixins list of checkboxes with Timestamped and Located ticked and Auditable unticked, and an Edges list where DRIVES is marked as coming from Vehicle and STATIONED_AT from Asset.">
+    <figcaption>
+      Selecting a type shows what a diagram box has no room for. <code>Extends</code> is a
+      dropdown; mixins are <strong>checkboxes</strong>, because applying one is set membership
+      and a type may apply several.
+    </figcaption>
+  </figure>
+
+  <div class="grid grid-2">
+    <div class="card feature">
+      <span class="k">A hierarchy contributes keys and edges</span>
+      <span class="v">Every concrete type declares exactly one key — but keys are inherited,
+      so declaring one on an abstract root covers every subtype. An edge declared on that
+      root belongs to every descendant too, which is what makes the root worth declaring at
+      all.</span>
+    </div>
+    <div class="card feature">
+      <span class="k">Flattened before any target sees it</span>
+      <span class="v">Properties are flattened onto the subtype during resolution, each
+      carrying the name of the type it came from. A generator never walks the chain, and a
+      diagram can say where a property is written: <code>↑Vehicle</code> for a supertype,
+      <code>◇Timestamped</code> for a mixin.</span>
+    </div>
+    <div class="card feature">
+      <span class="k">Edges are drawn once, listed everywhere</span>
+      <span class="v">An inherited edge is drawn on the ancestor's box alone and listed on
+      each descendant in the panel instead. Drawing it again from four subtypes would suggest
+      four declarations where the model has one. Expanding it is the target's job:
+      LadybugDB emits one <code>FROM</code>/<code>TO</code> pair per concrete subtype, while
+      PG-Schema keeps the abstract endpoint as written.</span>
+    </div>
+    <div class="card feature">
+      <span class="k">What stops at the declaring type</span>
+      <span class="v">Openness and named constraints are <em>not</em> inherited. A subtype
+      that silently widened its parent's contract would leave the reader of the parent with
+      no way to see it — so each is stated where it is declared, and nowhere else.</span>
+    </div>
+  </div>
+
+  <figure>
+    <img class="shot" src="assets/screenshots/mixin.png"
+      alt="The panel with the Timestamped mixin selected. It reads: a bag of properties; applying it copies them into a type; it declares no supertype and no identity of its own. Below are its two properties, createdAt and updatedAt, their value constraints, and an Applied by list naming Driver, Trailer, Truck and Van.">
+    <figcaption>
+      A mixin has no box on the canvas, because it is not a type. It gets the panel instead —
+      its properties, and every type applying it, so a change shows what it would touch before
+      you make it. The nearer declaration wins: a type's own property beats a mixin's, and a
+      mixin's beats an ancestor's.
+    </figcaption>
+  </figure>
+
+  <p>
+    Because a mixin is not a label, it costs the generators nothing: its properties are
+    flattened into every type that applies it before any target sees the model, so a target
+    with no inheritance and one with rich subtyping generate the same columns. It contributes
+    no key — though a type may name a mixin's property in its own key. A mixin that nothing
+    applies is reported at <code>warning</code>, because it reaches no artifact at all.
+  </p>
+  <p>
+    Start from <a href="examples/fleet.lpg.yaml" download><code>fleet.lpg.yaml</code></a>,
+    which is the model in every screenshot above, or read the
+    <a href="model-format.html">model format</a> for every key involved.
+  </p>
 </section>
 
 <hr class="rule">
@@ -395,6 +508,7 @@ social:likes a owl:ObjectProperty ; rdfs:label "LIKES" .
   <h2>Start here</h2>
   <div class="next">
     <a href="getting-started.html"><div class="k">Getting started</div><div class="v">Install, write your first model, open the canvas, generate.</div></a>
+    <a href="examples.html"><div class="k">Examples</div><div class="v">Five complete models to download and start from.</div></a>
     <a href="model-format.html"><div class="k">Model format</div><div class="v">Node types, mixins, keys, edges, imports, views.</div></a>
     <a href="targets.html"><div class="k">Targets</div><div class="v">What each generator emits, and what it will not enforce.</div></a>
     <a href="cli.html"><div class="k">CLI</div><div class="v">The same checks and generators, in continuous integration.</div></a>

@@ -19,6 +19,8 @@ You author the model as YAML, or on a canvas beside it. Everything downstream is
 
 ![One model, four artifacts](https://raw.githubusercontent.com/Volland/lpg-modeler/main/docs/assets/diagrams/pipeline.png)
 
+![The canvas, showing an abstract hierarchy and three mixins](https://raw.githubusercontent.com/Volland/lpg-modeler/main/docs/assets/screenshots/canvas.png)
+
 ---
 
 ## The problem it removes
@@ -64,6 +66,42 @@ diagram produces **no semantic diff at all**, and renaming a type moves nothing 
 
 **Why it matters:** a schema change that shows up as a 400-line reformat does not get
 reviewed. It gets approved.
+
+### Inheritance and mixins, kept apart
+
+A node type may extend an abstract label, and it may apply any number of mixins. These look
+alike and are not: inheritance says what a thing **is**, and a mixin says what a thing
+**carries**.
+
+![The inspector, showing an ancestor chain, mixin checkboxes, and inherited edges](https://raw.githubusercontent.com/Volland/lpg-modeler/main/docs/assets/screenshots/inspector.png)
+
+- **Abstract types** emit no table and hold no instances. They exist to contribute a key,
+  properties, and edges to every descendant — `Truck` above is three levels down, and its
+  key `assetTag` is declared once, on the root.
+- **Inherited properties are flattened** onto the subtype during resolution, each carrying
+  the name of the type it came from. On the diagram they read `↑Vehicle`; from a mixin,
+  `◇Timestamped`. A generator never walks the chain, and a reader can always see where a
+  property is written.
+- **Edges are inherited too.** `STATIONED_AT` is declared on the abstract root and drawn
+  there alone, then listed on each descendant in the inspector marked with the type it came
+  from. The targets do the expanding: LadybugDB emits a `FROM`/`TO` pair per concrete
+  subtype, while PG-Schema keeps the abstract endpoint as written.
+- **Mixins are checkboxes, not a parent.** A mixin declares no supertype, never appears in
+  an ancestor chain, and contributes no key — though a type may name a mixin's property in
+  its own key. Because it is not a label, it costs the generators nothing.
+
+![The mixin panel, listing its properties and every type that applies it](https://raw.githubusercontent.com/Volland/lpg-modeler/main/docs/assets/screenshots/mixin.png)
+
+A mixin has no box on the canvas, because it is not a type — it gets the panel instead,
+listing its properties and every type that applies it, so you can see what a change would
+touch before making it. The nearer declaration wins: a type's own property beats a mixin's,
+and a mixin's beats an ancestor's. The first is reported at `info` and a mixin nothing
+applies at `warning`, because neither is visible in the file.
+
+**Why it matters:** conflating reuse with subtyping produces a hierarchy shaped by which
+properties happen to travel together rather than by what a thing is. `createdAt` on twenty
+types does not make twenty subtypes of a `Timestamped` — and a hierarchy built that way
+exports an ontology nobody can use.
 
 ### Seven generators, one model
 
@@ -161,6 +199,25 @@ writes the file, and opens the canvas on it — no need to know the shape of a m
 model and opened beside it.
 
 That is the whole loop. Nothing here needs a running database.
+
+---
+
+## Examples to download
+
+Five complete models. Each is checked in continuous integration — a test resolves every one
+of them and generates all seven targets — so the file you download is the file the test
+checked. Save one as `<name>.lpg.yaml` in a workspace and run **LPG: Open Canvas** on it.
+
+| Model | Shows |
+| --- | --- |
+| [`social.lpg.yaml`](https://volland.github.io/lpg-modeler/examples/social.lpg.yaml) | The starter: an abstract parent contributing a key, a mixin, and an edge with an abstract endpoint |
+| [`fleet.lpg.yaml`](https://volland.github.io/lpg-modeler/examples/fleet.lpg.yaml) | **Inheritance and mixins**: a three-level abstract hierarchy, three mixins applied at different levels, and an edge declared once on the root |
+| [`catalog.lpg.yaml`](https://volland.github.io/lpg-modeler/examples/catalog.lpg.yaml) | Enums, list-valued properties, a composite key, and an open type — where the targets start disagreeing |
+| [`kinship.lpg.yaml`](https://volland.github.io/lpg-modeler/examples/kinship.lpg.yaml) | Endpoint bounds: exactly two parents, which no named multiplicity can express |
+| [`booking.lpg.yaml`](https://volland.github.io/lpg-modeler/examples/booking.lpg.yaml) | Value bounds, patterns, named constraints, and the raw SHACL escape hatch |
+
+All five, with commentary on what to read in each:
+**https://volland.github.io/lpg-modeler/examples.html**
 
 ---
 

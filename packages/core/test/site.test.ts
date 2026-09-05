@@ -66,6 +66,52 @@ describe('the documentation site makes no third-party request', () => {
   })
 })
 
+// @lat: [[architecture#Distribution#Documentation site#Screenshots]]
+describe('the site shows the canvas, and shows a model it still ships', () => {
+  /** Every local `src`/`href` a page points at, excluding in-page anchors and mail links. */
+  const localRefs = (attr: 'src' | 'href') => {
+    const out: { page: string; url: string }[] = []
+    for (const page of pages()) {
+      const pattern = new RegExp(`<(?:link|script|img|iframe|source|a)\\b[^>]*?${attr}="([^"]+)"`, 'g')
+      for (const m of read(page).matchAll(pattern)) {
+        const url = m[1]!
+        if (/^(https?:|mailto:|#)/.test(url)) continue
+        out.push({ page, url })
+      }
+    }
+    return out
+  }
+
+  it('resolves every image it renders', () => {
+    // A missing image degrades to alt text rather than to an error, so nothing but a
+    // test notices it. Covers the diagrams as well as the screenshots.
+    const missing = localRefs('src')
+      .filter(({ url }) => !existsSync(join(DOCS, url)))
+      .map(({ page, url }) => `${page}: ${url}`)
+    expect(missing).toEqual([])
+  })
+
+  it('renders every screenshot it carries', () => {
+    // The other direction: an image nothing references is a file that stopped being
+    // shown, which is how a page quietly loses the picture it was built around.
+    const shots = readdirSync(join(DOCS, 'assets', 'screenshots'))
+    expect(shots.length).toBeGreaterThan(0)
+    const html = pages().map(read).join('\n')
+    expect(shots.filter((f) => !html.includes(`assets/screenshots/${f}`))).toEqual([])
+  })
+
+  it('offers for download every example model it names', () => {
+    // The screenshots are captured from a published example, and the captions say so.
+    // The promise only holds while that file is still there to download.
+    const named = localRefs('href').filter(({ url }) => url.endsWith('.lpg.yaml'))
+    expect(named.length).toBeGreaterThan(0)
+    const missing = named
+      .filter(({ url }) => !existsSync(join(DOCS, url)))
+      .map(({ page, url }) => `${page}: ${url}`)
+    expect(missing).toEqual([])
+  })
+})
+
 // @lat: [[architecture#Distribution#Legal pages]]
 describe('legal pages', () => {
   it('is reachable from every page, which is what an Impressum has to be', () => {
