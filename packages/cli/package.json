@@ -1,6 +1,6 @@
 {
   "name": "lpg-modeler-cli",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "type": "commonjs",
   "bin": {
     "lpg": "./dist/cli.js"

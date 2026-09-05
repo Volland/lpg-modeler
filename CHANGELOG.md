@@ -4,6 +4,62 @@ All notable changes to LPG Modeler are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0] — 2026-09-05
+
+### Added
+
+- **Composite types: `STRUCT`, `MAP`, `UNION` and the fixed-size `ARRAY`.** 0.4.0 drew the
+  scalar set from what LadybugDB stores natively and stopped at the composites, on the grounds
+  that they need a nested type syntax and a story for every other target. They are in now, with
+  the syntax the database itself uses, so a model reads the way the DDL it generates does:
+
+  ```yaml
+  location:  { type: "STRUCT(lat DOUBLE, lon DOUBLE)" }
+  tags:      { type: "MAP(STRING, STRING)" }
+  reading:   { type: "UNION(num DOUBLE, text STRING)" }
+  embedding: { type: "FLOAT[128]" }                       # also ARRAY<FLOAT, 128>
+  history:   { type: "STRUCT(at TIMESTAMP, v DOUBLE[])[]" }
+  ```
+
+  They nest, in any combination and to any depth — a list of structs one of whose fields is
+  itself a list, a map of arrays, a list of lists. Because a composite nests, it cannot be read
+  with the regular expression a bare scalar could, so the type parser is now a tokenizer and a
+  recursive-descent reader.
+
+- **The ladybug target stores every one of them, verified against a running engine.** The
+  execution test creates the table and then reads the column type back out of `TABLE_INFO`,
+  so it proves the composite reached the catalogue intact rather than only that the DDL parsed.
+  All seven forms round-trip byte-identical, and a second test writes a struct and a map value
+  and reads both back through `s.location.label` and `map_extract`.
+
+- **Every other target reports the loss and keeps what it has a place for.** A composite
+  property also carries the scalar it degrades to — the element scalar when every value inside
+  it is the same scalar, `json` otherwise — computed once in the parser rather than reinvented
+  per emitter. So `UINT8[3]` still writes `LIST<UINT8>` in GQL and only its size is reported
+  lost, while a `STRUCT` has no single element type and falls back to `json`. Neo4j writes that
+  the value is unstorable outright: a Neo4j property is a primitive or an array of primitives.
+
+  Reifying a struct into an RDF node shape was the alternative for SHACL and OWL. It was
+  rejected because it invents a node with an identity the model never gave it, which is the
+  composition problem rather than a datatype mapping.
+
+- **`compositeTypes` in the capability matrix**, native on ladybug and unsupported on the other
+  six. One shared reporter raises the downgrade, for the same reason the constraint downgrades
+  have one: six targets saying the same thing in six wordings would drift. It is a `warning`
+  rather than the `info` used for constraints, because a property whose structure silently
+  flattens is the surprising kind of loss.
+
+- **Six rules on what a composite may not do.** It cannot be part of a key, reference an enum,
+  or carry value bounds — each of those is defined on one scalar value, and a composite is not
+  one. Three more are internal to the type rather than target-specific: a `STRUCT` or `UNION`
+  may not name a field twice, a fixed-size array holds at least one element, and a map key must
+  be a scalar, because none of the three is writable in LadybugDB either. Diagnostics name the
+  type as written rather than the scalar it happens to degrade to.
+
+- **The composite forms reach the file format and the canvas.** The contributed JSON Schema
+  admits them, so the editor does not mark a valid model broken, and a composite property on a
+  diagram shows its full spelling instead of the fallback scalar.
+
 ## [0.5.0] — 2026-09-05
 
 ### Added

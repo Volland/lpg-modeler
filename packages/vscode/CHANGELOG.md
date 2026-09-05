@@ -4,6 +4,28 @@ All notable changes to LPG Modeler are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0] — 2026-09-05
+
+### Added
+
+- **Composite property types: `STRUCT`, `MAP`, `UNION` and fixed-size arrays.** Written the way
+  LadybugDB writes them — `STRUCT(lat DOUBLE, lon DOUBLE)`, `MAP(STRING, STRING)`,
+  `UNION(num DOUBLE, text STRING)`, `FLOAT[128]` — and they nest, so
+  `STRUCT(at TIMESTAMP, v DOUBLE[])[]` is a list of structs. Quote the type in YAML, since a
+  comma would otherwise end the flow mapping.
+
+- **Completion and validation know about them.** The contributed JSON Schema admits the
+  composite forms, so a valid model is no longer marked broken in the editor, and a composite
+  property on the canvas shows its whole type rather than a fallback.
+
+- **The ladybug target stores them; the other six say what they lose.** Only LadybugDB has
+  these types. Generating to GQL, PG-Schema, LinkML, Neo4j, SHACL or OWL now reports one
+  warning per composite property and keeps whatever that target has a place for — a
+  `FLOAT[128]` becomes a plain list and loses only its size.
+
+- **A composite cannot be a key, reference an enum, or carry value bounds.** Each of those is
+  defined on a single scalar value. You get a diagnostic naming the type as you wrote it.
+
 ## [0.5.0] — 2026-09-05
 
 ### Added
