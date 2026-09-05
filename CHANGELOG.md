@@ -4,6 +4,35 @@ All notable changes to LPG Modeler are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.1] — 2026-09-05
+
+### Fixed
+
+- **A model with no sidecar files now appears on the canvas.** Opening the canvas on a
+  hand-written model showed an empty grid. React Flow's zoom floor is 0.5, and ELK lays a
+  few dozen ERD boxes out across several thousand pixels, so framing that diagram asks for
+  roughly 0.15, gets clamped, and parks the viewport in the middle of a diagram it cannot
+  fit — one or two boxes of thirty-four in frame, and empty grid everywhere the model
+  should be. The canvas sets its own floor now.
+
+- **Automatic layout is kept instead of thrown away.** An element the file gives no `id:`
+  was resolved with a random identifier minted afresh on every read, so the canvas would
+  lay a diagram out, persist those positions and then never recognise them again; the
+  layout sidecar grew by a dead entry per element per refresh. Identifiers are now derived
+  from what names the element — its kind, and its name within its owner — so two reads of a
+  file agree. `backfillIdEdits` writes the same identifiers, so the first canvas edit no
+  longer scatters an arrangement that was just made. A derived identifier follows the name,
+  so a rename still moves the box until the tool has written the identifiers into the file.
+
+- **The contributed JSON Schema accepts exactly what the type parser accepts.** Its pattern
+  branches had drifted: a stacked suffix like `INT64[][]`, a `NUMERIC(9,2)`, and a composite
+  carrying a fixed-size suffix all parsed but were marked broken in the editor. The test now
+  asserts both directions against the parser rather than a handful of accepted forms.
+
+- **An unknown type is reported against the twenty-one canonical names** rather than all
+  sixty accepted spellings, with the alias rule taught by example. A list that long is a
+  wall to scan rather than an answer.
+
 ## [0.6.0] — 2026-09-05
 
 ### Added

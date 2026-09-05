@@ -4,6 +4,27 @@ All notable changes to LPG Modeler are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.1] — 2026-09-05
+
+### Fixed
+
+- **A model you wrote by hand now shows up on the canvas.** Opening the canvas on a model
+  with no layout file beside it drew an empty grid. The canvas could not zoom out far
+  enough to frame a diagram it had just laid out, so it sat in the middle of one, showing
+  a couple of boxes out of thirty and empty grid everywhere else.
+
+- **The canvas keeps the layout it works out for you.** Positions it chose were saved
+  against identifiers that changed on the next read, so the arrangement was lost every
+  time the diagram reloaded, and the layout file filled up with dead entries. It also
+  means the first change you make to a model no longer scatters the boxes you just moved.
+
+- **Valid types are no longer marked broken in the editor.** `INT64[][]`, `NUMERIC(9,2)`
+  and a composite with a size suffix such as `STRUCT(a INT64)[3]` all worked but were
+  underlined as errors.
+
+- **A typo in a type name gives a readable message.** It names the twenty-one types and
+  shows the alias rule by example, instead of listing all sixty accepted spellings.
+
 ## [0.6.0] — 2026-09-05
 
 ### Added
