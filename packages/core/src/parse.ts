@@ -2,7 +2,7 @@ import { parseDocument, Document, isMap, isSeq, isScalar, YAMLMap, Node } from '
 import type { Assertion, Cardinality, Diagnostic, Loc, ScalarType, ValueType } from './ir'
 import {
   ASSERTION_KINDS, CARDINALITY_NAMES, COMPARISON_KINDS, COMPOSITE_TYPE_NAMES,
-  DEFAULT_CARDINALITY, SCALAR_SPELLING_NAMES, canonicalCardinality, parseBound,
+  DEFAULT_CARDINALITY, SCALAR_TYPES, canonicalCardinality, parseBound,
   parsePropertyType, err,
 } from './ir'
 
@@ -150,6 +150,19 @@ function numeric(body: YAMLMap, key: string): Record<string, number> {
   return v === undefined ? {} : { [key]: v }
 }
 
+/**
+ * What an unknown type is measured against. The canonical names rather than every
+ * accepted spelling: sixty aliases in one line is a wall a reader has to scan rather
+ * than an answer. See lat.md/metamodel#Type Spellings.
+ */
+const KNOWN_TYPES = [
+  `Known scalars: ${SCALAR_TYPES.join(', ')}.`,
+  'Each also answers to its GQL or LadybugDB name, so STRING and ZONED_DATETIME work as',
+  'well as string and zoneddatetime, and any of them may take a […], […n] or LIST<…> suffix.',
+  `Composites: ${COMPOSITE_TYPE_NAMES.join(', ')} — written STRUCT(field TYPE, …),`,
+  'MAP(KEY, VALUE), UNION(member TYPE, …) and ARRAY<TYPE, n>.',
+].join(' ')
+
 function parseProps(file: string, owner: YAMLMap, diags: Diagnostic[]): RawProperty[] {
   const propsNode = owner.get('props', true)
   if (!isMap(propsNode)) return []
@@ -170,8 +183,7 @@ function parseProps(file: string, owner: YAMLMap, diags: Diagnostic[]): RawPrope
     }
     const parsed = parsePropertyType(rawType)
     if (!parsed) {
-      diags.push(err('unknown-type',
-        `Property '${name}' has unknown type '${rawType}'. Known types: ${SCALAR_SPELLING_NAMES.join(', ')}, each also as LIST<…> or […], and the composites ${COMPOSITE_TYPE_NAMES.join(', ')}.`, loc))
+      diags.push(err('unknown-type', `Property '${name}' has unknown type '${rawType}'. ${KNOWN_TYPES}`, loc))
       continue
     }
     // `list: true` and a LIST<…> type say the same thing; either is enough.

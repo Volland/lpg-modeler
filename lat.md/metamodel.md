@@ -76,7 +76,9 @@ Every scalar type has at least two accepted spellings: the original lower-case n
 
 Both spellings resolve to the same canonical name in the IR, so nothing downstream has to know which was written. Adopting the standard's vocabulary where it costs nothing means a model reads the way the schema it generates does. The reverse mapping is not total — `uuid` and `json` have no GQL value type and stay reported downgrades, as they already were for RDF.
 
-The set the parser accepts is also the set the JSON Schema offers, checked by a test: a spelling the editor rejects but the CLI takes would make a valid model look broken in the one place most models are written.
+An unknown type is reported against the canonical names, not against every spelling. Listing all sixty aliases is a wall to scan rather than an answer, so the message names the twenty-one scalars once, teaches the alias rule by example — `STRING` alongside `string` — and gives the composite forms as syntax. A test pins the example, because the rule is the part a reader most needs and the part a shortened message most easily drops.
+
+The set the parser accepts is also the set the JSON Schema offers, checked by a test in both directions: a spelling the editor rejects but the CLI takes would make a valid model look broken in the one place most models are written. The schema needs pattern branches as well as an enum, because a parameterised decimal, a stacked suffix like `INT64[][]` and every [[metamodel#Composite Types|composite]] are open sets rather than names.
 
 ## Lists
 

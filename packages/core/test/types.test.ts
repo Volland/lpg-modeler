@@ -209,17 +209,33 @@ describe('composite types', () => {
     }
   })
 
-  it('offers the composite forms in the contributed JSON Schema', () => {
+  // @lat: [[metamodel#Type Spellings]]
+  it('accepts in the JSON Schema exactly what the parser accepts', () => {
+    // A spelling the editor rejects but the CLI takes makes a valid model look broken
+    // in the one place most models are written. The enum branch is pinned by its own
+    // test above; this one covers the pattern branches, in both directions.
     const schema = JSON.parse(readFileSync(join(__dirname, '..', 'schemas', 'lpg.schema.json'), 'utf8'))
-    const patterns = schema.$defs.scalarType.anyOf
+    const branches = schema.$defs.scalarType.anyOf
+    const names = new Set<string>(branches[0].enum)
+    const patterns = branches
       .filter((b: { pattern?: string }) => b.pattern !== undefined)
       .map((b: { pattern: string }) => new RegExp(b.pattern))
-    const accepted = (written: string) => patterns.some((r: RegExp) => r.test(written))
+    const schemaAccepts = (w: string) =>
+      names.has(w) || patterns.some((r: RegExp) => r.test(w))
+
     for (const written of [
+      // Scalars, parameters and both list spellings.
+      'STRING', 'ZONED_DATETIME', 'DECIMAL(18,3)', 'NUMERIC(9,2)', 'STRING[]', 'LIST<STRING>',
+      // Fixed-size arrays, and suffixes stacked — a list of lists is a valid type.
+      'FLOAT[128]', 'ARRAY<FLOAT, 128>', 'INT64[][]', 'STRING[][]', 'FLOAT32[518][2]',
+      'DECIMAL(10,2)[]', 'STRUCT(a INT64)[3]',
+      // Composites, including nesting in both directions.
       'STRUCT(lat DOUBLE, lon DOUBLE)', 'MAP(STRING, INT64)', 'UNION(a INT64, b STRING)',
-      'ARRAY<FLOAT, 128>', 'FLOAT[128]', 'STRUCT(at TIMESTAMP)[]',
+      'STRUCT(at TIMESTAMP, v DOUBLE[])[]', 'LIST<LIST<STRING>>', 'MAP(STRING, STRUCT(a INT64))',
+      // And things neither should take.
+      'NOPE', 'STRUCT(a INT64', 'INT64[x]', 'STRING(3,1)',
     ]) {
-      expect(accepted(written), written).toBe(true)
+      expect(schemaAccepts(written), written).toBe(parsePropertyType(written) !== undefined)
     }
   })
 })
