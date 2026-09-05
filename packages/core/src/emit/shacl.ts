@@ -1,8 +1,11 @@
 import type {
   Assertion, ConstraintIR, Diagnostic, EdgeTypeIR, EnumIR, ModelIR, NodeTypeIR, PropertyIR,
 } from '../ir'
-import { concreteNodes, describeCardinality, formatBound, findEnum } from '../ir'
-import { downgrade, type Capabilities, type EmitOptions, type EmitResult } from '../capabilities'
+import { concreteNodes, describeCardinality, formatBound, formatValueType, findEnum } from '../ir'
+import {
+  compositeDowngrade, downgrade,
+  type Capabilities, type EmitOptions, type EmitResult,
+} from '../capabilities'
 import { LOSSY_TYPES, XSD, lowerCamel, mapEdge, mapEdges, prefixHeader, term } from './reify'
 
 /**
@@ -22,6 +25,9 @@ export const SHACL_CAPABILITIES: Capabilities = {
   namedConstraints: 'enforced',
   rawPassthrough: true,
   listProps: 'native',
+  // An RDF literal has a datatype, not a shape: a struct or a map would have to be
+  // reified into its own node shape, which is a different metamodel.
+  compositeTypes: 'unsupported',
   enums: 'enforced',
   openTypes: 'native',
   cardinality: 'enforced',
@@ -111,7 +117,10 @@ function propertyShape(
     // an `sh:in ()` that would reject every value.
     if (declared) lines.push(`    sh:in ${valueList(declared)} ;`)
   }
-  if (LOSSY_TYPES.has(p.type)) {
+  if (p.composite) {
+    compositeDowngrade(diags, 'shacl', owner, p, XSD[p.type])
+    lines.push(`    # DOWNGRADE: model type '${formatValueType(p.composite)}' has no RDF datatype; using ${XSD[p.type]}.`)
+  } else if (LOSSY_TYPES.has(p.type)) {
     downgrade(diags, 'shacl', 'downgrade-type',
       `Property '${owner}.${p.name}' has type ${p.type}, which RDF has no dedicated datatype for. Constrained as ${XSD[p.type]}.`,
       p.loc)

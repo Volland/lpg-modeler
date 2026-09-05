@@ -108,7 +108,7 @@
       "description": "Stable element id. Assigned by the tool; never edit or copy it."
     },
     "scalarType": {
-      "description": "A property type. The lower-case names are the original spelling; the upper-case ones are the GQL (ISO/IEC 39075) and LadybugDB spellings of the same type. Matching ignores case and reads an underscore as a space. A decimal may carry parameters, as DECIMAL(18,3). A list is written LIST<STRING> or STRING[], or with `list: true`.",
+      "description": "A property type. The lower-case names are the original spelling; the upper-case ones are the GQL (ISO/IEC 39075) and LadybugDB spellings of the same type. Matching ignores case and reads an underscore as a space. A decimal may carry parameters, as DECIMAL(18,3). A list is written LIST<STRING> or STRING[], or with `list: true`. LadybugDB's composites nest: a fixed-size array as FLOAT[128] or ARRAY<FLOAT, 128>, a record as STRUCT(a INT64, b STRING), a map as MAP(STRING, INT64), and a sum as UNION(num INT64, str STRING).",
       "anyOf": [
         {
           "enum": [
@@ -181,6 +181,16 @@
         {
           "type": "string",
           "pattern": "^([Ll][Ii][Ss][Tt]\\s*<[^>]+>|[^\\[\\]]+\\[\\s*\\]|[Dd][Ee][Cc][Ii][Mm][Aa][Ll]\\s*\\(\\s*[0-9]+\\s*,\\s*[0-9]+\\s*\\))$"
+        },
+        {
+          "type": "string",
+          "pattern": "^\\s*([Ss][Tt][Rr][Uu][Cc][Tt]|[Mm][Aa][Pp]|[Uu][Nn][Ii][Oo][Nn]|[Aa][Rr][Rr][Aa][Yy]|[Ll][Ii][Ss][Tt])\\s*[(<].*[)>](\\s*\\[\\s*[0-9]*\\s*\\])*\\s*$",
+          "description": "A composite type: STRUCT(field TYPE, …), MAP(KEY, VALUE), UNION(member TYPE, …), ARRAY<TYPE, n> or LIST<TYPE>, with optional [] and [n] suffixes."
+        },
+        {
+          "type": "string",
+          "pattern": "^[^\\[\\]]+\\[\\s*[0-9]+\\s*\\]$",
+          "description": "A fixed-size array of a scalar, as FLOAT[128]."
         }
       ]
     },

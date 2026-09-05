@@ -75,6 +75,7 @@ function toProp(p: RawProperty, inheritedFrom?: string): PropertyIR {
     type: p.type,
     ...(p.precision !== undefined ? { precision: p.precision } : {}),
     ...(p.scale !== undefined ? { scale: p.scale } : {}),
+    ...(p.composite ? { composite: p.composite } : {}),
     list: p.list,
     ...(p.enum ? { enum: p.enum } : {}),
     ...(p.min !== undefined ? { min: p.min } : {}),

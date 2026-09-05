@@ -2,7 +2,8 @@ import * as vscode from 'vscode'
 import * as path from 'node:path'
 import {
   DEFAULT_VIEW, addToView, addView, applyEdits, backfillIdEdits, describeCardinality,
-  emit, formatBound, isUnconstrained, parseLayout, parseViews, projectView, pruneLayout,
+  emit, formatBound, formatValueType, isUnconstrained, parseLayout, parseViews, projectView,
+  pruneLayout,
   removeFromView, removeFromViews, renameInViews, resolveModel, serializeLayout,
   serializeViews, setPosition,
   isValidPrefix, newModelSource, sidecarPaths, targetNames, validateModel,
@@ -184,6 +185,7 @@ class Canvas {
       props.map((p) => ({
         id: p.id, name: p.name, type: p.type, required: p.required, unique: p.unique,
         isKey: key.includes(p.name), list: p.list,
+        ...(p.composite ? { composite: formatValueType(p.composite) } : {}),
         ...(p.precision !== undefined ? { precision: p.precision } : {}),
         ...(p.scale !== undefined ? { scale: p.scale } : {}),
         ...(p.enum ? { enum: p.enum } : {}),

@@ -210,7 +210,267 @@ export function endpointIsSingular(c: Cardinality): { from: boolean; to: boolean
   return { from: c.from.max === 1, to: c.to.max === 1 }
 }
 
-/** A property type as written: the scalar, its parameters, and whether it is a list. */
+/**
+ * A field of a `STRUCT` or a member of a `UNION`: a name and the type it carries.
+ * See lat.md/metamodel#Composite Types.
+ */
+export interface TypeField {
+  name: string
+  type: ValueType
+}
+
+/**
+ * A value type as written on a property. A scalar and a list of scalars are what every
+ * target can hold; the rest are LadybugDB's composites, which nest arbitrarily and
+ * which only the ladybug target stores. See lat.md/metamodel#Composite Types.
+ */
+export type ValueType =
+  | { kind: 'scalar'; scalar: ScalarType; precision?: number; scale?: number }
+  /** A variable-size list: `STRING[]` or `LIST<STRING>`. */
+  | { kind: 'list'; of: ValueType }
+  /** A fixed-size array: `FLOAT[128]` or `ARRAY<FLOAT, 128>`. */
+  | { kind: 'array'; of: ValueType; size: number }
+  | { kind: 'struct'; fields: TypeField[] }
+  | { kind: 'map'; key: ValueType; value: ValueType }
+  | { kind: 'union'; members: TypeField[] }
+
+/** The composite keywords, for messages and for the schema the editor completes from. */
+export const COMPOSITE_TYPE_NAMES: readonly string[] = ['ARRAY', 'STRUCT', 'MAP', 'UNION']
+
+/**
+ * A type is simple when it is a scalar or a variable-size list of one: exactly the
+ * shapes every target could already hold before composites existed. Everything else is
+ * composite, including a list of lists, and travels on `PropertyIR.composite`.
+ */
+export function isSimpleType(t: ValueType): boolean {
+  return t.kind === 'scalar' || (t.kind === 'list' && t.of.kind === 'scalar')
+}
+
+/** The scalar a type ultimately holds, when every value in it is the same scalar. */
+export function elementScalar(t: ValueType): ScalarType | undefined {
+  if (t.kind === 'scalar') return t.scalar
+  if (t.kind === 'list' || t.kind === 'array') return elementScalar(t.of)
+  return undefined
+}
+
+/** Whether the outermost node holds many values, which is what a list marker means. */
+export function holdsMany(t: ValueType): boolean {
+  return t.kind === 'list' || t.kind === 'array'
+}
+
+/** Every type node in a tree, outermost first, so a check can look at all of them. */
+export function walkType(t: ValueType): ValueType[] {
+  switch (t.kind) {
+    case 'scalar': return [t]
+    case 'list': case 'array': return [t, ...walkType(t.of)]
+    case 'map': return [t, ...walkType(t.key), ...walkType(t.value)]
+    case 'struct': return [t, ...t.fields.flatMap((f) => walkType(f.type))]
+    case 'union': return [t, ...t.members.flatMap((f) => walkType(f.type))]
+  }
+}
+
+/**
+ * Spell a type the way LadybugDB writes it. The scalar names are passed in rather than
+ * fixed, so the ladybug target gets its own column types and a diagnostic gets the
+ * canonical model names the file was written with.
+ */
+export function formatValueType(t: ValueType, spell: (s: ScalarType) => string = (s) => s): string {
+  const field = (f: TypeField) => `${f.name} ${formatValueType(f.type, spell)}`
+  switch (t.kind) {
+    case 'scalar': return `${spell(t.scalar)}${typeParams(t)}`
+    case 'list': return `${formatValueType(t.of, spell)}[]`
+    case 'array': return `${formatValueType(t.of, spell)}[${t.size}]`
+    case 'map': return `MAP(${formatValueType(t.key, spell)}, ${formatValueType(t.value, spell)})`
+    case 'struct': return `STRUCT(${t.fields.map(field).join(', ')})`
+    case 'union': return `UNION(${t.members.map(field).join(', ')})`
+  }
+}
+
+type Token = { t: 'word'; v: string } | { t: 'num'; v: number } | { t: 'punct'; v: string }
+
+/**
+ * A composite type nests, so it cannot be read with a regular expression the way a bare
+ * scalar could. The grammar is small enough that a hand-written reader is shorter than
+ * pulling in a parser: words, numbers and the six punctuation marks the forms use.
+ */
+function tokenize(written: string): Token[] | undefined {
+  const out: Token[] = []
+  let i = 0
+  while (i < written.length) {
+    const c = written[i]!
+    if (/\s/.test(c)) { i += 1; continue }
+    if (/[A-Za-z_]/.test(c)) {
+      let j = i
+      while (j < written.length && /[A-Za-z0-9_]/.test(written[j]!)) j += 1
+      out.push({ t: 'word', v: written.slice(i, j) })
+      i = j
+      continue
+    }
+    if (/[0-9]/.test(c)) {
+      let j = i
+      while (j < written.length && /[0-9]/.test(written[j]!)) j += 1
+      out.push({ t: 'num', v: Number(written.slice(i, j)) })
+      i = j
+      continue
+    }
+    if ('()<>[],'.includes(c)) { out.push({ t: 'punct', v: c }); i += 1; continue }
+    return undefined
+  }
+  return out
+}
+
+/** Recursive-descent reader over the token stream. Returns undefined on anything unexpected. */
+class TypeReader {
+  private at = 0
+
+  constructor(private readonly toks: Token[]) {}
+
+  private peek(offset = 0): Token | undefined { return this.toks[this.at + offset] }
+
+  private punct(v: string): boolean {
+    const t = this.peek()
+    if (t?.t === 'punct' && t.v === v) { this.at += 1; return true }
+    return false
+  }
+
+  private word(): string | undefined {
+    const t = this.peek()
+    if (t?.t !== 'word') return undefined
+    this.at += 1
+    return t.v
+  }
+
+  private number(): number | undefined {
+    const t = this.peek()
+    if (t?.t !== 'num') return undefined
+    this.at += 1
+    return t.v
+  }
+
+  done(): boolean { return this.at >= this.toks.length }
+
+  /** `LIST<STRING NOT NULL>` is how GQL spells a list of non-null values. */
+  private skipNotNull(): void {
+    const a = this.peek()
+    const b = this.peek(1)
+    if (a?.t === 'word' && a.v.toUpperCase() === 'NOT' && b?.t === 'word' && b.v.toUpperCase() === 'NULL') {
+      this.at += 2
+    }
+  }
+
+  /** A type with its `[]` and `[n]` suffixes applied outward. */
+  type(): ValueType | undefined {
+    let base = this.base()
+    if (!base) return undefined
+    for (;;) {
+      if (!this.punct('[')) break
+      const size = this.number()
+      if (!this.punct(']')) return undefined
+      base = size === undefined ? { kind: 'list', of: base } : { kind: 'array', of: base, size }
+    }
+    this.skipNotNull()
+    return base
+  }
+
+  private fields(): TypeField[] | undefined {
+    const out: TypeField[] = []
+    do {
+      const name = this.word()
+      if (name === undefined) return undefined
+      const type = this.type()
+      if (!type) return undefined
+      out.push({ name, type })
+    } while (this.punct(','))
+    return out.length > 0 ? out : undefined
+  }
+
+  private base(): ValueType | undefined {
+    const head = this.peek()
+    if (head?.t !== 'word') return undefined
+    switch (head.v.toUpperCase()) {
+      case 'STRUCT': case 'UNION': {
+        this.at += 1
+        if (!this.punct('(')) return undefined
+        const fields = this.fields()
+        if (!fields || !this.punct(')')) return undefined
+        return head.v.toUpperCase() === 'STRUCT'
+          ? { kind: 'struct', fields }
+          : { kind: 'union', members: fields }
+      }
+      case 'MAP': {
+        this.at += 1
+        if (!this.punct('(')) return undefined
+        const key = this.type()
+        if (!key || !this.punct(',')) return undefined
+        const value = this.type()
+        if (!value || !this.punct(')')) return undefined
+        return { kind: 'map', key, value }
+      }
+      case 'ARRAY': {
+        this.at += 1
+        if (!this.punct('<')) return undefined
+        const of = this.type()
+        if (!of || !this.punct(',')) return undefined
+        const size = this.number()
+        if (size === undefined || !this.punct('>')) return undefined
+        return { kind: 'array', of, size }
+      }
+      case 'LIST': {
+        this.at += 1
+        if (!this.punct('<')) return undefined
+        const of = this.type()
+        if (!of || !this.punct('>')) return undefined
+        return { kind: 'list', of }
+      }
+      default:
+        return this.scalar()
+    }
+  }
+
+  /**
+   * A scalar, greedily: two words first, because `ZONED DATETIME` and `LOCAL DATETIME`
+   * are spelled with a space. Only `decimal` then takes a `(precision, scale)`.
+   */
+  private scalar(): ValueType | undefined {
+    const a = this.peek()
+    const b = this.peek(1)
+    let scalar: ScalarType | undefined
+    if (a?.t === 'word' && b?.t === 'word') {
+      scalar = canonicalScalar(`${a.v} ${b.v}`)
+      if (scalar) this.at += 2
+    }
+    if (!scalar) {
+      if (a?.t !== 'word') return undefined
+      scalar = canonicalScalar(a.v)
+      if (!scalar) return undefined
+      this.at += 1
+    }
+    if (!this.punct('(')) return { kind: 'scalar', scalar }
+    // A precision on anything but a decimal reads better as an unknown type than as a
+    // silently ignored parameter.
+    if (scalar !== 'decimal') return undefined
+    const precision = this.number()
+    if (precision === undefined || !this.punct(',')) return undefined
+    const scale = this.number()
+    if (scale === undefined || !this.punct(')')) return undefined
+    return { kind: 'scalar', scalar, precision, scale }
+  }
+}
+
+/** Read a type as written in a model file, scalar or composite, or fail. */
+export function parseValueType(written: string): ValueType | undefined {
+  const toks = tokenize(written)
+  if (!toks || toks.length === 0) return undefined
+  const reader = new TypeReader(toks)
+  const type = reader.type()
+  return type && reader.done() ? type : undefined
+}
+
+/**
+ * A property type as written: the scalar, its parameters, and whether it is a list.
+ * A composite additionally carries the whole type, and `type` is then the scalar the
+ * targets without composites keep. See lat.md/metamodel#Composite Types.
+ */
 export interface ParsedType {
   type: ScalarType
   list: boolean
@@ -218,39 +478,39 @@ export interface ParsedType {
   precision?: number
   /** Digits after the point of a `decimal`. */
   scale?: number
+  /** The whole type, present only when it is composite. */
+  composite?: ValueType
 }
 
 /**
- * A scalar with its parameters, e.g. `DECIMAL(18, 3)`. Only `decimal` takes any: a
- * precision on anything else is a mistake, and reads better as an unknown type than as
- * a silently ignored parameter.
+ * The scalar a composite degrades to on a target that cannot hold it. A struct, a map
+ * and a union have no single element type, so they keep `json` — the one scalar in the
+ * set that already stands for "a value with structure inside it".
  */
-function parseScalar(written: string): Omit<ParsedType, 'list'> | undefined {
-  const params = /^(.+?)\s*\(\s*(\d+)\s*,\s*(\d+)\s*\)$/.exec(written.trim())
-  if (params) {
-    const base = canonicalScalar(params[1]!)
-    if (base !== 'decimal') return undefined
-    return { type: base, precision: Number(params[2]), scale: Number(params[3]) }
-  }
-  const scalar = canonicalScalar(written)
-  return scalar ? { type: scalar } : undefined
-}
+const COMPOSITE_FALLBACK: ScalarType = 'json'
 
 /**
- * Resolve a property type as written. Accepts the GQL `LIST<STRING>` form and the
- * bracket form `STRING[]` alongside a bare scalar name.
+ * Resolve a property type as written. Accepts a bare scalar, the GQL `LIST<STRING>` and
+ * bracket `STRING[]` forms, and LadybugDB's `ARRAY`, `STRUCT`, `MAP` and `UNION`.
  */
 export function parsePropertyType(written: string): ParsedType | undefined {
-  const trimmed = written.trim()
-  const listed = /^LIST\s*<(.+)>$/i.exec(trimmed) ?? /^(.+?)\s*\[\s*\]$/.exec(trimmed)
-  if (listed) {
-    // `LIST<STRING NOT NULL>` is how GQL spells a list of non-null values; the
-    // nullability of the element is not something this metamodel carries.
-    const inner = parseScalar(listed[1]!.replace(/\s+NOT\s+NULL$/i, ''))
-    return inner ? { ...inner, list: true } : undefined
+  const type = parseValueType(written)
+  if (!type) return undefined
+  if (isSimpleType(type)) {
+    const inner = type.kind === 'list' ? type.of : type
+    if (inner.kind !== 'scalar') return undefined
+    return {
+      type: inner.scalar,
+      list: type.kind === 'list',
+      ...(inner.precision !== undefined ? { precision: inner.precision } : {}),
+      ...(inner.scale !== undefined ? { scale: inner.scale } : {}),
+    }
   }
-  const scalar = parseScalar(trimmed)
-  return scalar ? { ...scalar, list: false } : undefined
+  return {
+    type: elementScalar(type) ?? COMPOSITE_FALLBACK,
+    list: holdsMany(type),
+    composite: type,
+  }
 }
 
 /** A decimal's `(precision, scale)` suffix, for the targets that spell one. */
@@ -319,6 +579,12 @@ export interface PropertyIR {
   maxLength?: number
   /** Whether the property holds a list of its type rather than a single value. */
   list: boolean
+  /**
+   * The whole type when it is composite, which `type` and `list` cannot describe: they
+   * then say only what a target without composites keeps. See
+   * lat.md/metamodel#Composite Types.
+   */
+  composite?: ValueType
   /** Name of the enum constraining this property's values. See lat.md/metamodel#Enums. */
   enum?: string
   required: boolean

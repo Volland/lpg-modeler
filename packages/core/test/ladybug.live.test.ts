@@ -149,4 +149,39 @@ describe('ladybug emitter, executed', () => {
     const r = await conn.query('MATCH ()-[o:OWNS]->() RETURN count(o) AS n')
     expect((await r.getAll())[0]?.n).toBe(2)
   })
+
+  // @lat: [[emitters#Composite Types]]
+  it('creates every composite column with the type it was written as', async () => {
+    const conn = await connect()
+    await conn.query(emit(loadFixture('composites.lpg.yaml'), 'ladybug').content)
+    const r = await conn.query('CALL TABLE_INFO("Sensor") RETURN name, type')
+    const columns = new Map((await r.getAll()).map((row: Record<string, unknown>) =>
+      [row.name as string, row.type as string]))
+    // LadybugDB reports the column type back, so this proves the composite reached the
+    // catalogue intact rather than merely that the DDL parsed.
+    expect(columns.get('embedding')).toBe('DOUBLE[128]')
+    expect(columns.get('rgb')).toBe('UINT8[3]')
+    expect(columns.get('location')).toBe('STRUCT(lat DOUBLE, lon DOUBLE, label STRING)')
+    expect(columns.get('tags')).toBe('MAP(STRING, STRING)')
+    expect(columns.get('reading')).toBe('UNION(num DOUBLE, text STRING)')
+    expect(columns.get('history')).toBe('STRUCT(at TIMESTAMP, values DOUBLE[])[]')
+    expect(columns.get('grid')).toBe('INT64[][]')
+  })
+
+  // @lat: [[emitters#Composite Types]]
+  it('stores and reads back a struct and a map value', async () => {
+    const conn = await connect()
+    await conn.query(emit(loadFixture('composites.lpg.yaml'), 'ladybug').content)
+    await conn.query(`CREATE (:Sensor {
+      id: 's1',
+      location: {lat: 1.5, lon: 2.5, label: 'dock'},
+      tags: map(['unit'], ['celsius'])
+    })`)
+    const r = await conn.query(
+      "MATCH (s:Sensor) RETURN s.location.label AS label, map_extract(s.tags, 'unit')[1] AS unit")
+    const row = (await r.getAll())[0] as Record<string, unknown>
+    expect(row.label).toBe('dock')
+    expect(row.unit).toBe('celsius')
+  })
+
 })

@@ -1,0 +1,29 @@
+# Every composite the metamodel has, in one model: a fixed-size array in both spellings,
+# a struct, a map, a union, and the two directions composites nest in. The scalar and
+# list types live in types.lpg.yaml; this file is only about what nests.
+lpg: "1.0"
+namespace:
+  prefix: comp
+  iri: https://example.org/vocab/comp#
+
+nodes:
+  Sensor:
+    id: n_sensor
+    key: [id]
+    props:
+      id:        { id: p_id, type: string, required: true }
+      embedding: { id: p_emb, type: "FLOAT[128]" }
+      rgb:       { id: p_rgb, type: "ARRAY<UINT8, 3>" }
+      location:  { id: p_loc, type: "STRUCT(lat DOUBLE, lon DOUBLE, label STRING)" }
+      tags:      { id: p_tags, type: "MAP(STRING, STRING)" }
+      reading:   { id: p_read, type: "UNION(num DOUBLE, text STRING)" }
+      history:   { id: p_hist, type: "STRUCT(at TIMESTAMP, values DOUBLE[])[]" }
+      grid:      { id: p_grid, type: "INT64[][]" }
+
+edges:
+  CALIBRATED_BY:
+    id: e_cal
+    from: Sensor
+    to: Sensor
+    props:
+      offsets: { id: p_off, type: "MAP(STRING, DECIMAL(10,2))" }

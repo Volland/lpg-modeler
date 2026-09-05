@@ -1,5 +1,5 @@
-import type { Diagnostic, Loc, ModelIR } from './ir'
-import { hasValueConstraints } from './ir'
+import type { Diagnostic, Loc, ModelIR, PropertyIR } from './ir'
+import { formatValueType, hasValueConstraints } from './ir'
 
 /**
  * What a target can express. The compiler compares a model against this and reports
@@ -23,6 +23,11 @@ export interface Capabilities {
   nestedEdges: boolean
   /** Whether a property may hold a list of values. */
   listProps: 'native' | 'unsupported'
+  /**
+   * Whether a property may hold a composite value — a struct, a map, a union, a
+   * fixed-size array, or a nesting of them. See lat.md/metamodel#Composite Types.
+   */
+  compositeTypes: 'native' | 'unsupported'
   /**
    * Whether an enumerated value set is enforced, merely written down where a reader
    * will see it, or has nowhere to go at all.
@@ -70,6 +75,21 @@ export function downgrade(
   into: Diagnostic[], target: string, code: string, message: string, loc?: Loc,
 ): void {
   into.push({ severity: 'warning', code, message, target, ...(loc ? { loc } : {}) })
+}
+
+/**
+ * Report a composite type the target has no equivalent for, naming what survives. Only
+ * LadybugDB stores one; everywhere else the property keeps its element scalar and its
+ * list marker, and the shape inside is lost. Reported in one place so the six targets
+ * that carry none of them cannot drift apart in what they say.
+ * See lat.md/emitters#Composite Types.
+ */
+export function compositeDowngrade(
+  into: Diagnostic[], target: string, owner: string, p: PropertyIR, as: string,
+): void {
+  downgrade(into, target, 'downgrade-composite',
+    `Property '${owner}.${p.name}' has composite type ${formatValueType(p.composite!)}, which ${target} has no equivalent for. Declared as ${as}; the structure inside it is not carried.`,
+    p.loc)
 }
 
 /**

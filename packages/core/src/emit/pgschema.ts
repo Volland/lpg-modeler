@@ -1,7 +1,9 @@
 import type { Diagnostic, EdgeTypeIR, ModelIR, MixinIR, NodeTypeIR, PropertyIR } from '../ir'
-import { GQL_TYPES, describeCardinality, isUnconstrained, typeParams } from '../ir'
 import {
-  downgrade, reportUnsupportedConstraints,
+  GQL_TYPES, describeCardinality, formatValueType, isUnconstrained, typeParams,
+} from '../ir'
+import {
+  compositeDowngrade, downgrade, reportUnsupportedConstraints,
   type Capabilities, type EmitOptions, type EmitResult,
 } from '../capabilities'
 import { lowerCamel } from './reify'
@@ -25,6 +27,8 @@ export const PGSCHEMA_CAPABILITIES: Capabilities = {
   namedConstraints: 'unsupported',
   rawPassthrough: false,
   listProps: 'native',
+  // PG-Schema borrows GQL's value types, which stop at scalars and lists of them.
+  compositeTypes: 'unsupported',
   enums: 'unsupported',
   openTypes: 'native',
   cardinality: 'unsupported',
@@ -45,7 +49,9 @@ function propertyList(
   owner: string, props: PropertyIR[], diags: Diagnostic[],
 ): string {
   return props.map((p) => {
-    if (LOSSY_TYPES.has(p.type)) {
+    if (p.composite) {
+      compositeDowngrade(diags, 'pgschema', owner, p, valueType(p))
+    } else if (LOSSY_TYPES.has(p.type)) {
       downgrade(diags, 'pgschema', 'downgrade-type',
         `Property '${owner}.${p.name}' has type ${p.type}, which PG-Schema has no dedicated type for. Declared as ${GQL_TYPES[p.type]}.`,
         p.loc)

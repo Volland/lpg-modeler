@@ -1,7 +1,7 @@
 import type { Diagnostic, ModelIR, PropertyIR } from '../ir'
 import { describeCardinality, findEnum, isUnconstrained } from '../ir'
 import {
-  downgrade, reportUnsupportedConstraints,
+  compositeDowngrade, downgrade, reportUnsupportedConstraints,
   type Capabilities, type EmitOptions, type EmitResult,
 } from '../capabilities'
 import { LOSSY_TYPES, XSD, mapEdges, prefixHeader, term } from './reify'
@@ -24,6 +24,8 @@ export const OWL_CAPABILITIES: Capabilities = {
   namedConstraints: 'unsupported',
   rawPassthrough: false,
   listProps: 'native',
+  // An RDF literal has a datatype, not a shape; a composite has nowhere to go.
+  compositeTypes: 'unsupported',
   enums: 'enforced',
   // OWL is open-world by construction, so closure is not something it can assert.
   openTypes: 'always-open',
@@ -98,7 +100,9 @@ export function emitOwl(model: ModelIR, _options: EmitOptions = {}): EmitResult 
       if (declared.has(t)) continue
       declared.add(t)
       parts.push(`${t} a owl:DatatypeProperty ; rdfs:label "${p.name}" ; rdfs:range ${rangeOf(p)} .`)
-      if (LOSSY_TYPES.has(p.type)) {
+      if (p.composite) {
+        compositeDowngrade(diagnostics, 'owl', node.name, p, XSD[p.type])
+      } else if (LOSSY_TYPES.has(p.type)) {
         downgrade(diagnostics, 'owl', 'downgrade-type',
           `Property '${node.name}.${p.name}' has type ${p.type}, which RDF has no dedicated datatype for. Declared as ${XSD[p.type]}.`,
           p.loc)

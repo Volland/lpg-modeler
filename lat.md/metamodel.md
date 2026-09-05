@@ -50,7 +50,7 @@ A property takes one of twenty-one scalars: five integer widths and four unsigne
 
 The set is what LadybugDB stores natively, minus what is not a value type. Taking the primary target's own vocabulary as the ceiling means an attribute a model can write is an attribute that target can hold without a downgrade, while every other target either has the type or says honestly that it does not: RDF names all of them but `uuid` and `json`, GQL carries the same, and LinkML collapses the widths onto one `integer` and reports `duration` and `blob`. See [[emitters#Capability Matrix]].
 
-Three things LadybugDB has are deliberately not types here. `SERIAL` is a generated value rather than a value type, and the metamodel has no notion of a generated column. `TIMESTAMP_NS`, `TIMESTAMP_MS` and `TIMESTAMP_SEC` are storage precisions of one instant, not distinct types. `STRUCT`, `MAP`, `UNION` and the fixed-size `ARRAY` are composite: admitting them means a nested type syntax in the file format and a reification path in every RDF emitter, which is work on the scale of [[metamodel#Composition]] rather than a row in a type table.
+Two things LadybugDB has are deliberately not types here. `SERIAL` is a generated value rather than a value type, and the metamodel has no notion of a generated column. `TIMESTAMP_NS`, `TIMESTAMP_MS` and `TIMESTAMP_SEC` are storage precisions of one instant, not distinct types. LadybugDB's composites are admitted, but as a separate shape rather than a row in this table — see [[metamodel#Composite Types]].
 
 ### Parameters
 
@@ -83,6 +83,28 @@ The set the parser accepts is also the set the JSON Schema offers, checked by a 
 A property may hold a list of its type rather than a single value, written `list: true`, or as the GQL `LIST<STRING>` or the bracket form `STRING[]`. All three say the same thing.
 
 Lists were admitted because every target already has them: LadybugDB stores a `STRING[]` column, Neo4j stores arrays natively, GQL and PG-Schema spell the type `LIST<…>`, and LinkML calls it `multivalued`. Nothing has to be downgraded to carry one. A list may not take part in a key — see [[metamodel#Identity]] — because a key has to identify one node and a list of values cannot.
+
+## Composite Types
+
+A property may hold a composite value: a fixed-size `ARRAY`, a `STRUCT` of named fields, a `MAP` from a scalar key to a value, or a `UNION` of named members. They nest, in any combination and to any depth.
+
+They were admitted because LadybugDB stores all four natively and models written for it were losing them at the door. The metamodel's type set was drawn from that engine to begin with — see [[metamodel#Scalar Types]] — and stopping short of its composites meant a schema the tool could not describe was still a schema the tool's primary target would run.
+
+The syntax is LadybugDB's own, so a model reads the way the DDL it generates does: `STRUCT(lat DOUBLE, lon DOUBLE)`, `MAP(STRING, INT64)`, `UNION(num INT64, text STRING)`, and `FLOAT[128]` for a fixed-size array, which is also spelled `ARRAY<FLOAT, 128>`. The `[]` and `[n]` suffixes apply outward, so `STRUCT(at TIMESTAMP)[]` is a list of structs. In YAML the type has to be quoted, since a comma would otherwise end the mapping it sits in.
+
+A composite nests, so it cannot be read with a regular expression the way a bare scalar can. The parser is a hand-written recursive-descent reader over a small token stream, which is shorter than the grammar would be if the forms were kept flat and separate.
+
+### What a Composite May Not Do
+
+A composite property cannot be part of a key, cannot reference an [[metamodel#Enums|enum]], and takes no [[metamodel#Value Constraints|value constraints]].
+
+The reason is the same in each case: those things are defined on one scalar value, and a composite is not one. A key is a scalar column in every target that has a key at all, an enum constrains string values, and a bound compares two values of one ordered type. Three further rules are internal to the type rather than target-specific — a `STRUCT` or `UNION` may not name a field twice, a fixed-size array holds at least one element, and a map key must be a scalar — because none of them is writable in LadybugDB itself.
+
+### Degradation
+
+A composite property also carries the scalar it degrades to on a target that has no composites: the element scalar when every value inside it is the same scalar, and `json` otherwise.
+
+This is what lets the six other targets keep behaving as they did without knowing the composite shape at all. A `UINT8[3]` degrades to a list of `UINT8`, so GQL still writes `LIST<UINT8>` and only the fixed size is reported lost; a `STRUCT` has no single element type, so it keeps `json` — the one scalar in the set that already stands for a value with structure inside it. The degradation is recorded once, in the parser, rather than reinvented per emitter. See [[emitters#Composite Types]].
 
 ## Enums
 

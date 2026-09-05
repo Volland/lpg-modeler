@@ -12,6 +12,11 @@ export interface WireProperty {
   isKey: boolean
   /** Whether the property holds a list of its type. */
   list: boolean
+  /**
+   * The whole type, already spelled out, when it is composite. `type` and `list` then
+   * say only what a target without composites keeps, so this is what the canvas shows.
+   */
+  composite?: string
   /** Name of the enum constraining its values, if any. */
   enum?: string
   /** Bounds and shape on the value. See lat.md/metamodel#Value Constraints. */
@@ -101,8 +106,12 @@ export interface WireScalar {
   facets: 'ordered' | 'text' | 'none'
 }
 
-/** How a property's type reads: the scalar, its parameters, and its list marker. */
+/**
+ * How a property's type reads: the scalar, its parameters, and its list marker, or the
+ * composite spelled out whole.
+ */
 export function displayType(p: WireProperty): string {
+  if (p.composite) return p.composite
   const params = p.precision !== undefined && p.scale !== undefined
     ? `(${p.precision},${p.scale})` : ''
   return `${p.type}${params}${p.list ? '[]' : ''}`

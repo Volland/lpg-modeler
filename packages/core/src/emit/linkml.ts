@@ -1,9 +1,9 @@
 import type { Diagnostic, EdgeTypeIR, ModelIR, NodeTypeIR, PropertyIR, ScalarType } from '../ir'
 import {
-  constraintDowngrade, downgrade,
+  compositeDowngrade, constraintDowngrade, downgrade,
   type Capabilities, type EmitOptions, type EmitResult,
 } from '../capabilities'
-import { describeCardinality, endpointIsSingular } from '../ir'
+import { describeCardinality, endpointIsSingular, formatValueType } from '../ir'
 import { collectPrefixes, mapEdges, term, type EdgeMapping } from './reify'
 
 /**
@@ -29,6 +29,8 @@ export const LINKML_CAPABILITIES: Capabilities = {
   namedConstraints: 'unsupported',
   rawPassthrough: false,
   listProps: 'native',
+  // A LinkML range is a type name, and there is no anonymous record or map among them.
+  compositeTypes: 'unsupported',
   enums: 'enforced',
   openTypes: 'unsupported',
   cardinality: 'enforced',
@@ -59,7 +61,10 @@ function attribute(
   owner: string, ownerPrefix: string, p: PropertyIR, isIdentifier: boolean, diags: Diagnostic[],
 ): string[] {
   const lines: string[] = []
-  if (LOSSY_TYPES.has(p.type)) {
+  if (p.composite) {
+    compositeDowngrade(diags, 'linkml', owner, p, RANGES[p.type])
+    lines.push(`        # DOWNGRADE: model type '${formatValueType(p.composite)}' has no LinkML range; using ${RANGES[p.type]}.`)
+  } else if (LOSSY_TYPES.has(p.type)) {
     downgrade(diags, 'linkml', 'downgrade-type',
       `Property '${owner}.${p.name}' has type ${p.type}, which LinkML has no dedicated range for. Declared as ${RANGES[p.type]}.`,
       p.loc)

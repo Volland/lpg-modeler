@@ -6,7 +6,7 @@ An emitter turns the resolved intermediate representation into an artifact for o
 
 Each emitter publishes a typed capability set. The compiler computes which capabilities a model requires and reports every downgrade as an editor diagnostic, with per-target configurable severity.
 
-The set covers the hierarchy, identity, and edge properties, plus [[metamodel#Lists|lists]], [[metamodel#Enums]], [[metamodel#Open and Closed Types|openness]], and [[metamodel#Cardinality]].
+The set covers the hierarchy, identity, and edge properties, plus [[metamodel#Lists|lists]], [[metamodel#Composite Types|composites]], [[metamodel#Enums]], [[metamodel#Open and Closed Types|openness]], and [[metamodel#Cardinality]].
 
 A downgrade is reported only when a model actually uses the feature. A target that cannot enforce closure says so in the capability set, but does not raise a diagnostic on every closed type, which would be noise on every model rather than information.
 
@@ -25,6 +25,8 @@ LadybugDB, formerly Kuzu, is an embedded Cypher property graph database with a m
 An abstract hierarchy is flattened to one node table per concrete leaf type, with inherited columns copied down. The cost is that an edge declared on an abstract endpoint expands to a cross-product of endpoint pairs, and adding a subtype becomes a schema migration.
 
 Every scalar in [[metamodel#Scalar Types]] is a native column type here, which is not a coincidence: the metamodel's type set was drawn from what this engine stores. The integer widths, the unsigned variants, `DECIMAL` with its parameters, `INTERVAL`, `BLOB` and `JSON` all exist, so this target reports no type downgrade at all. Measured against 0.19.1, `json` is a real column type that reads back as a value rather than as text, where it used to be stored as `STRING`.
+
+Its [[metamodel#Composite Types|composites]] are native here too, and only here: `STRUCT`, `MAP`, `UNION` and the fixed-size `ARRAY` reach a column exactly as written, nesting included. The execution test reads the column type back out of the catalogue, so it proves the type survived rather than only that the DDL parsed.
 
 Two more features are carried natively. A [[metamodel#Lists|list]] property becomes a `STRING[]` column, and [[metamodel#Cardinality]] becomes the trailing multiplicity keyword — `MANY_ONE` and its siblings — which, measured against a running instance, really is rejected on write. It is one of the few constraints this target enforces rather than reports.
 
@@ -113,6 +115,16 @@ An [[metamodel#Enums|enum]] is the one constraint that does cross over, as an OW
 An edge with no properties becomes a plain object property. An edge that carries properties becomes an n-ary relation class plus a shortcut property, and its SHACL shape targets that class.
 
 Reifying only what needs it follows the treatment of property graphs as accidental metagraphs in the author's work, where edge properties are already implicit reified edges. Staying inside OWL DL keeps reasoners working, at the cost of the graph shape differing between edge types. RDF-star was rejected as the uniform representation because OWL DL reasoners do not handle quoted triples and SHACL cannot constrain them.
+
+## Composite Types
+
+Only the ladybug target stores a [[metamodel#Composite Types|composite]]. The other six report one downgrade per composite property and emit the scalar it degrades to, so a model that uses a struct still generates a usable artifact everywhere else.
+
+The downgrade is raised by one shared reporter rather than per emitter, for the same reason the constraint downgrades are: six targets saying the same thing in six wordings would drift. It is a `warning` rather than the `info` used for constraints, because a property whose structure silently flattens is the surprising kind of loss — the kind the capability matrix exists to surface.
+
+What each target keeps is what it already had a place for. GQL and PG-Schema write the element scalar, wrapped in `LIST<…>` when the composite holds many; LinkML writes the corresponding range with `multivalued`; SHACL and OWL write the XSD datatype. Neo4j has no type DDL at all, so it writes a comment saying the value is unstorable: a Neo4j property is a primitive or an array of primitives, and a struct would have to become its own node, which the model does not say to do.
+
+Reifying a struct into a node shape was the alternative for the RDF targets. It was rejected because it invents graph structure the author did not write — a node with an identity the model never gave it — which is the [[metamodel#Composition]] problem rather than a datatype mapping.
 
 ## Migrations
 

@@ -1,7 +1,47 @@
-import type { Diagnostic, ModelIR } from './ir'
-import { LPG_FORMAT_VERSION, ORDERED_TYPES, TEXT_TYPES, assertionOperands, err, info, warn } from './ir'
+import type { Diagnostic, ModelIR, PropertyIR, ValueType } from './ir'
+import {
+  LPG_FORMAT_VERSION, ORDERED_TYPES, TEXT_TYPES, assertionOperands, elementScalar,
+  formatValueType, walkType, err, info, warn,
+} from './ir'
 import type { ViewDef } from './views'
 import { typesInNoView } from './views'
+
+/**
+ * How a property's type reads in a message: the type as written, so a composite is not
+ * reported under the scalar it happens to degrade to.
+ */
+function describeType(p: PropertyIR): string {
+  return p.composite ? formatValueType(p.composite) : p.type
+}
+
+/**
+ * Rules internal to a composite type. Nothing here is target-specific: a struct with two
+ * fields of the same name, an array of no elements, and a map keyed by a struct are all
+ * unwritable in LadybugDB itself. See lat.md/metamodel#Composite Types.
+ */
+function checkComposite(where: string, t: ValueType, loc: PropertyIR['loc']): Diagnostic[] {
+  const out: Diagnostic[] = []
+  for (const node of walkType(t)) {
+    if (node.kind === 'array' && node.size < 1) {
+      out.push(err('empty-array-type',
+        `Property ${where} declares an array of ${node.size} elements. A fixed-size array holds at least one.`, loc))
+    }
+    if (node.kind === 'map' && elementScalar(node.key) === undefined) {
+      out.push(err('composite-map-key',
+        `Property ${where} keys a map by ${formatValueType(node.key)}. A map key must be a scalar.`, loc))
+    }
+    const fields = node.kind === 'struct' ? node.fields : node.kind === 'union' ? node.members : []
+    const seen = new Set<string>()
+    for (const f of fields) {
+      if (seen.has(f.name)) {
+        out.push(err('duplicate-type-field',
+          `Property ${where} declares '${f.name}' twice inside ${formatValueType(node)}. Field names must be distinct.`, loc))
+      }
+      seen.add(f.name)
+    }
+  }
+  return out
+}
 
 /**
  * Semantic rules that resolution alone does not cover. Structural and reference errors
@@ -36,9 +76,9 @@ export function validateModel(model: ModelIR, views?: ViewDef[]): Diagnostic[] {
           p.loc))
         continue
       }
-      if (p.type !== 'string') {
+      if (p.composite || p.type !== 'string') {
         out.push(err('enum-type-mismatch',
-          `Property '${owner}.${p.name}' references enum '${p.enum}' but has type ${p.type}. An enum constrains string values.`,
+          `Property '${owner}.${p.name}' references enum '${p.enum}' but has type ${describeType(p)}. An enum constrains string values.`,
           p.loc))
       }
     }
@@ -69,6 +109,11 @@ export function validateModel(model: ModelIR, views?: ViewDef[]): Diagnostic[] {
           `Node type '${node.name}' uses list property '${k}' as part of its key. A key must identify one node, which a list of values cannot do.`,
           node.loc))
       }
+      if (keyProp?.composite && !keyProp.list) {
+        out.push(err('composite-key-property',
+          `Node type '${node.name}' uses composite property '${k}' as part of its key. A key is a scalar column in every target that has one.`,
+          node.loc))
+      }
       if (!propNames.has(k)) {
         out.push(err('key-unknown-property',
           `Node type '${node.name}' declares key property '${k}', which it neither declares nor inherits.`,
@@ -82,9 +127,10 @@ export function validateModel(model: ModelIR, views?: ViewDef[]): Diagnostic[] {
   for (const owner of [...model.nodes, ...model.edges]) {
     for (const p of owner.props) {
       const where = `'${owner.name}.${p.name}'`
+      if (p.composite) out.push(...checkComposite(where, p.composite, p.loc))
       if ((p.min !== undefined || p.max !== undefined) && !ORDERED_TYPES.has(p.type)) {
         out.push(err('constraint-type-mismatch',
-          `Property ${where} has a min or max but type ${p.type}, which has no ordering. Bounds apply to the numeric and temporal types: ${[...ORDERED_TYPES].join(', ')}.`,
+          `Property ${where} has a min or max but type ${describeType(p)}, which has no ordering. Bounds apply to the numeric and temporal types: ${[...ORDERED_TYPES].join(', ')}.`,
           p.loc))
       }
       if (p.min !== undefined && p.max !== undefined && p.min > p.max) {
@@ -94,7 +140,7 @@ export function validateModel(model: ModelIR, views?: ViewDef[]): Diagnostic[] {
       const stringOnly = p.pattern !== undefined || p.minLength !== undefined || p.maxLength !== undefined
       if (stringOnly && !TEXT_TYPES.has(p.type)) {
         out.push(err('constraint-type-mismatch',
-          `Property ${where} has a pattern or a length bound but type ${p.type}. Those apply to string.`,
+          `Property ${where} has a pattern or a length bound but type ${describeType(p)}. Those apply to string.`,
           p.loc))
       }
       if (p.minLength !== undefined && p.maxLength !== undefined && p.minLength > p.maxLength) {

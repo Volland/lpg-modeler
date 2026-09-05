@@ -141,7 +141,7 @@
   <h2>Properties</h2>
 <pre><code>email: { type: string, required: true, unique: true }</code></pre>
   <p>Twenty-one scalar types, drawn from what LadybugDB stores natively, so an attribute
-    you can write is one the database can hold:</p>
+    you can write is one the database can hold — plus its composites, below:</p>
   <p>
     <span class="pill pill-off">string</span> <span class="pill pill-off">int8</span> <span class="pill pill-off">int16</span> <span class="pill pill-off">int32</span> <span class="pill pill-off">int</span> <span class="pill pill-off">int128</span> <span class="pill pill-off">uint8</span> <span class="pill pill-off">uint16</span> <span class="pill pill-off">uint32</span> <span class="pill pill-off">uint64</span> <span class="pill pill-off">float32</span> <span class="pill pill-off">float</span> <span class="pill pill-off">decimal</span> <span class="pill pill-off">boolean</span> <span class="pill pill-off">date</span> <span class="pill pill-off">datetime</span> <span class="pill pill-off">zoneddatetime</span> <span class="pill pill-off">duration</span> <span class="pill pill-off">uuid</span> <span class="pill pill-off">blob</span> <span class="pill pill-off">json</span>
   </p>
@@ -179,6 +179,28 @@ tags: { type: STRING[] }            <span class="c-com"># the bracket form</span
     stores arrays natively, GQL and PG-Schema spell the type <code>LIST&lt;…&gt;</code>, and
     LinkML calls it <code>multivalued</code>. A list may not be part of a
     <a href="#ids">key</a> — a key identifies one node, and a list of values cannot.
+  </p>
+
+  <h3>Composite types</h3>
+  <p>
+    A property may also hold one of LadybugDB's composite values. They nest, in any
+    combination and to any depth, and the syntax is the database's own:
+  </p>
+<pre><code>location:  { type: "STRUCT(lat DOUBLE, lon DOUBLE)" }
+tags:      { type: "MAP(STRING, STRING)" }
+reading:   { type: "UNION(num DOUBLE, text STRING)" }
+embedding: { type: "FLOAT[128]" }                      <span class="c-com"># fixed size; also ARRAY&lt;FLOAT, 128&gt;</span>
+history:   { type: "STRUCT(at TIMESTAMP, v DOUBLE[])[]" }</code></pre>
+  <p>
+    Quoted, because a comma would otherwise end the flow mapping. Only the
+    <strong>ladybug</strong> target stores one; every other target reports a downgrade and
+    keeps what it has a place for — a <code>FLOAT[128]</code> becomes a plain
+    <code>LIST&lt;FLOAT&gt;</code> and loses only its size, while a <code>STRUCT</code> has no
+    single element type and falls back to <code>json</code>.
+  </p>
+  <p>
+    A composite may not be part of a <a href="#ids">key</a>, reference an enum, or carry
+    value bounds: each of those is defined on one scalar value, and a composite is not one.
   </p>
 
   <h3>Enums</h3>

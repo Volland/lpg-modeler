@@ -1,7 +1,9 @@
 import type {
   Cardinality, Diagnostic, EdgeTypeIR, ModelIR, NodeTypeIR, PropertyIR, ScalarType,
 } from '../ir'
-import { describeCardinality, endpointIsSingular, isUnconstrained, typeParams } from '../ir'
+import {
+  describeCardinality, endpointIsSingular, formatValueType, isUnconstrained, typeParams,
+} from '../ir'
 import { concreteDescendants, concreteNodes } from '../ir'
 import {
   downgrade, reportUnsupportedConstraints,
@@ -26,6 +28,9 @@ export const LADYBUG_CAPABILITIES: Capabilities = {
   namedConstraints: 'unsupported',
   rawPassthrough: false,
   listProps: 'native',
+  // STRUCT, MAP, UNION and the fixed-size ARRAY are LadybugDB's own composites, so the
+  // whole nested type reaches a column unchanged. No other target has any of them.
+  compositeTypes: 'native',
   // Measured against LadybugDB 0.19.1: rel multiplicity is rejected on write, unlike
   // NOT NULL. The schema is mandatory and closed, and there is no enum type.
   enums: 'unsupported',
@@ -75,8 +80,13 @@ function unexpressible(c: Cardinality): string[] {
   return out
 }
 
-/** A column type, with the `[]` suffix LadybugDB uses for a list. */
-const columnType = (p: PropertyIR) => `${TYPES[p.type]}${typeParams(p)}${p.list ? '[]' : ''}`
+/**
+ * A column type, with the `[]` suffix LadybugDB uses for a list. A composite is spelled
+ * out whole — the target's own syntax is what the metamodel borrowed.
+ */
+const columnType = (p: PropertyIR) => (p.composite
+  ? formatValueType(p.composite, (s) => TYPES[s])
+  : `${TYPES[p.type]}${typeParams(p)}${p.list ? '[]' : ''}`)
 
 /** Column name for a synthesized composite key. */
 export function syntheticKeyColumn(node: NodeTypeIR): string {

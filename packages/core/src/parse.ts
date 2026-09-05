@@ -1,8 +1,9 @@
 import { parseDocument, Document, isMap, isSeq, isScalar, YAMLMap, Node } from 'yaml'
-import type { Assertion, Cardinality, Diagnostic, Loc, ScalarType } from './ir'
+import type { Assertion, Cardinality, Diagnostic, Loc, ScalarType, ValueType } from './ir'
 import {
-  ASSERTION_KINDS, CARDINALITY_NAMES, COMPARISON_KINDS, DEFAULT_CARDINALITY,
-  SCALAR_SPELLING_NAMES, canonicalCardinality, parseBound, parsePropertyType, err,
+  ASSERTION_KINDS, CARDINALITY_NAMES, COMPARISON_KINDS, COMPOSITE_TYPE_NAMES,
+  DEFAULT_CARDINALITY, SCALAR_SPELLING_NAMES, canonicalCardinality, parseBound,
+  parsePropertyType, err,
 } from './ir'
 
 /** The raw shape of a model file, before imports or inheritance are resolved. */
@@ -14,6 +15,8 @@ export interface RawProperty {
   precision?: number
   scale?: number
   list: boolean
+  /** The whole type when it is composite. See lat.md/metamodel#Composite Types. */
+  composite?: ValueType
   enum?: string
   min?: number
   max?: number
@@ -168,7 +171,7 @@ function parseProps(file: string, owner: YAMLMap, diags: Diagnostic[]): RawPrope
     const parsed = parsePropertyType(rawType)
     if (!parsed) {
       diags.push(err('unknown-type',
-        `Property '${name}' has unknown type '${rawType}'. Known types: ${SCALAR_SPELLING_NAMES.join(', ')}, each also as LIST<…> or […].`, loc))
+        `Property '${name}' has unknown type '${rawType}'. Known types: ${SCALAR_SPELLING_NAMES.join(', ')}, each also as LIST<…> or […], and the composites ${COMPOSITE_TYPE_NAMES.join(', ')}.`, loc))
       continue
     }
     // `list: true` and a LIST<…> type say the same thing; either is enough.
@@ -180,6 +183,7 @@ function parseProps(file: string, owner: YAMLMap, diags: Diagnostic[]): RawPrope
       type: parsed.type,
       ...(parsed.precision !== undefined ? { precision: parsed.precision } : {}),
       ...(parsed.scale !== undefined ? { scale: parsed.scale } : {}),
+      ...(parsed.composite ? { composite: parsed.composite } : {}),
       list,
       ...(enumRef ? { enum: enumRef } : {}),
       ...numeric(body, 'min'), ...numeric(body, 'max'),

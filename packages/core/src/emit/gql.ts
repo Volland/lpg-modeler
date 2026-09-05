@@ -1,7 +1,9 @@
 import type { Diagnostic, EdgeTypeIR, ModelIR, NodeTypeIR, PropertyIR } from '../ir'
-import { GQL_TYPES, concreteNodes, describeCardinality, isUnconstrained, typeParams } from '../ir'
 import {
-  downgrade, reportUnsupportedConstraints,
+  GQL_TYPES, concreteNodes, describeCardinality, formatValueType, isUnconstrained, typeParams,
+} from '../ir'
+import {
+  compositeDowngrade, downgrade, reportUnsupportedConstraints,
   type Capabilities, type EmitOptions, type EmitResult,
 } from '../capabilities'
 import { lowerCamel } from './reify'
@@ -28,6 +30,8 @@ export const GQL_CAPABILITIES: Capabilities = {
   namedConstraints: 'unsupported',
   rawPassthrough: false,
   listProps: 'native',
+  // GQL value types are scalars and lists of them; there is no record or map type.
+  compositeTypes: 'unsupported',
   enums: 'unsupported',
   openTypes: 'unsupported',
   cardinality: 'unsupported',
@@ -48,7 +52,10 @@ function propertyEntry(
   owner: string, p: PropertyIR, marker: string, diags: Diagnostic[],
 ): string {
   const lines: string[] = []
-  if (LOSSY_TYPES.has(p.type)) {
+  if (p.composite) {
+    compositeDowngrade(diags, 'gql', owner, p, valueType(p))
+    lines.push(`    // DOWNGRADE: model type '${formatValueType(p.composite)}' has no GQL value type; using ${valueType(p)}.`)
+  } else if (LOSSY_TYPES.has(p.type)) {
     downgrade(diags, 'gql', 'downgrade-type',
       `Property '${owner}.${p.name}' has type ${p.type}, which GQL has no dedicated value type for. Declared as ${GQL_TYPES[p.type]}.`,
       p.loc)

@@ -1,7 +1,7 @@
 import type { Diagnostic, EdgeTypeIR, ModelIR, NodeTypeIR, PropertyIR } from '../ir'
-import { concreteNodes, describeCardinality, isUnconstrained } from '../ir'
+import { concreteNodes, describeCardinality, formatValueType, isUnconstrained } from '../ir'
 import {
-  downgrade, reportUnsupportedConstraints,
+  compositeDowngrade, downgrade, reportUnsupportedConstraints,
   type Capabilities, type EmitOptions, type EmitResult,
 } from '../capabilities'
 
@@ -23,6 +23,9 @@ export const NEO4J_CAPABILITIES: Capabilities = {
   namedConstraints: 'unsupported',
   rawPassthrough: false,
   listProps: 'native',
+  // A Neo4j property value is a primitive or an array of primitives. A struct or a map
+  // has to become its own node, which the model does not say to do.
+  compositeTypes: 'unsupported',
   enums: 'unsupported',
   // Neo4j is schema-optional, so a closed type cannot be enforced either.
   openTypes: 'always-open',
@@ -64,6 +67,11 @@ function nodeConstraints(
   }
 
   for (const p of node.props) {
+    if (p.composite) {
+      compositeDowngrade(diags, 'neo4j', node.name, p, 'an untyped property')
+      out.push(`// UNSTORABLE: '${p.name}' is ${formatValueType(p.composite)} in the model; a Neo4j`)
+      out.push(`// property value is a primitive or an array of primitives.`)
+    }
     if (p.enum) {
       downgrade(diags, 'neo4j', 'downgrade-enum',
         `Property '${node.name}.${p.name}' is constrained to enum '${p.enum}', which Neo4j has no schema facility for.`,
@@ -102,6 +110,11 @@ function edgeConstraints(edge: EdgeTypeIR, enterprise: boolean, diags: Diagnosti
     out.push(`// UNENFORCED: ${describeCardinality(edge.cardinality)} in the model; Neo4j has no multiplicity constraint.`)
   }
   for (const p of edge.props) {
+    if (p.composite) {
+      compositeDowngrade(diags, 'neo4j', edge.name, p, 'an untyped property')
+      out.push(`// UNSTORABLE: '${p.name}' is ${formatValueType(p.composite)} in the model; a Neo4j`)
+      out.push(`// property value is a primitive or an array of primitives.`)
+    }
     if (!p.required) continue
     if (enterprise) {
       out.push(
