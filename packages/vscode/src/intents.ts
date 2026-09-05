@@ -1,8 +1,8 @@
 import {
-  addEdgeType, addNodeType, addProperty, applyEdits, deleteProperty, deleteType,
+  addEdgeType, addMixin, addNodeType, addProperty, applyEdits, deleteProperty, deleteType,
   addConstraint, deleteConstraint, renameProperty, renameType, resolveModel,
-  setAbstractParent, setCardinality, setEndpoint, setKey, setPropertyFacet,
-  setPreviousIri, type ScalarType, type TextEdit,
+  setAbstract, setAbstractParent, setCardinality, setEndpoint, setKey, setMixins,
+  setPropertyFacet, setPreviousIri, type ScalarType, type TextEdit,
 } from '@lpg/core'
 import type { Intent } from './protocol'
 
@@ -20,24 +20,29 @@ export function intentToEdits(
     case 'addNode':
       return addNodeType(text, intent.name, {})
 
-    case 'renameNode': {
-      // Record the pre-rename IRI first so the ontology can assert equivalence to it.
-      const { model } = resolveModel(modelPath, read)
-      const node = model.nodes.find((n) => n.name === intent.from)
-      const pre = node && !node.previousIri
-        ? setPreviousIri(text, 'nodes', intent.from, node.iri)
-        : []
-      // The rename is computed against the already-patched text, so both sets of edits
-      // are consistent; return them as a single application over the original.
-      const patched = applyEdits(text, pre)
-      const renames = renameType(patched, 'nodes', intent.from, intent.to)
-      return combine(text, pre, renames)
-    }
+    case 'renameNode':
+      return rename(text, 'nodes', intent.from, intent.to, modelPath, read)
+
+    case 'renameEdge':
+      return rename(text, 'edges', intent.from, intent.to, modelPath, read)
+
+    case 'addMixin':
+      return addMixin(text, intent.name)
+    case 'renameMixin':
+      // No previous IRI: a mixin is a bag of properties, not a type anything can hold
+      // an identity for. See lat.md/metamodel#Type Hierarchy#Mixins.
+      return renameType(text, 'mixins', intent.from, intent.to)
+    case 'deleteMixin':
+      return deleteType(text, 'mixins', intent.name)
+    case 'setMixins':
+      return setMixins(text, intent.name, intent.mixins)
 
     case 'deleteNode':
       return deleteType(text, 'nodes', intent.name)
     case 'setAbstractParent':
       return setAbstractParent(text, intent.name, intent.parent)
+    case 'setAbstract':
+      return setAbstract(text, intent.name, intent.abstract)
     case 'addProperty':
       return addProperty(text, intent.ownerKind, intent.owner, {
         name: intent.name, type: intent.propType as ScalarType,
@@ -72,6 +77,30 @@ export function intentToEdits(
     case 'deleteConstraint':
       return deleteConstraint(text, intent.owner, intent.name)
   }
+}
+
+/**
+ * Rename a type, recording the pre-rename IRI first so the ontology can assert
+ * equivalence to the identity consumers already hold. Edges are renamed the same way as
+ * node types: an edge type carries an IRI too, and an ontology consumer holds it.
+ */
+function rename(
+  text: string,
+  kind: 'nodes' | 'edges',
+  from: string,
+  to: string,
+  modelPath: string,
+  read: (p: string) => string | undefined,
+): TextEdit[] {
+  const { model } = resolveModel(modelPath, read)
+  const declared = (kind === 'nodes' ? model.nodes : model.edges).find((t) => t.name === from)
+  const pre = declared && !declared.previousIri
+    ? setPreviousIri(text, kind, from, declared.iri)
+    : []
+  // The rename is computed against the already-patched text, so both sets of edits
+  // are consistent; return them as a single application over the original.
+  const patched = applyEdits(text, pre)
+  return combine(text, pre, renameType(patched, kind, from, to))
 }
 
 /**

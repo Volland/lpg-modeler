@@ -100,6 +100,26 @@ describe('canvas intents', () => {
     expect(emit(model, 'owl').content).toContain('demo:Person a owl:Class')
     expect(emit(model, 'shacl').content).toContain('sh:targetClass demo:Person ;')
   })
+  it('makes a type abstract and gives it a parent from the inspector', () => {
+    let text = apply(SRC(), { kind: 'setAbstract', name: 'Company', abstract: true }).text
+    expect(apply(text, { kind: 'addNode', name: 'x' }).model.nodes
+      .find((n) => n.name === 'Company')!.abstract).toBe(true)
+
+    text = apply(text, { kind: 'setAbstract', name: 'Company', abstract: false }).text
+    const r = apply(text, { kind: 'setAbstractParent', name: 'Company', parent: 'Party' })
+    expect(r.diagnostics.filter((d) => d.severity === 'error')).toEqual([])
+    expect(r.model.nodes.find((n) => n.name === 'Company')!.extends).toBe('Party')
+  })
+
+  it('renaming an edge type records its previous IRI too', () => {
+    // An ontology consumer holds an edge type's identity the same way it holds a node
+    // type's, so the equivalence has to be asserted either way.
+    const r = apply(SRC(), { kind: 'renameEdge', from: 'KNOWS', to: 'IS_ACQUAINTED_WITH' })
+    expect(r.diagnostics.filter((d) => d.severity === 'error')).toEqual([])
+    const edge = r.model.edges.find((e) => e.name === 'IS_ACQUAINTED_WITH')!
+    expect(edge.previousIri).toBe('https://example.org/vocab/social#KNOWS')
+    expect([edge.from, edge.to]).toEqual(['Person', 'Person'])
+  })
 })
 
 // @lat: [[metamodel#Cardinality]]

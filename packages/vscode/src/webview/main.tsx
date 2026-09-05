@@ -1,13 +1,18 @@
 import * as React from 'react'
 import { createRoot } from 'react-dom/client'
 import {
-  Background, Controls, ReactFlow, type Connection, type Edge, type Node,
+  Background, Controls, ReactFlow, ReactFlowProvider, useReactFlow,
+  type Connection, type Edge, type FinalConnectionState, type Node,
   type NodeChange, applyNodeChanges,
 } from '@xyflow/react'
 import ELK from 'elkjs/lib/elk.bundled.js'
-import type { HostMessage, Intent, Projection, ViewMessage, WireScalar } from '../protocol'
+import type { HostMessage, Intent, Projection, ViewMessage } from '../protocol'
 import { ErdNode, type ErdNodeData } from './nodes'
 import { Inspector } from './inspector'
+import {
+  ConfirmDialog, EdgeDialog, EdgeToNewNodeDialog, PromptDialog, PropertyDialog,
+  type Dialog,
+} from './dialogs'
 
 declare function acquireVsCodeApi(): { postMessage(m: ViewMessage): void }
 const vscode = acquireVsCodeApi()
@@ -18,12 +23,30 @@ const intent = (i: Intent) => post({ type: 'intent', intent: i })
 const elk = new ELK()
 const NODE_TYPES = { erd: ErdNode }
 
+const NODE_WIDTH = 240
 /** Height estimate so ELK reserves room for the property rows. */
 const heightOf = (propCount: number) => 56 + propCount * 22 + 26
 
-async function autoLayout(p: Projection, existing: Record<string, { x: number; y: number }>) {
+type Positions = Record<string, { x: number; y: number }>
+
+/**
+ * Give every box a position. A diagram that has none is laid out wholesale by ELK; once
+ * boxes are placed, a newly created type goes in a fresh column beside them rather than
+ * triggering a relayout that would move everything the user had arranged.
+ */
+async function place(p: Projection, existing: Positions): Promise<Positions> {
   const missing = p.nodes.filter((n) => !existing[n.id])
   if (missing.length === 0) return existing
+
+  const placed = p.nodes.map((n) => existing[n.id]).filter((pt): pt is { x: number; y: number } => Boolean(pt))
+  if (placed.length > 0) {
+    const x = Math.max(...placed.map((pt) => pt.x)) + NODE_WIDTH + 96
+    const top = Math.min(...placed.map((pt) => pt.y))
+    const out = { ...existing }
+    missing.forEach((n, i) => { out[n.id] = { x, y: top + i * (heightOf(n.props.length) + 48) } })
+    return out
+  }
+
   const graph = {
     id: 'root',
     layoutOptions: {
@@ -32,7 +55,7 @@ async function autoLayout(p: Projection, existing: Record<string, { x: number; y
       'elk.spacing.nodeNode': '48',
       'elk.layered.spacing.nodeNodeBetweenLayers': '96',
     },
-    children: p.nodes.map((n) => ({ id: n.id, width: 240, height: heightOf(n.props.length) })),
+    children: p.nodes.map((n) => ({ id: n.id, width: NODE_WIDTH, height: heightOf(n.props.length) })),
     edges: p.edges.map((e) => {
       const from = p.nodes.find((n) => n.name === e.from)
       const to = p.nodes.find((n) => n.name === e.to)
@@ -52,11 +75,15 @@ function App(): React.ReactElement {
   const [notice, setNotice] = React.useState<string | undefined>()
   const [nodes, setNodes] = React.useState<Node[]>([])
   const [edges, setEdges] = React.useState<Edge[]>([])
-  const [pendingEdge, setPendingEdge] = React.useState<{ from: string; to: string } | undefined>()
-  const [adding, setAdding] = React.useState<{ owner: string } | undefined>()
+  const [dialog, setDialog] = React.useState<Dialog | undefined>()
+  const [selected, setSelected] = React.useState<string | undefined>(undefined)
+  const { fitView } = useReactFlow()
+  // Read inside the projection effect without making that effect depend on selection.
+  const selectedRef = React.useRef<string | undefined>(undefined)
+  selectedRef.current = selected
 
   React.useEffect(() => {
-    const onMessage = async (event: MessageEvent<HostMessage>) => {
+    const onMessage = (event: MessageEvent<HostMessage>) => {
       const message = event.data
       if (message.type === 'invalid') { setNotice(message.message); return }
       setNotice(undefined)
@@ -71,29 +98,37 @@ function App(): React.ReactElement {
     if (!projection) return
     let cancelled = false
     void (async () => {
-      const positions = await autoLayout(projection, projection.positions)
+      const positions = await place(projection, projection.positions)
       if (cancelled) return
+      // A position the canvas computed is persisted straight away, so the box stays put
+      // across refreshes without waiting for the user to drag it.
+      for (const [id, pt] of Object.entries(positions)) {
+        if (!projection.positions[id]) post({ type: 'move', elementId: id, x: pt.x, y: pt.y })
+      }
       const handlers = {
-        onAddProperty: (owner: string) => setAdding({ owner }),
+        onAddProperty: (owner: string) => setDialog({ kind: 'addProperty', owner, ownerKind: 'nodes' }),
         onDeleteProperty: (owner: string, name: string) =>
           intent({ kind: 'deleteProperty', owner, ownerKind: 'nodes', name }),
-        onRename: (from: string) => {
-          const to = window.prompt(`Rename ${from} to`, from)
-          if (to && to !== from) intent({ kind: 'renameNode', from, to })
-        },
-        onToggleKey: (owner: string, prop: string) => intent({ kind: 'setKey', name: owner, key: [prop] }),
-        onDelete: (name: string) => {
-          if (window.confirm(`Delete ${name}? Edges that reference it are removed too.`)) {
-            intent({ kind: 'deleteNode', name })
-          }
+        onRenameProperty: (owner: string, name: string) =>
+          setDialog({ kind: 'renameProperty', owner, ownerKind: 'nodes', name }),
+        onRename: (name: string) => setDialog({ kind: 'renameNode', name }),
+        onToggleKey: (owner: string, prop: string, isKey: boolean) =>
+          intent({ kind: 'setKey', name: owner, key: isKey ? [] : [prop] }),
+        onDelete: (name: string) => setDialog({ kind: 'confirmDeleteNode', name }),
+        onStartEdge: (name: string) => setDialog({ kind: 'edgeToNewNode', from: name }),
+        onSelectMixin: (name: string) => {
+          const found = projection.mixins.find((m) => m.name === name)
+          if (found) setSelected(found.id)
         },
       }
       setNodes(projection.nodes.map((n): Node => ({
         id: n.id,
         type: 'erd',
         position: positions[n.id] ?? { x: 0, y: 0 },
+        selected: n.id === selectedRef.current,
         data: {
           name: n.name, abstract: n.abstract, open: n.open, extendsName: n.extends,
+          mixins: n.mixins,
           props: n.props, constraintCount: n.constraints.length + (n.hasRawShacl ? 1 : 0),
           ...handlers,
         } satisfies ErdNodeData as unknown as Record<string, unknown>,
@@ -103,7 +138,7 @@ function App(): React.ReactElement {
         const to = projection.nodes.find((n) => n.name === e.to)
         // Multiplicity rides in the label rather than as endpoint markers: React Flow's
         // default edge has one label, and a wrong-looking crow's foot is worse than a
-        // correct number. Editing happens on click.
+        // correct number. Editing happens in the inspector.
         const props = e.props.length > 0 ? ` {${e.props.map((p) => p.name).join(', ')}}` : ''
         const mult = e.cardinality.constrained
           ? `  [${e.cardinality.from} → ${e.cardinality.to}]`
@@ -116,12 +151,23 @@ function App(): React.ReactElement {
           labelStyle: { fontSize: 11 },
           labelBgStyle: e.cardinality.constrained ? { fill: 'var(--vscode-editor-background)' } : undefined,
           animated: false,
-          data: { edgeName: e.name, cardinality: e.cardinality },
+          data: { edgeName: e.name },
         }
       }).filter((e) => e.source && e.target))
     })()
     return () => { cancelled = true }
   }, [projection])
+
+  // A type created from the canvas is placed outside the current viewport, so bring the
+  // diagram back into frame once the new box exists.
+  const knownIds = React.useRef<string>('')
+  React.useEffect(() => {
+    const ids = nodes.map((n) => n.id).sort().join(',')
+    const grew = knownIds.current !== '' && ids !== knownIds.current
+      && nodes.length > knownIds.current.split(',').filter(Boolean).length
+    knownIds.current = ids
+    if (grew) window.setTimeout(() => void fitView({ duration: 200, padding: 0.15 }), 0)
+  }, [nodes, fitView])
 
   const onNodesChange = React.useCallback((changes: NodeChange[]) => {
     setNodes((current) => applyNodeChanges(changes, current))
@@ -133,32 +179,24 @@ function App(): React.ReactElement {
     }
   }, [])
 
-  const [selected, setSelected] = React.useState<string | undefined>(undefined)
-
-  const onNodeClick = React.useCallback((_: React.MouseEvent, n: Node) => {
-    setSelected(n.id)
-  }, [])
-
+  const onNodeClick = React.useCallback((_: React.MouseEvent, n: Node) => setSelected(n.id), [])
+  const onEdgeClick = React.useCallback((_: React.MouseEvent, e: Edge) => setSelected(e.id), [])
   const onPaneClick = React.useCallback(() => setSelected(undefined), [])
-
-  const onEdgeClick = React.useCallback((_: React.MouseEvent, edge: Edge) => {
-    const d = edge.data as { edgeName?: string; cardinality?: { from: string; to: string } } | undefined
-    if (!d?.edgeName || !d.cardinality) return
-    const from = window.prompt(
-      `${d.edgeName}: how many ${'sources'} per target?\n`
-      + `'*' any, '2' exactly two, '1..2' a range, '1..*' at least one.`,
-      d.cardinality.from)
-    if (from === null) return
-    const to = window.prompt(
-      `${d.edgeName}: how many targets per source?`, d.cardinality.to)
-    if (to === null) return
-    intent({ kind: 'setCardinality', name: d.edgeName, from: from.trim(), to: to.trim() })
-  }, [])
 
   const onConnect = React.useCallback((c: Connection) => {
     const from = projection?.nodes.find((n) => n.id === c.source)
     const to = projection?.nodes.find((n) => n.id === c.target)
-    if (from && to) setPendingEdge({ from: from.name, to: to.name })
+    if (from && to) setDialog({ kind: 'newEdge', from: from.name, to: to.name })
+  }, [projection])
+
+  /**
+   * A connection dropped on empty canvas rather than on a box. That gesture means "and
+   * then there is one of these", so it offers to create the type as well as the edge.
+   */
+  const onConnectEnd = React.useCallback((_: MouseEvent | TouchEvent, state: FinalConnectionState) => {
+    if (state.toNode || !state.fromNode) return
+    const from = projection?.nodes.find((n) => n.id === state.fromNode?.id)
+    if (from) setDialog({ kind: 'edgeToNewNode', from: from.name })
   }, [projection])
 
   if (!projection) {
@@ -167,6 +205,10 @@ function App(): React.ReactElement {
 
   const errors = projection.diagnostics.filter((d) => d.severity === 'error')
   const warnings = projection.diagnostics.filter((d) => d.severity === 'warning')
+  const close = () => setDialog(undefined)
+  const selectedNode = projection.nodes.find((n) => n.id === selected)
+  const selectedEdge = projection.edges.find((e) => e.id === selected)
+  const selectedMixin = projection.mixins.find((m) => m.id === selected)
 
   return (
     <div className="app">
@@ -178,14 +220,24 @@ function App(): React.ReactElement {
             {projection.views.map((v) => <option key={v} value={v}>{v}</option>)}
           </select>
         </label>
-        <button onClick={() => {
-          const name = window.prompt('New view name')
-          if (name) post({ type: 'createView', name })
-        }}>+ view</button>
-        <button onClick={() => {
-          const name = window.prompt('New node type name')
-          if (name) intent({ kind: 'addNode', name })
-        }}>+ node type</button>
+        <button onClick={() => setDialog({ kind: 'newView' })}>+ view</button>
+        <span className="toolbar-sep" />
+        <button className="primary" onClick={() => setDialog({ kind: 'newNode' })}>+ node type</button>
+        <button
+          disabled={projection.nodes.length === 0}
+          title={projection.nodes.length === 0
+            ? 'An edge type needs a node type at each end.'
+            : 'Connect two node types'}
+          onClick={() => setDialog({
+            kind: 'newEdge',
+            from: projection.nodes[0]?.name ?? '',
+            to: projection.nodes[1]?.name ?? projection.nodes[0]?.name ?? '',
+          })}
+        >
+          + edge type
+        </button>
+        <button title="A named bag of properties types can apply"
+          onClick={() => setDialog({ kind: 'newMixin' })}>+ mixin</button>
         <span className="spacer" />
         <label>
           Generate{' '}
@@ -211,36 +263,129 @@ function App(): React.ReactElement {
         </div>
       )}
 
-      {pendingEdge && (
-        <div className="modal">
-          <div className="modal-body">
-            <p>New edge {pendingEdge.from} → {pendingEdge.to}</p>
-            <input autoFocus placeholder="EDGE_NAME" onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                const name = (e.target as HTMLInputElement).value.trim()
-                if (name) intent({ kind: 'addEdge', name, ...pendingEdge })
-                setPendingEdge(undefined)
-              }
-              if (e.key === 'Escape') setPendingEdge(undefined)
-            }} />
-            <button onClick={() => setPendingEdge(undefined)}>cancel</button>
-          </div>
-        </div>
+      {dialog?.kind === 'newNode' && (
+        <PromptDialog
+          title="New node type" label="Name" placeholder="TypeName" submitLabel="create"
+          onCancel={close}
+          onSubmit={(name) => { intent({ kind: 'addNode', name }); close() }} />
       )}
 
-      {adding && (
-        <div className="modal">
-          <div className="modal-body">
-            <p>New property on {adding.owner}</p>
-            <PropertyForm
-              scalars={projection.scalars}
-              onCancel={() => setAdding(undefined)}
-              onSubmit={(name, propType) => {
-                intent({ kind: 'addProperty', owner: adding.owner, ownerKind: 'nodes', name, propType })
-                setAdding(undefined)
-              }} />
-          </div>
-        </div>
+      {dialog?.kind === 'newView' && (
+        <PromptDialog
+          title="New view" label="Name" placeholder="overview" submitLabel="create"
+          onCancel={close}
+          onSubmit={(name) => { post({ type: 'createView', name }); close() }} />
+      )}
+
+      {dialog?.kind === 'renameNode' && (
+        <PromptDialog
+          title={`Rename ${dialog.name}`} label="Name" initial={dialog.name} submitLabel="rename"
+          onCancel={close}
+          onSubmit={(to) => {
+            if (to !== dialog.name) intent({ kind: 'renameNode', from: dialog.name, to })
+            close()
+          }} />
+      )}
+
+      {dialog?.kind === 'renameProperty' && (
+        <PromptDialog
+          title={`Rename ${dialog.name}`} label="Name" initial={dialog.name} submitLabel="rename"
+          onCancel={close}
+          onSubmit={(to) => {
+            if (to !== dialog.name) {
+              intent({
+                kind: 'renameProperty', owner: dialog.owner, ownerKind: dialog.ownerKind,
+                from: dialog.name, to,
+              })
+            }
+            close()
+          }} />
+      )}
+
+      {dialog?.kind === 'confirmDeleteNode' && (
+        <ConfirmDialog
+          title={`Delete ${dialog.name}?`}
+          message="Every edge type that references it is removed too, because a reference left behind would not resolve."
+          onCancel={close}
+          onConfirm={() => {
+            intent({ kind: 'deleteNode', name: dialog.name })
+            if (selected) setSelected(undefined)
+            close()
+          }} />
+      )}
+
+      {dialog?.kind === 'confirmDeleteEdge' && (
+        <ConfirmDialog
+          title={`Delete ${dialog.name}?`}
+          message="The edge type and its properties are removed. The node types it joined stay."
+          onCancel={close}
+          onConfirm={() => {
+            intent({ kind: 'deleteEdge', name: dialog.name })
+            setSelected(undefined)
+            close()
+          }} />
+      )}
+
+      {dialog?.kind === 'newEdge' && (
+        <EdgeDialog
+          nodes={projection.nodes} from={dialog.from} to={dialog.to}
+          onCancel={close}
+          onSubmit={(name, from, to) => { intent({ kind: 'addEdge', name, from, to }); close() }} />
+      )}
+
+      {dialog?.kind === 'edgeToNewNode' && (
+        <EdgeToNewNodeDialog
+          from={dialog.from}
+          onCancel={close}
+          onSubmit={(nodeName, edgeName) => {
+            // Two intents, in order: the edge cannot name a type the file does not have.
+            intent({ kind: 'addNode', name: nodeName })
+            intent({ kind: 'addEdge', name: edgeName, from: dialog.from, to: nodeName })
+            close()
+          }} />
+      )}
+
+      {dialog?.kind === 'newMixin' && (
+        <PromptDialog
+          title="New mixin" label="Name" placeholder="Timestamped" submitLabel="create"
+          onCancel={close}
+          onSubmit={(name) => { intent({ kind: 'addMixin', name }); close() }} />
+      )}
+
+      {dialog?.kind === 'renameMixin' && (
+        <PromptDialog
+          title={`Rename ${dialog.name}`} label="Name" initial={dialog.name} submitLabel="rename"
+          onCancel={close}
+          onSubmit={(to) => {
+            if (to !== dialog.name) intent({ kind: 'renameMixin', from: dialog.name, to })
+            close()
+          }} />
+      )}
+
+      {dialog?.kind === 'confirmDeleteMixin' && (
+        <ConfirmDialog
+          title={`Delete ${dialog.name}?`}
+          message={dialog.appliedBy.length === 0
+            ? 'No type applies it, so nothing else changes.'
+            : `${dialog.appliedBy.join(', ')} apply it and lose its properties.`}
+          onCancel={close}
+          onConfirm={() => {
+            intent({ kind: 'deleteMixin', name: dialog.name })
+            setSelected(undefined)
+            close()
+          }} />
+      )}
+
+      {dialog?.kind === 'addProperty' && (
+        <PropertyDialog
+          owner={dialog.owner} scalars={projection.scalars}
+          onCancel={close}
+          onSubmit={(name, propType) => {
+            intent({
+              kind: 'addProperty', owner: dialog.owner, ownerKind: dialog.ownerKind, name, propType,
+            })
+            close()
+          }} />
       )}
 
       <div className="workspace">
@@ -251,6 +396,7 @@ function App(): React.ReactElement {
           nodeTypes={NODE_TYPES}
           onNodesChange={onNodesChange}
           onConnect={onConnect}
+          onConnectEnd={onConnectEnd}
           onEdgeClick={onEdgeClick}
           onNodeClick={onNodeClick}
           onPaneClick={onPaneClick}
@@ -262,37 +408,28 @@ function App(): React.ReactElement {
         </ReactFlow>
       </div>
       <Inspector
-        node={projection.nodes.find((n) => n.id === selected)}
+        node={selectedNode}
+        edge={selectedEdge}
+        mixin={selectedMixin}
+        nodes={projection.nodes}
+        edges={projection.edges}
+        mixins={projection.mixins}
         scalars={projection.scalars}
         emit={intent}
+        ask={setDialog}
+        select={setSelected}
       />
       </div>
     </div>
   )
 }
 
-function PropertyForm(
-  { scalars, onSubmit, onCancel }: {
-    scalars: WireScalar[]
-    onSubmit: (name: string, type: string) => void
-    onCancel: () => void
-  },
-): React.ReactElement {
-  const [name, setName] = React.useState('')
-  const [type, setType] = React.useState('string')
-  return (
-    <div className="form">
-      <input autoFocus placeholder="propertyName" value={name}
-        onChange={(e) => setName(e.target.value)}
-        onKeyDown={(e) => { if (e.key === 'Enter' && name.trim()) onSubmit(name.trim(), type) }} />
-      <select value={type} onChange={(e) => setType(e.target.value)}>
-        {scalars.map((s) => <option key={s.name} value={s.name}>{s.name}</option>)}
-      </select>
-      <button disabled={!name.trim()} onClick={() => onSubmit(name.trim(), type)}>add</button>
-      <button onClick={onCancel}>cancel</button>
-    </div>
+const root = document.getElementById('root')
+if (root) {
+  createRoot(root).render(
+    // The provider is what lets the canvas re-frame itself when a type is created.
+    <ReactFlowProvider>
+      <App />
+    </ReactFlowProvider>,
   )
 }
-
-const root = document.getElementById('root')
-if (root) createRoot(root).render(<App />)

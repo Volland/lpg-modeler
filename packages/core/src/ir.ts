@@ -449,6 +449,11 @@ export function warn(code: string, message: string, loc?: Loc): Diagnostic {
   return { severity: 'warning', code, message, loc }
 }
 
+/** Something worth saying that is not a problem: a rule the model applied silently. */
+export function info(code: string, message: string, loc?: Loc): Diagnostic {
+  return { severity: 'info', code, message, loc }
+}
+
 /** Concrete (non-abstract) node types, the only ones a database target realises. */
 export function concreteNodes(model: ModelIR): NodeTypeIR[] {
   return model.nodes.filter((n) => !n.abstract)

@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import {
   DEFAULT_VIEW, addToView, addView, parseLayout, parseViews, projectView, pruneLayout,
-  removeFromView, serializeLayout, serializeViews, setPosition, sidecarPaths, typesInNoView,
+  removeFromView, removeFromViews, renameInViews, serializeLayout, serializeViews,
+  setPosition, sidecarPaths, typesInNoView,
 } from '../src/views'
 import { validateModel } from '../src/validate'
 import { applyEdits, renameType } from '../src/mutate'
@@ -56,6 +57,36 @@ describe('views', () => {
 })
 
 // @lat: [[metamodel#Stable Element IDs]]
+// @lat: [[architecture#Views]]
+describe('views follow the model', () => {
+  const file = () => ({
+    views: [
+      { name: 'overview', include: ['*'] },
+      { name: 'people', include: ['Person', 'Company'] },
+    ],
+  })
+
+  it('carries a rename into every view that named the type', () => {
+    // A view holds names rather than ids, so without this a rename drops the type out
+    // of the diagram it was drawn on.
+    const next = renameInViews(file(), 'Person', 'Individual')
+    expect(next.views[1]!.include).toEqual(['Individual', 'Company'])
+    expect(next.views[0]!.include).toEqual(['*'])
+  })
+
+  it('drops a deleted type from every view', () => {
+    expect(removeFromViews(file(), 'Person').views[1]!.include).toEqual(['Company'])
+  })
+
+  it('leaves a wildcard view alone when a type is added to it', () => {
+    // '*' already includes whatever the model gains; naming it as well would be a lie
+    // the moment the type is renamed.
+    expect(addToView(file(), 'overview', 'Address').views[0]!.include).toEqual(['*'])
+    expect(addToView(file(), 'people', 'Address').views[1]!.include)
+      .toEqual(['Person', 'Company', 'Address'])
+  })
+})
+
 describe('layout', () => {
   it('keys positions by element id, so a rename does not move a box', () => {
     const src = readFile(fixture('social.lpg.yaml'))!

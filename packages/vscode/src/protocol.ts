@@ -20,7 +20,10 @@ export interface WireProperty {
   pattern?: string
   minLength?: number
   maxLength?: number
+  /** The type or mixin this property came from, when it is not declared here. */
   inheritedFrom?: string
+  /** Whether `inheritedFrom` names an ancestor or a mixin. */
+  inheritedVia?: 'parent' | 'mixin'
 }
 
 /** A named constraint, already rendered for display. */
@@ -40,6 +43,10 @@ export interface WireNode {
   /** Whether instances may carry properties the type does not declare. */
   open: boolean
   extends?: string
+  /** Every ancestor, nearest first. See lat.md/metamodel#Type Hierarchy. */
+  ancestors: string[]
+  /** Mixins this type applies, in the order it applies them. */
+  mixins: string[]
   props: WireProperty[]
   constraints: WireConstraint[]
   /** Whether the type carries a raw SHACL fragment. */
@@ -63,6 +70,18 @@ export interface WireEdge {
   to: string
   cardinality: WireCardinality
   props: WireProperty[]
+}
+
+/**
+ * A mixin: a named bag of properties that types apply. It is not a supertype and has no
+ * identity of its own. See lat.md/metamodel#Type Hierarchy#Mixins.
+ */
+export interface WireMixin {
+  id: string
+  name: string
+  props: WireProperty[]
+  /** Node types applying it, so the panel can say what a change would touch. */
+  appliedBy: string[]
 }
 
 export interface WireDiagnostic {
@@ -94,6 +113,8 @@ export interface Projection {
   activeView: string
   nodes: WireNode[]
   edges: WireEdge[]
+  /** Declared mixins. Model-wide: a mixin belongs to no one diagram. */
+  mixins: WireMixin[]
   /** Saved positions for the active view, keyed by element id. */
   positions: Record<string, { x: number; y: number }>
   diagnostics: WireDiagnostic[]
@@ -110,28 +131,38 @@ export type HostMessage =
    */
   | { type: 'invalid'; message: string }
 
+/** What an intent addresses. A mixin holds properties the same way a type does. */
+export type OwnerKind = 'nodes' | 'edges' | 'mixins'
+
 export type Intent =
   | { kind: 'addNode'; name: string }
   | { kind: 'renameNode'; from: string; to: string }
   | { kind: 'deleteNode'; name: string }
   | { kind: 'setAbstractParent'; name: string; parent: string | undefined }
-  | { kind: 'addProperty'; owner: string; ownerKind: 'nodes' | 'edges'; name: string; propType: string }
-  | { kind: 'renameProperty'; owner: string; ownerKind: 'nodes' | 'edges'; from: string; to: string }
-  | { kind: 'deleteProperty'; owner: string; ownerKind: 'nodes' | 'edges'; name: string }
+  | { kind: 'setAbstract'; name: string; abstract: boolean }
+  | { kind: 'addProperty'; owner: string; ownerKind: OwnerKind; name: string; propType: string }
+  | { kind: 'renameProperty'; owner: string; ownerKind: OwnerKind; from: string; to: string }
+  | { kind: 'deleteProperty'; owner: string; ownerKind: OwnerKind; name: string }
   | { kind: 'setKey'; name: string; key: string[] }
   | { kind: 'addEdge'; name: string; from: string; to: string }
+  | { kind: 'renameEdge'; from: string; to: string }
   | { kind: 'deleteEdge'; name: string }
   | { kind: 'setEndpoint'; name: string; which: 'from' | 'to'; target: string }
   | { kind: 'setCardinality'; name: string; from: string; to: string }
   | {
       kind: 'setPropertyFacet'
       owner: string
-      ownerKind: 'nodes' | 'edges'
+      ownerKind: OwnerKind
       prop: string
       facet: 'min' | 'max' | 'pattern' | 'minLength' | 'maxLength'
       /** Absent clears the facet. */
       value?: string
     }
+  | { kind: 'addMixin'; name: string }
+  | { kind: 'renameMixin'; from: string; to: string }
+  | { kind: 'deleteMixin'; name: string }
+  /** The whole set a type applies, which is what a list of checkboxes says. */
+  | { kind: 'setMixins'; name: string; mixins: string[] }
   | { kind: 'addConstraint'; owner: string; name: string; assertion: string; message?: string }
   | { kind: 'deleteConstraint'; owner: string; name: string }
 

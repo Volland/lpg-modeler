@@ -10,6 +10,20 @@ The hierarchy exists for two reasons. It removes copy-pasted property sets acros
 
 Edges that are themselves endpoints of other edges — the metagraph case — are deliberately outside the core. Neo4j cannot represent them natively, so admitting them would force every emitter to grow a silent reification path.
 
+### Inheritance
+
+A node type may extend one other type. It gains that type's properties and, when it declares none of its own, its key; every ancestor is recorded so a target can either declare the hierarchy or flatten it.
+
+Properties are flattened onto the subtype during resolution, each carrying the name of the type it came from, so an emitter never walks the chain and a diagram can say where a property is written. What is *not* inherited is stated where each concept is: [[metamodel#Open and Closed Types|openness]] and [[metamodel#Named Constraints|named constraints]] both stop at the type that declares them. An edge declared on an abstract parent belongs to every descendant, which is what makes the parent worth declaring; the emitters differ only in whether they can say so directly — see [[emitters#GQL Target]] against [[emitters#Ladybug Target]].
+
+### Mixins
+
+A mixin is a named bag of properties a node type applies. It declares no supertype, has no identity of its own, and never appears in an ancestor chain.
+
+Reuse and subtyping are different needs, and conflating them produces a hierarchy shaped by which properties happen to travel together rather than by what a thing is: `createdAt` on twenty types does not make twenty subtypes of a Timestamped. Because a mixin is not a label it costs the emitters nothing — its properties are flattened into every type that applies it before any target sees the model, so a target with no inheritance and one with rich subtyping generate the same columns. It contributes no key, though a type may name a mixin's property in its own key.
+
+The nearer declaration wins: a type's own property beats a mixin's, and a mixin's beats an ancestor's. The first is reported at `info` and a mixin nothing applies at `warning`, because neither is visible in the file — one silently drops a property the reader can see written, the other reaches no artifact at all.
+
 ## Identity
 
 Every concrete node type declares exactly one key, single or composite; validation fails without one. Keys are inherited, so declaring a key once on an abstract parent covers every subtype.

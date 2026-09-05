@@ -1,5 +1,5 @@
 import type { Diagnostic, ModelIR } from './ir'
-import { LPG_FORMAT_VERSION, ORDERED_TYPES, TEXT_TYPES, assertionOperands, err, warn } from './ir'
+import { LPG_FORMAT_VERSION, ORDERED_TYPES, TEXT_TYPES, assertionOperands, err, info, warn } from './ir'
 import type { ViewDef } from './views'
 import { typesInNoView } from './views'
 
@@ -149,6 +149,36 @@ export function validateModel(model: ModelIR, views?: ViewDef[]): Diagnostic[] {
         out.push(err('unresolved-operand',
           `Constraint '${node.name}.${k.name}' qualifies on type '${a.of}', which is not a known node type.`,
           k.loc))
+      }
+    }
+  }
+
+  // --- Mixins are bags of properties, so the only thing to check is that they land.
+  // See lat.md/metamodel#Type Hierarchy#Mixins.
+  const applied = new Map<string, string[]>()
+  for (const node of model.nodes) {
+    for (const m of node.mixins) applied.set(m, [...(applied.get(m) ?? []), node.name])
+  }
+  for (const mixin of model.mixins) {
+    if (!applied.has(mixin.name)) {
+      out.push(warn('unused-mixin',
+        `Mixin '${mixin.name}' is applied by no node type, so it contributes nothing to any generated artifact.`,
+        mixin.loc))
+    }
+  }
+  for (const node of model.nodes) {
+    // A property the type declares itself wins over the mixin's. That is the useful
+    // reading — a mixin is a default — but it is invisible in the file, so say it.
+    for (const name of node.mixins) {
+      const mixin = model.mixins.find((m) => m.name === name)
+      if (!mixin) continue
+      for (const p of mixin.props) {
+        const own = node.props.find((q) => q.name === p.name && !q.inheritedFrom)
+        if (own) {
+          out.push(info('shadowed-mixin-property',
+            `Node type '${node.name}' declares '${p.name}' itself, so mixin '${name}' does not contribute its own.`,
+            own.loc))
+        }
       }
     }
   }

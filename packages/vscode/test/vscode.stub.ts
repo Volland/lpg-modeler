@@ -23,9 +23,15 @@ export class Position {
 export class Range {
   readonly start: Position
   readonly end: Position
-  constructor(a: number, b: number, c: number, d: number) {
-    this.start = new Position(a, b)
-    this.end = new Position(c, d)
+  /** Both forms the real constructor takes: two positions, or four line/character numbers. */
+  constructor(a: Position | number, b: Position | number, c?: number, d?: number) {
+    if (typeof a === 'number') {
+      this.start = new Position(a, b as number)
+      this.end = new Position(c ?? 0, d ?? 0)
+    } else {
+      this.start = a
+      this.end = b as Position
+    }
   }
 }
 
@@ -84,6 +90,7 @@ export const harness = {
     this.panels = []
     this.workspaceRoot = root
     window.activeTextEditor = undefined
+    workspace.textDocuments = []
   },
 }
 
@@ -92,18 +99,23 @@ class FakePanel {
   /** A real panel takes focus on creation; a test says so explicitly instead. */
   active = false
   readonly messages: unknown[] = []
-  private readonly listeners: ((m: unknown) => void)[] = []
+  private readonly listeners: ((m: unknown) => unknown)[] = []
   readonly webview = {
     html: '',
     cspSource: 'vscode-webview:',
     asWebviewUri: (u: Uri) => u,
     postMessage: (m: unknown) => { this.messages.push(m); return Promise.resolve(true) },
-    onDidReceiveMessage: (cb: (m: unknown) => void) => { this.listeners.push(cb); return { dispose() {} } },
+    onDidReceiveMessage: (cb: (m: unknown) => unknown) => { this.listeners.push(cb); return { dispose() {} } },
   }
   constructor(readonly viewType: string, readonly title: string) {}
   onDidDispose(_cb: () => void): { dispose(): void } { return { dispose() {} } }
-  /** Drive the webview -> host direction the way the real bundle does on load. */
-  send(message: unknown): void { for (const cb of this.listeners) cb(message) }
+  /**
+   * Drive the webview -> host direction the way the real bundle does. The host's handler
+   * is async, so the promise comes back and a test can await what the message did.
+   */
+  send(message: unknown): Promise<unknown[]> {
+    return Promise.all(this.listeners.map((cb) => cb(message)))
+  }
 }
 
 export const commands = {
@@ -169,7 +181,31 @@ export const workspace = {
     workspace.textDocuments = [...workspace.textDocuments.filter((d) => d.uri.fsPath !== p), doc]
     return doc
   },
-  applyEdit: async (_edit: WorkspaceEdit) => true,
+  /**
+   * Really apply the edit. A stub that swallowed it would let every canvas flow pass
+   * without the model file ever changing, which is the one thing those flows do.
+   */
+  applyEdit: async (edit: WorkspaceEdit) => {
+    const byFile = new Map<string, { start: number; end: number; newText: string }[]>()
+    for (const e of edit.edits) {
+      const doc = new TextDocument(e.uri, await fs.promises.readFile(e.uri.fsPath, 'utf8'))
+      byFile.set(e.uri.fsPath, [
+        ...(byFile.get(e.uri.fsPath) ?? []),
+        { start: doc.offsetAt(e.range.start), end: doc.offsetAt(e.range.end), newText: e.newText },
+      ])
+    }
+    for (const [p, edits] of byFile) {
+      let text = await fs.promises.readFile(p, 'utf8')
+      // Back to front, so an earlier edit's offsets stay valid.
+      for (const e of [...edits].sort((a, b) => b.start - a.start)) {
+        text = text.slice(0, e.start) + e.newText + text.slice(e.end)
+      }
+      await fs.promises.writeFile(p, text)
+      const doc = new TextDocument(Uri.file(p), text)
+      workspace.textDocuments = [...workspace.textDocuments.filter((d) => d.uri.fsPath !== p), doc]
+    }
+    return true
+  },
   findFiles: async (_glob: string, _exclude?: string) => harness.foundFiles,
   getConfiguration: (_section?: string) => ({ get: <T>(_key: string, fallback: T) => fallback }),
   onDidChangeTextDocument: noop,

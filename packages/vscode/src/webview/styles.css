@@ -15,6 +15,9 @@ body { margin: 0; font-family: var(--vscode-font-family, sans-serif); color: var
   padding: 6px 10px; border-bottom: 1px solid var(--line); font-size: 12px;
 }
 .toolbar .spacer { flex: 1; }
+.toolbar-sep { width: 1px; align-self: stretch; background: var(--line); }
+.toolbar button.primary { background: var(--vscode-button-background, #0e639c); color: var(--vscode-button-foreground, #fff); border-color: transparent; }
+.toolbar button:disabled { opacity: 0.5; cursor: default; }
 .toolbar button, .toolbar select {
   background: var(--vscode-button-secondaryBackground, #3a3d41);
   color: var(--vscode-button-secondaryForeground, #ccc);
@@ -38,7 +41,11 @@ body { margin: 0; font-family: var(--vscode-font-family, sans-serif); color: var
   padding: 5px 7px; border-bottom: 1px solid var(--line);
   background: var(--vscode-titleBar-activeBackground, #2d2d2d); font-weight: 600;
 }
-.erd-name { cursor: text; }
+.erd-name { cursor: pointer; background: none; border: none; color: inherit; font: inherit; font-weight: 600; padding: 0; text-align: left; }
+.erd-name:hover { text-decoration: underline; }
+.erd-title-spacer { flex: 1; }
+.erd-prop-edit { background: none; border: none; color: inherit; font: inherit; padding: 0; text-align: left; cursor: pointer; }
+.erd-prop-edit:hover { text-decoration: underline; }
 .erd-badge { font-size: 9px; text-transform: uppercase; color: var(--muted); border: 1px solid var(--line); border-radius: 2px; padding: 0 3px; }
 .erd-extends { font-size: 10px; color: var(--muted); font-weight: 400; }
 .erd-rows { display: flex; flex-direction: column; }
@@ -58,11 +65,23 @@ body { margin: 0; font-family: var(--vscode-font-family, sans-serif); color: var
 .erd-add:hover { color: var(--fg); }
 .erd-handle { width: 7px; height: 7px; background: var(--accent); }
 
-/* --- modal --- */
+/* --- dialogs ---
+   A VS Code webview is a sandboxed iframe: window.prompt and window.confirm return
+   without showing anything, so every question the canvas asks is rendered here. */
 .modal { position: fixed; inset: 0; background: rgba(0,0,0,0.45); display: flex; align-items: center; justify-content: center; z-index: 20; }
-.modal-body { background: var(--vscode-editorWidget-background, #252526); border: 1px solid var(--line); border-radius: 4px; padding: 14px; min-width: 280px; font-size: 12px; }
-.modal-body input, .modal-body select { background: var(--vscode-input-background, #3c3c3c); color: var(--vscode-input-foreground, #ccc); border: 1px solid var(--line); border-radius: 3px; padding: 4px 6px; margin-right: 6px; }
-.form { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.modal-body { background: var(--vscode-editorWidget-background, #252526); border: 1px solid var(--line); border-radius: 4px; padding: 14px; min-width: 320px; max-width: 420px; font-size: 12px; }
+.modal-title { font-weight: 600; margin-bottom: 10px; }
+.modal-text { color: var(--muted); margin: 0 0 10px; line-height: 1.45; }
+.modal-row { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; }
+.modal-label { color: var(--muted); min-width: 66px; }
+.modal-arrow { color: var(--muted); }
+.modal-row input { flex: 1; min-width: 0; }
+.modal-actions { display: flex; gap: 6px; justify-content: flex-end; margin-top: 4px; }
+.modal-body input, .modal-body select { background: var(--vscode-input-background, #3c3c3c); color: var(--vscode-input-foreground, #ccc); border: 1px solid var(--line); border-radius: 3px; padding: 4px 6px; }
+.modal-body button { background: var(--vscode-button-secondaryBackground, #3a3d41); color: var(--vscode-button-secondaryForeground, #ccc); border: 1px solid var(--line); border-radius: 3px; padding: 4px 12px; cursor: pointer; font-size: 12px; }
+.modal-body button.primary { background: var(--vscode-button-background, #0e639c); color: var(--vscode-button-foreground, #fff); border-color: transparent; }
+.modal-body button.danger { background: var(--vscode-inputValidation-errorBackground, #5a1d1d); color: var(--fg); }
+.modal-body button:disabled { opacity: 0.5; cursor: default; }
 
 /* Open types and enum-constrained properties, added with the constraint work. */
 .erd-open { border-color: var(--accent); color: var(--accent); }
@@ -96,3 +115,28 @@ body { margin: 0; font-family: var(--vscode-font-family, sans-serif); color: var
 .insp-raw { margin-top: 12px; padding: 6px; border-left: 2px solid var(--accent);
   color: var(--muted); }
 .erd-constrained { border-color: var(--accent); color: var(--accent); }
+
+/* Identity and endpoint editing, beside the constraints they belong with. */
+.insp-field { display: flex; align-items: center; gap: 6px; margin-bottom: 5px; }
+.insp-field > span { color: var(--muted); min-width: 54px; }
+.insp-input { flex: 1; min-width: 0; background: var(--vscode-input-background, #3c3c3c);
+  color: var(--vscode-input-foreground, #ccc); border: 1px solid var(--line);
+  border-radius: 3px; padding: 3px 5px; font-size: 11px; }
+.insp-check { display: flex; align-items: center; gap: 6px; margin: 6px 0 2px; color: var(--muted); }
+.insp-danger { width: 100%; margin-top: 16px; background: none; color: var(--muted);
+  border: 1px solid var(--line); border-radius: 3px; padding: 4px; cursor: pointer; font-size: 11px; }
+.insp-danger:hover { color: var(--vscode-errorForeground, #f48771);
+  border-color: var(--vscode-errorForeground, #f48771); }
+
+/* Mixins read differently from inheritance: a bag of properties, not a supertype. */
+.erd-mixin { background: none; border: 1px solid var(--line); border-radius: 2px;
+  color: var(--muted); font: inherit; font-size: 9px; font-weight: 400;
+  padding: 0 3px; cursor: pointer; }
+.erd-mixin:hover { color: var(--fg); border-color: var(--accent); }
+.erd-from-mixin { font-style: normal; }
+
+.insp-link { background: none; border: none; padding: 0; color: var(--accent);
+  font: inherit; cursor: pointer; text-align: left; }
+.insp-link:hover { text-decoration: underline; }
+.insp-edge { display: flex; align-items: center; gap: 6px; margin-bottom: 3px; }
+.insp-inherited { color: var(--muted); font-size: 9px; }

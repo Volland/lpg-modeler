@@ -165,6 +165,23 @@ export function removeFromView(file: ViewsFile, view: string, typeName: string):
   }
 }
 
+/**
+ * Carry a type rename into every view that names it. A view holds names rather than
+ * ids, so without this a rename drops the type out of the diagram it was drawn on.
+ */
+export function renameInViews(file: ViewsFile, from: string, to: string): ViewsFile {
+  return {
+    views: file.views.map((v) => ({ ...v, include: v.include.map((n) => (n === from ? to : n)) })),
+  }
+}
+
+/** Drop a deleted type from every view, so no view names something the model lost. */
+export function removeFromViews(file: ViewsFile, typeName: string): ViewsFile {
+  return {
+    views: file.views.map((v) => ({ ...v, include: v.include.filter((n) => n !== typeName) })),
+  }
+}
+
 /** Conventional sidecar paths for a model file. */
 export function sidecarPaths(modelPath: string): { views: string; layout: string } {
   const base = modelPath.replace(/\.lpg\.ya?ml$/, '')

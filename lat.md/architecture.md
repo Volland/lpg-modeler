@@ -54,7 +54,7 @@ A workspace holding exactly one model needs no question; more than one is a quic
 
 Every palette command runs its async body through a wrapper that catches and reports. A handler that discards its promise turns any failure into silence.
 
-`registerCommand('lpg.newModel', () => void newModel())` was the original form: the editor never sees the rejection, so a failure anywhere in the flow presents as a palette entry that does nothing at all — indistinguishable from an extension that never activated, and the one symptom a user cannot report usefully. Returning the promise also lets VS Code treat the command as still running. The extension host entry is driven end to end in tests against a stub `vscode` module, which is what makes a silent handler a test failure rather than a support ticket.
+`registerCommand('lpg.newModel', () => void newModel())` was the original form: the editor never sees the rejection, so a failure anywhere in the flow presents as a palette entry that does nothing at all — indistinguishable from an extension that never activated, and the one symptom a user cannot report usefully. Returning the promise also lets VS Code treat the command as still running. The extension host entry is driven end to end in tests against a stub `vscode` module, which is what makes a silent handler a test failure rather than a support ticket. The stub really applies a `WorkspaceEdit` to the file: one that acknowledged the edit without writing would let every canvas flow pass while the model never changed, which is the one thing those flows do.
 
 ### Targeted edits
 
@@ -68,13 +68,25 @@ The webview holds no model state. It posts a named intent, the extension host tu
 
 Deleting a node type also deletes the edge types that reference it: leaving the reference behind would produce a model that cannot resolve. Renaming a type first records its previous IRI, so the ontology can assert equivalence to the identity consumers already have.
 
-The projection carries whatever the metamodel carries, so an addition there is incomplete until the wire types grow with it: a canvas that cannot show a constraint silently invites someone to author a model that contradicts it. [[metamodel#Cardinality]] is edited on the edge rather than in a panel, because it belongs to the relationship and not to either type.
+The projection carries whatever the metamodel carries, so an addition there is incomplete until the wire types grow with it: a canvas that cannot show a constraint silently invites someone to author a model that contradicts it. [[metamodel#Cardinality]] is edited on the selected edge rather than on either box, because it belongs to the relationship and not to either type.
+
+An intent that creates, renames or deletes a node type also carries that through the views sidecar — see [[architecture#Views#Keeping a view current]]. A failing intent is reported rather than swallowed, for the same reason a palette command is: see [[architecture#Editing Surface#Command failures]].
+
+The host handles one message at a time. One canvas gesture can post two intents — the drop that creates a type and the edge reaching it — and both would otherwise be spliced against the same original text, so the second would land at offsets the first had already moved. Serializing at the host rather than batching in the webview keeps the [[architecture#Editing Surface#Targeted edits|splices]] independent of how a gesture was composed.
+
+### Asking
+
+Every question the canvas asks — a name, a confirmation, a pair of endpoints — is rendered in the document. The webview never calls `window.prompt`, `window.confirm` or `window.alert`.
+
+A VS Code webview is a sandboxed iframe in which those three return immediately without showing anything. An action routed through one therefore does nothing at all, and does it silently: `+ node type` read as a dead button, and a type's name read as uneditable, because the dialog that would have collected the name never appeared. That failure is invisible to types and to any test that does not run a browser, so a test asserts instead that no webview source reaches for them. Asking in the document also buys what a native prompt cannot express: an endpoint is a dropdown of types that exist rather than free text, and creating a type and the edge that reaches it is one question rather than two.
 
 ### Inspector
 
-Constraints are edited in a panel beside the canvas rather than on the diagram. A type box shows only a count, so a model with rules stays readable at a glance.
+The panel beside the canvas holds what a type is — its name, its parent, its [[metamodel#Type Hierarchy#Mixins|mixins]], its endpoints and [[metamodel#Cardinality]] — together with its constraints. A box shows only a constraint count, so a model with rules stays readable.
 
-Bounds, patterns and [[metamodel#Named Constraints]] have no place on an ERD box without crowding out the properties, which are what the diagram is for. The panel is also what makes the closed assertion vocabulary pay off twice: every operand is a dropdown of the selected type's own properties and edges, so a constraint cannot be written against something that does not exist, and there is no expression to parse.
+Bounds, patterns and [[metamodel#Named Constraints]] have no place on an ERD box without crowding out the properties, which are what the diagram is for. The panel is also what makes the closed assertion vocabulary pay off twice: every operand is a dropdown of the selected type's own properties and edges, so a constraint cannot be written against something that does not exist, and there is no expression to parse. Identity fields commit on Enter or on blur rather than per keystroke, which would rewrite the model file on every letter typed.
+
+A mixin is edited here too, selected from a chip on any type that applies it or from the panel's own list, and applied through a checkbox per mixin rather than a parent dropdown — the metamodel's distinction, made visible. The list is what the panel shows when nothing is selected, because a mixin no type applies has no box to be reached from.
 
 ## Examples
 
@@ -88,13 +100,27 @@ A view names a subset of types plus an optional neighbourhood expansion, and lay
 
 A single diagram of the whole model is unreadable past a few dozen types, and welding diagram scope to module boundaries would make people split modules for presentation reasons. Views drift as a model grows, so validation reports types that appear in no view.
 
+### Keeping a view current
+
+A view names its members, so the host carries a canvas-driven creation, rename or deletion into the sidecar as well as into the model file.
+
+Without it, a type created while a named view is on screen lands in the file and not on the diagram in front of the user, which is indistinguishable from a button that did nothing. A rename would likewise drop a type out of the diagram it was drawn on, because a view holds names while [[architecture#Source of Truth|layout]] holds ids. A wildcard view is left alone: `*` already covers whatever the model gains, and naming the new type as well would be a lie the moment it is renamed.
+
 ## Rendering
 
 The canvas is built on React Flow with ELK for automatic layout. Custom React nodes render an ERD box with one row per property, and per-row handles let an edge attach to the exact property it references.
 
 React Flow is DOM-based and degrades past a few hundred nodes, which is acceptable precisely because [[architecture#Views]] caps how much any one diagram shows. Note that `elkjs` is EPL-2.0 while React Flow and `dagre` are MIT.
 
-A property row shows its type with a `[]` suffix when it is a [[metamodel#Lists|list]] and the [[metamodel#Enums|enum]] it is limited to; an open type carries a badge. [[metamodel#Cardinality]] rides in the edge label rather than as crow's-foot markers at each end: React Flow's default edge carries one label, and endpoint markers would need a custom edge whose geometry cannot be checked without looking at it. A number that is certainly right beats a marker that might be drawn wrong.
+ELK lays out a diagram that has no saved positions at all; once boxes are placed, a newly created type takes a free column beside them instead. A relayout would move every box the user had arranged, and the point of creating a type is to see the new one, so the canvas re-frames itself and persists the position it chose rather than waiting for a drag. A connection dropped on empty canvas means "and then there is one of these": it offers to create the type as well as the edge.
+
+### Inherited edges
+
+An edge declared on an ancestor is drawn on the ancestor's box alone, and listed on each descendant in the inspector instead.
+
+The diagram says where a thing is written: drawing `OWNS` again from every subtype of `Party` would suggest four declarations where the model has one, and on a hierarchy of any depth it multiplies the lines faster than it adds information. The reading a user actually needs — what can this type relate to — is a list rather than a picture, so the panel gives it, marked with the type each edge is declared on. What the [[emitters#Ladybug Target|targets]] do with the same fact is expansion, which is theirs to do and not the diagram's.
+
+A property row shows its type with a `[]` suffix when it is a [[metamodel#Lists|list]] and the [[metamodel#Enums|enum]] it is limited to; an open type carries a badge. An inherited property names its source with `↑` and a [[metamodel#Type Hierarchy#Mixins|mixin's]] with `◇`, because a supertype and a bag of properties are not the same claim about the type. [[metamodel#Cardinality]] rides in the edge label rather than as crow's-foot markers at each end: React Flow's default edge carries one label, and endpoint markers would need a custom edge whose geometry cannot be checked without looking at it. A number that is certainly right beats a marker that might be drawn wrong.
 
 ## Roadmap
 

@@ -279,3 +279,69 @@ describe('targets carry the additions or report them', () => {
       expect.arrayContaining(['downgrade-enum', 'downgrade-cardinality']))
   })
 })
+
+// @lat: [[metamodel#Type Hierarchy#Mixins]]
+describe('inheritance and mixins', () => {
+  const social = () => loadFixture('social.lpg.yaml')
+
+  it('flattens a parent\'s properties and a mixin\'s onto the type, naming each source', () => {
+    const person = social().nodes.find((n) => n.name === 'Person')!
+    const by = (name: string) => person.props.find((p) => p.name === name)!
+    expect(by('email').inheritedFrom).toBeUndefined()
+    expect(by('id').inheritedFrom).toBe('Party')            // the abstract parent
+    expect(by('createdAt').inheritedFrom).toBe('Timestamped')  // the mixin
+    // A mixin is a bag of properties, not a supertype: it never becomes an ancestor.
+    expect(person.ancestors).toEqual(['Party'])
+    expect(person.mixins).toEqual(['Timestamped'])
+    // The key comes down the inheritance chain; a mixin cannot carry one.
+    expect(person.key).toEqual(['id'])
+    expect(person.keyInheritedFrom).toBe('Party')
+  })
+
+  it('generates every inherited and mixed-in property into every target', () => {
+    // The whole point of declaring a property once: it has to reach the schema of each
+    // type that has it, whichever target is asked for.
+    const model = social()
+    for (const target of ['gql', 'ladybug', 'linkml', 'neo4j', 'owl', 'pgschema', 'shacl']) {
+      const { content, diagnostics } = emit(model, target)
+      expect(diagnostics.filter((d) => d.severity === 'error'), target).toEqual([])
+      expect(content, `${target} carries the mixin property`).toMatch(/createdAt/)
+      // Targets with no inheritance copy the parent's property down; the ones that have
+      // it declare the parent instead. Either way the property is reachable.
+      expect(content, `${target} carries the inherited key property`).toMatch(/\bid\b/)
+    }
+  })
+
+  it('expands an edge on an abstract endpoint to every concrete descendant', () => {
+    // OWNS is declared Party -> Car, and Party is abstract. A target with no
+    // inheritance has to name the leaves. See lat.md/emitters#Ladybug Target.
+    const ddl = emit(social(), 'ladybug').content
+    expect(ddl).toMatch(/FROM Person TO Car/)
+    expect(ddl).toMatch(/FROM Company TO Car/)
+    expect(ddl).not.toMatch(/FROM Party TO Car/)
+  })
+
+  it('reports a mixin no type applies, and one a type overrides', () => {
+    const { model } = inline([
+      'mixins:',
+      '  Stamped:',
+      '    props: { createdAt: { type: datetime } }',
+      '  Unused:',
+      '    props: { spare: { type: string } }',
+      'nodes:',
+      '  Thing:',
+      '    key: [id]',
+      '    mixins: [Stamped]',
+      '    props:',
+      '      id: { type: string }',
+      '      createdAt: { type: date }',
+    ].join('\n'))
+    const found = codes(validateModel(model))
+    // A mixin nothing applies reaches no artifact, and the type's own declaration wins
+    // over the mixin's -- both true silently, so both are said.
+    expect(found).toContain('unused-mixin')
+    expect(found).toContain('shadowed-mixin-property')
+    const thing = model.nodes.find((n) => n.name === 'Thing')!
+    expect(thing.props.find((p) => p.name === 'createdAt')!.type).toBe('date')
+  })
+})

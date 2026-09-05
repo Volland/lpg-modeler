@@ -1,4 +1,7 @@
-import { parseDocument, isMap, isScalar, type Document, type Pair, type YAMLMap, isSeq, YAMLSeq } from 'yaml'
+import {
+  parseDocument, isMap, isScalar, isSeq,
+  type Document, type Pair, type Scalar, type YAMLMap, type YAMLSeq,
+} from 'yaml'
 import type { ScalarType } from './ir'
 
 /**
@@ -126,14 +129,21 @@ function propEntry(p: PropertySpec): string {
   return `${p.name}: { ${idPart}${bits.join(', ')} }`
 }
 
+/**
+ * What a mutation addresses. A mixin body has the same shape as a type body — an id and
+ * a props map — so every property operation works on one unchanged.
+ * See lat.md/metamodel#Type Hierarchy#Mixins.
+ */
+export type OwnerKind = 'nodes' | 'edges' | 'mixins'
+
 interface Ctx { text: string; doc: Document }
 
 function ctx(text: string): Ctx {
   return { text, doc: parseDocument(text, { keepSourceTokens: true }) }
 }
 
-/** Locate a node or edge type's body map. */
-function typeBody(c: Ctx, kind: 'nodes' | 'edges', name: string): YAMLMap | undefined {
+/** Locate a node type, edge type, or mixin body map. */
+function typeBody(c: Ctx, kind: OwnerKind, name: string): YAMLMap | undefined {
   const sec = section(c.doc, kind)
   if (!sec) return undefined
   const item = mapItem(sec, name)
@@ -143,7 +153,7 @@ function typeBody(c: Ctx, kind: 'nodes' | 'edges', name: string): YAMLMap | unde
 // --- Mutations ---------------------------------------------------------------
 
 export function renameType(
-  text: string, kind: 'nodes' | 'edges', from: string, to: string,
+  text: string, kind: OwnerKind, from: string, to: string,
 ): TextEdit[] {
   const c = ctx(text)
   const sec = section(c.doc, kind)
@@ -151,6 +161,18 @@ export function renameType(
   const r = item && rangeOf(item.key)
   if (!r) return []
   const edits: TextEdit[] = [{ start: r[0], end: r[1], newText: to }]
+
+  // Applications of a renamed mixin must move with it.
+  if (kind === 'mixins') {
+    for (const { seq } of mixinLists(c)) {
+      for (const item of seq.items) {
+        const ir = rangeOf(item)
+        if (isScalar(item) && item.value === from && ir) {
+          edits.push({ start: ir[0], end: ir[1], newText: to })
+        }
+      }
+    }
+  }
 
   // References to a renamed node type must move with it.
   if (kind === 'nodes') {
@@ -206,7 +228,7 @@ export function addNodeType(
  * delete is expected to take the connected edges with it. Callers that need to warn
  * first can inspect `edgesReferencing` before applying.
  */
-export function deleteType(text: string, kind: 'nodes' | 'edges', name: string): TextEdit[] {
+export function deleteType(text: string, kind: OwnerKind, name: string): TextEdit[] {
   const c = ctx(text)
   const sec = section(c.doc, kind)
   const item = sec && mapItem(sec, name)
@@ -214,6 +236,20 @@ export function deleteType(text: string, kind: 'nodes' | 'edges', name: string):
   const edits: TextEdit[] = []
   const own = deleteItem(text, item)
   if (own) edits.push(own)
+
+  if (kind === 'mixins') {
+    // A type left applying a mixin the model no longer has would not resolve.
+    for (const { pair, seq } of mixinLists(c)) {
+      if (!seq.items.some((i) => isScalar(i) && i.value === name)) continue
+      const remaining = seq.items
+        .filter((i) => isScalar(i) && i.value !== name)
+        .map((i) => String((i as Scalar).value))
+      const e = remaining.length === 0
+        ? deleteItem(text, pair)
+        : replaceSeq(text, seq, remaining)
+      if (e) edits.push(e)
+    }
+  }
 
   if (kind === 'nodes') {
     const edges = section(c.doc, 'edges')
@@ -250,7 +286,7 @@ export function edgesReferencing(text: string, nodeName: string): string[] {
 }
 
 export function addProperty(
-  text: string, kind: 'nodes' | 'edges', typeName: string, prop: PropertySpec,
+  text: string, kind: OwnerKind, typeName: string, prop: PropertySpec,
 ): TextEdit[] {
   const c = ctx(text)
   const body = typeBody(c, kind, typeName)
@@ -280,7 +316,7 @@ export function addProperty(
 }
 
 export function deleteProperty(
-  text: string, kind: 'nodes' | 'edges', typeName: string, propName: string,
+  text: string, kind: OwnerKind, typeName: string, propName: string,
 ): TextEdit[] {
   const c = ctx(text)
   const body = typeBody(c, kind, typeName)
@@ -293,7 +329,7 @@ export function deleteProperty(
 }
 
 export function renameProperty(
-  text: string, kind: 'nodes' | 'edges', typeName: string, from: string, to: string,
+  text: string, kind: OwnerKind, typeName: string, from: string, to: string,
 ): TextEdit[] {
   const c = ctx(text)
   const body = typeBody(c, kind, typeName)
@@ -344,7 +380,7 @@ function deleteFlowItem(text: string, map: YAMLMap, field: string): TextEdit | u
  * pattern, a length. Written in whichever style the property body already uses.
  */
 export function setPropertyFacet(
-  text: string, kind: 'nodes' | 'edges', typeName: string, propName: string,
+  text: string, kind: OwnerKind, typeName: string, propName: string,
   facet: string, rendered: string | undefined,
 ): TextEdit[] {
   const c = ctx(text)
@@ -442,7 +478,7 @@ export function deleteConstraint(text: string, typeName: string, name: string): 
 
 /** Replace, add, or remove a scalar/sequence field on a type body. */
 function setField(
-  text: string, kind: 'nodes' | 'edges', typeName: string, field: string, rendered: string | undefined,
+  text: string, kind: OwnerKind, typeName: string, field: string, rendered: string | undefined,
 ): TextEdit[] {
   const c = ctx(text)
   const body = typeBody(c, kind, typeName)
@@ -515,8 +551,68 @@ export function addEdgeType(
 }
 
 /** Record the pre-rename IRI so ontology consumers keep resolving. */
+/** Every node type's `mixins:` list, paired with the entry that holds it. */
+function mixinLists(c: Ctx): { pair: Pair; seq: YAMLSeq }[] {
+  const out: { pair: Pair; seq: YAMLSeq }[] = []
+  const nodes = section(c.doc, 'nodes')
+  for (const n of nodes?.items ?? []) {
+    if (!isMap(n.value)) continue
+    const pair = mapItem(n.value as YAMLMap, 'mixins')
+    if (pair && isSeq(pair.value)) out.push({ pair, seq: pair.value as YAMLSeq })
+  }
+  return out
+}
+
+/** Rewrite a whole sequence as a flow list, which is how a model file spells one. */
+function replaceSeq(text: string, seq: YAMLSeq, names: string[]): TextEdit | undefined {
+  const r = rangeOf(seq)
+  if (!r) return undefined
+  // A block sequence's range runs to the start of whatever follows it.
+  let end = r[1]
+  while (end > r[0] && /\s/.test(text[end - 1] ?? '')) end--
+  return { start: r[0], end, newText: `[${names.join(', ')}]` }
+}
+
+/**
+ * Declare a mixin. It lands before `nodes:` when there is one, because a bag of
+ * properties reads as a preamble to the types that apply it.
+ * See lat.md/metamodel#Type Hierarchy#Mixins.
+ */
+export function addMixin(text: string, name: string, id?: string): TextEdit[] {
+  const c = ctx(text)
+  const lines = [`${name}:`, ...(id ? [`  id: ${id}`] : []), '  props: {}']
+
+  const sec = section(c.doc, 'mixins')
+  if (sec) {
+    const e = insertIntoMap(text, sec, lines)
+    return e ? [e] : []
+  }
+  const body = `mixins:\n${lines.map((l) => `  ${l}`).join('\n')}\n\n`
+
+  const root = c.doc.contents
+  const nodesKey = isMap(root)
+    ? (root.items.find((i) => isScalar(i.key) && i.key.value === 'nodes') as Pair | undefined)
+    : undefined
+  const at = nodesKey && rangeOf(nodesKey.key)
+  if (at) {
+    const start = startOfLine(text, at[0])
+    return [{ start, end: start, newText: body }]
+  }
+  const suffix = text.endsWith('\n') ? '' : '\n'
+  return [{ start: text.length, end: text.length, newText: `${suffix}\n${body}` }]
+}
+
+/**
+ * Set which mixins a node type applies. Written as a whole list rather than as an
+ * add and a remove, so the canvas can send what the checkboxes say.
+ */
+export function setMixins(text: string, typeName: string, names: string[]): TextEdit[] {
+  return setField(text, 'nodes', typeName, 'mixins',
+    names.length > 0 ? `[${names.join(', ')}]` : undefined)
+}
+
 export function setPreviousIri(
-  text: string, kind: 'nodes' | 'edges', typeName: string, iri: string,
+  text: string, kind: OwnerKind, typeName: string, iri: string,
 ): TextEdit[] {
   return setField(text, kind, typeName, 'previousIri', iri)
 }

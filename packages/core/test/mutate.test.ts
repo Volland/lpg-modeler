@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import {
-  addEdgeType, addNodeType, addProperty, applyEdits, deleteProperty, deleteType,
+  addEdgeType, addMixin, addNodeType, addProperty, applyEdits, deleteProperty, deleteType,
   edgesReferencing, renameProperty, renameType, setAbstractParent, setEndpoint, setKey,
-  setPreviousIri,
+  setMixins, setPreviousIri,
 } from '../src/mutate'
 import { resolveModel } from '../src/resolve'
 import { fixture, readFile } from './helpers'
@@ -141,5 +141,80 @@ describe('mutations preserve the file', () => {
     const org = reresolve(text).model.nodes.find((n) => n.name === 'Organisation')!
     expect(org.previousIri).toBe(iri)
     expect(org.iri).toBe('https://example.org/vocab/social#Organisation')
+  })
+})
+
+// @lat: [[metamodel#Type Hierarchy#Mixins]]
+describe('authoring a mixin', () => {
+  it('appends to the mixins block a model already has', () => {
+    const before = SRC()
+    const after = applyEdits(before, addMixin(before, 'Audited', 'm_aud'))
+    expect(insertedLines(before, after)).toEqual([
+      '  Audited:', '    id: m_aud', '    props: {}',
+    ])
+    expect(reresolve(after).model.mixins.map((m) => m.name)).toEqual(['Timestamped', 'Audited'])
+  })
+
+  it('opens a mixins block before the types that will apply it', () => {
+    // A bag of properties reads as a preamble to the types applying it, not as an
+    // afterthought at the end of the file.
+    const before = [
+      'namespace:', '  prefix: social', '  iri: https://example.org/vocab/social#', '',
+      'nodes:', '  Car:', '    key: [vin]', '    props:',
+      '      vin: { type: string, required: true }', '',
+    ].join('\n')
+    const after = applyEdits(before, addMixin(before, 'Audited'))
+    expect(after.indexOf('mixins:')).toBeLessThan(after.indexOf('nodes:'))
+    expect(after).toContain('nodes:')
+  })
+
+  it('applies and unapplies a mixin as a whole list', () => {
+    let text = applyEdits(SRC(), setMixins(SRC(), 'Company', ['Timestamped']))
+    const company = () => reresolve(text).model.nodes.find((n) => n.name === 'Company')!
+    expect(company().props.find((p) => p.name === 'createdAt')?.inheritedFrom).toBe('Timestamped')
+
+    text = applyEdits(text, setMixins(text, 'Company', []))
+    // The empty list removes the field rather than writing `mixins: []`.
+    expect(text).not.toContain('mixins: []')
+    expect(company().mixins).toEqual([])
+    expect(company().props.map((p) => p.name)).not.toContain('createdAt')
+  })
+
+  it('carries a rename into every type that applies it', () => {
+    const before = SRC()
+    const after = applyEdits(before, renameType(before, 'mixins', 'Timestamped', 'Stamped'))
+    expect(changedLines(before, after)).toEqual([
+      '  Timestamped: =>   Stamped:',
+      '    mixins: [Timestamped] =>     mixins: [Stamped]',
+    ])
+    const person = reresolve(after).model.nodes.find((n) => n.name === 'Person')!
+    expect(person.mixins).toEqual(['Stamped'])
+    expect(person.props.find((p) => p.name === 'createdAt')?.inheritedFrom).toBe('Stamped')
+  })
+
+  it('deleting one takes its applications with it', () => {
+    // A type left applying a mixin the model no longer has would not resolve.
+    const before = SRC()
+    const after = applyEdits(before, deleteType(before, 'mixins', 'Timestamped'))
+    expect(after).not.toContain('Timestamped')
+    const { model, diagnostics } = reresolve(after)
+    expect(diagnostics.filter((d) => d.severity === 'error')).toEqual([])
+    expect(model.nodes.find((n) => n.name === 'Person')!.mixins).toEqual([])
+  })
+
+  it('edits a mixin property the same way a type property is edited', () => {
+    let text = SRC()
+    text = applyEdits(text, addProperty(text, 'mixins', 'Timestamped', {
+      name: 'updatedAt', type: 'datetime',
+    }))
+    text = applyEdits(text, renameProperty(text, 'mixins', 'Timestamped', 'createdAt', 'bornAt'))
+    const props = () => reresolve(text).model.mixins[0]!.props.map((p) => p.name)
+    expect(props()).toEqual(['bornAt', 'updatedAt'])
+
+    text = applyEdits(text, deleteProperty(text, 'mixins', 'Timestamped', 'updatedAt'))
+    expect(props()).toEqual(['bornAt'])
+    // The change reaches every type applying it, which is the point of a mixin.
+    expect(reresolve(text).model.nodes.find((n) => n.name === 'Person')!.props
+      .map((p) => p.name)).toContain('bornAt')
   })
 })

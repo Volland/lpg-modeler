@@ -3,10 +3,12 @@ import * as path from 'node:path'
 import {
   DEFAULT_VIEW, addToView, addView, applyEdits, backfillIdEdits, describeCardinality,
   emit, formatBound, isUnconstrained, parseLayout, parseViews, projectView, pruneLayout,
-  removeFromView, resolveModel, serializeLayout, serializeViews, setPosition,
+  removeFromView, removeFromViews, renameInViews, resolveModel, serializeLayout,
+  serializeViews, setPosition,
   isValidPrefix, newModelSource, sidecarPaths, targetNames, validateModel,
   ORDERED_TYPES, SCALAR_TYPES, TEXT_TYPES,
   type Assertion, type Diagnostic, type Layout, type ModelIR, type TextEdit, type ViewDef,
+  type ViewsFile,
 } from '@lpg/core'
 import type { HostMessage, Intent, Projection, ViewMessage, WireProperty } from './protocol'
 import { intentToEdits } from './intents'
@@ -74,6 +76,11 @@ async function loadViews(modelPath: string): Promise<ViewDef[]> {
   return text ? parseViews(text).views : [DEFAULT_VIEW]
 }
 
+async function loadViewsFile(modelPath: string): Promise<ViewsFile> {
+  const text = await readSidecar(sidecarPaths(modelPath).views)
+  return text ? parseViews(text) : { views: [DEFAULT_VIEW] }
+}
+
 async function loadLayout(modelPath: string): Promise<Layout> {
   const text = await readSidecar(sidecarPaths(modelPath).layout)
   return text ? parseLayout(text) : {}
@@ -84,6 +91,7 @@ async function loadLayout(modelPath: string): Promise<Layout> {
 class Canvas {
   private lastValid: Projection | undefined
   private activeView = DEFAULT_VIEW.name
+  private queue: Promise<void> = Promise.resolve()
 
   constructor(
     private readonly panel: vscode.WebviewPanel,
@@ -92,13 +100,29 @@ class Canvas {
     extensionUri: vscode.Uri,
   ) {
     panel.webview.html = this.html(extensionUri)
-    panel.webview.onDidReceiveMessage((m: ViewMessage) => void this.onMessage(m))
+    panel.webview.onDidReceiveMessage((m: ViewMessage) => this.handle(m))
   }
 
   get modelPath(): string { return this.modelUri.fsPath }
 
   /** True while this canvas is the focused tab, which is when `activeTextEditor` is not. */
   get isActive(): boolean { return this.panel.active }
+
+  /**
+   * One message at a time, and reported rather than swallowed. Two intents in flight --
+   * the pair that creates a type and the edge reaching it, say -- would each be computed
+   * against the same original text, and the second set of splices would land at offsets
+   * the first had already moved. A failure that disappears leaves a button that does
+   * nothing and nothing to report, the same trap as a palette command that discards its
+   * promise. See lat.md/architecture#Editing Surface#Command failures.
+   */
+  private handle(message: ViewMessage): Promise<void> {
+    this.queue = this.queue.then(() => this.onMessage(message)).catch((error: unknown) => {
+      const detail = error instanceof Error ? error.message : String(error)
+      void vscode.window.showErrorMessage(`Canvas action failed: ${detail}`)
+    })
+    return this.queue
+  }
 
   private post(message: HostMessage): void {
     void this.panel.webview.postMessage(message)
@@ -153,6 +177,9 @@ class Canvas {
     const projection = projectView(model, view)
     const layout = await loadLayout(this.modelPath)
 
+    // A property's `inheritedFrom` names either an ancestor or a mixin. The canvas has
+    // to tell them apart: one is a supertype, the other a bag of properties.
+    const mixinNames = new Set(model.mixins.map((m) => m.name))
     const wireProps = (props: ModelIR['nodes'][number]['props'], key: string[]): WireProperty[] =>
       props.map((p) => ({
         id: p.id, name: p.name, type: p.type, required: p.required, unique: p.unique,
@@ -165,7 +192,12 @@ class Canvas {
         ...(p.pattern !== undefined ? { pattern: p.pattern } : {}),
         ...(p.minLength !== undefined ? { minLength: p.minLength } : {}),
         ...(p.maxLength !== undefined ? { maxLength: p.maxLength } : {}),
-        ...(p.inheritedFrom ? { inheritedFrom: p.inheritedFrom } : {}),
+        ...(p.inheritedFrom
+          ? {
+            inheritedFrom: p.inheritedFrom,
+            inheritedVia: mixinNames.has(p.inheritedFrom) ? 'mixin' as const : 'parent' as const,
+          }
+          : {}),
       }))
 
     this.lastValid = {
@@ -174,6 +206,8 @@ class Canvas {
       nodes: projection.nodes.map((n) => ({
         id: n.id, name: n.name, abstract: n.abstract, open: n.open,
         ...(n.extends ? { extends: n.extends } : {}),
+        ancestors: n.ancestors,
+        mixins: n.mixins,
         props: wireProps(n.props, n.key),
         constraints: n.constraints.map((k) => ({
           id: k.id, name: k.name, kind: k.assert.kind, summary: summarise(k.assert),
@@ -190,6 +224,13 @@ class Canvas {
           constrained: !isUnconstrained(e.cardinality),
         },
         props: wireProps(e.props, []),
+      })),
+      // Model-wide, not view-scoped: a mixin belongs to no one diagram, and a type on
+      // screen may apply one whose other users are not.
+      mixins: model.mixins.map((m) => ({
+        id: m.id, name: m.name,
+        props: wireProps(m.props, []),
+        appliedBy: model.nodes.filter((n) => n.mixins.includes(m.name)).map((n) => n.name),
       })),
       positions: layout[this.activeView] ?? {},
       diagnostics: all.map((d) => ({
@@ -261,8 +302,7 @@ class Canvas {
 
       case 'createView': {
         const paths = sidecarPaths(this.modelPath)
-        const existing = await readSidecar(paths.views)
-        const file = existing ? parseViews(existing) : { views: [DEFAULT_VIEW] }
+        const file = await loadViewsFile(this.modelPath)
         await writeSidecar(paths.views, serializeViews(addView(file, message.name, [])))
         this.activeView = message.name
         await this.refresh()
@@ -271,8 +311,7 @@ class Canvas {
 
       case 'setViewMembership': {
         const paths = sidecarPaths(this.modelPath)
-        const existing = await readSidecar(paths.views)
-        const file = existing ? parseViews(existing) : { views: [DEFAULT_VIEW] }
+        const file = await loadViewsFile(this.modelPath)
         const next = message.include
           ? addToView(file, message.view, message.name)
           : removeFromView(file, message.view, message.name)
@@ -306,6 +345,26 @@ class Canvas {
       const idEdits = backfillIdEdits(after)
       if (idEdits.length > 0) await this.applyToModel(idEdits)
     }
+
+    await this.trackInViews(intent)
+  }
+
+  /**
+   * Keep the views sidecar in step with what an intent did to the model. A view that
+   * names its types explicitly would otherwise swallow a newly created type: the file
+   * gains it and the diagram in front of the user does not, which reads as a button
+   * that does nothing. See lat.md/architecture#Views.
+   */
+  private async trackInViews(intent: Intent): Promise<void> {
+    if (intent.kind !== 'addNode' && intent.kind !== 'renameNode' && intent.kind !== 'deleteNode') {
+      return
+    }
+    const file = await loadViewsFile(this.modelPath)
+    const next = intent.kind === 'addNode' ? addToView(file, this.activeView, intent.name)
+      : intent.kind === 'renameNode' ? renameInViews(file, intent.from, intent.to)
+      : removeFromViews(file, intent.name)
+    if (serializeViews(next) === serializeViews(file)) return
+    await writeSidecar(sidecarPaths(this.modelPath).views, serializeViews(next))
   }
 }
 
