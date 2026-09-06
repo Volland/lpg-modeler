@@ -118,9 +118,45 @@
   },
   "hotPaths": [
     {
+      "path": "packages/vscode/src/webview/main.tsx",
+      "accessCount": 14,
+      "lastAccessed": 1788681005302,
+      "type": "file"
+    },
+    {
+      "path": "lat.md/architecture.md",
+      "accessCount": 9,
+      "lastAccessed": 1788681162506,
+      "type": "file"
+    },
+    {
       "path": "docs/index.html",
-      "accessCount": 6,
-      "lastAccessed": 1788601235834,
+      "accessCount": 7,
+      "lastAccessed": 1788601807324,
+      "type": "file"
+    },
+    {
+      "path": "packages/vscode/src/extension.ts",
+      "accessCount": 7,
+      "lastAccessed": 1788679577146,
+      "type": "file"
+    },
+    {
+      "path": "packages/vscode/src/webview/styles.css",
+      "accessCount": 7,
+      "lastAccessed": 1788681017560,
+      "type": "file"
+    },
+    {
+      "path": "packages/vscode/src/webview/inspector.tsx",
+      "accessCount": 5,
+      "lastAccessed": 1788678309578,
+      "type": "file"
+    },
+    {
+      "path": "packages/vscode/test/canvas.test.ts",
+      "accessCount": 5,
+      "lastAccessed": 1788681125084,
       "type": "file"
     },
     {
@@ -142,15 +178,39 @@
       "type": "file"
     },
     {
+      "path": "packages/vscode/test/vscode.stub.ts",
+      "accessCount": 3,
+      "lastAccessed": 1788680079489,
+      "type": "file"
+    },
+    {
       "path": "README.md",
       "accessCount": 2,
       "lastAccessed": 1788600956062,
       "type": "file"
     },
     {
-      "path": "lat.md/architecture.md",
+      "path": "packages/vscode/src/webview/nodes.tsx",
       "accessCount": 2,
-      "lastAccessed": 1788601158076,
+      "lastAccessed": 1788602099332,
+      "type": "file"
+    },
+    {
+      "path": "packages/vscode/src/protocol.ts",
+      "accessCount": 2,
+      "lastAccessed": 1788679517405,
+      "type": "file"
+    },
+    {
+      "path": "CHANGELOG.md",
+      "accessCount": 2,
+      "lastAccessed": 1788684357836,
+      "type": "file"
+    },
+    {
+      "path": "packages/vscode/CHANGELOG.md",
+      "accessCount": 2,
+      "lastAccessed": 1788684372730,
       "type": "file"
     },
     {
@@ -196,30 +256,6 @@
       "type": "file"
     },
     {
-      "path": "packages/vscode/src/webview/main.tsx",
-      "accessCount": 1,
-      "lastAccessed": 1788587041032,
-      "type": "file"
-    },
-    {
-      "path": "packages/vscode/src/webview/nodes.tsx",
-      "accessCount": 1,
-      "lastAccessed": 1788587072628,
-      "type": "file"
-    },
-    {
-      "path": "packages/vscode/src/webview/inspector.tsx",
-      "accessCount": 1,
-      "lastAccessed": 1788587122938,
-      "type": "file"
-    },
-    {
-      "path": "packages/vscode/test/canvas.test.ts",
-      "accessCount": 1,
-      "lastAccessed": 1788587223909,
-      "type": "file"
-    },
-    {
       "path": "docs/assets/site.css",
       "accessCount": 1,
       "lastAccessed": 1788601009264,
@@ -241,6 +277,30 @@
       "path": "packages/core/test/site.test.ts",
       "accessCount": 1,
       "lastAccessed": 1788601177295,
+      "type": "file"
+    },
+    {
+      "path": "package.json",
+      "accessCount": 1,
+      "lastAccessed": 1788684381348,
+      "type": "file"
+    },
+    {
+      "path": "packages/core/package.json",
+      "accessCount": 1,
+      "lastAccessed": 1788684387145,
+      "type": "file"
+    },
+    {
+      "path": "packages/cli/package.json",
+      "accessCount": 1,
+      "lastAccessed": 1788684391921,
+      "type": "file"
+    },
+    {
+      "path": "packages/vscode/package.json",
+      "accessCount": 1,
+      "lastAccessed": 1788684397101,
       "type": "file"
     }
   ],
