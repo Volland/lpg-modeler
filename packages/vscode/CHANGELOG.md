@@ -4,6 +4,28 @@ All notable changes to LPG Modeler are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] — 2026-09-06
+
+### Added
+
+- **Export your diagram as a PNG or SVG.** New PNG and SVG buttons on the canvas toolbar
+  save exactly what you see, framed to fit. The SVG embeds the diagram's markup rather than
+  tracing it into pure vector shapes, so it opens correctly in a browser or image viewer but
+  isn't the kind of SVG you'd decompose into paths in a vector editor.
+
+- **A "light" option for printing.** Tick the checkbox beside Export for a white-background,
+  dark-ink version of the diagram, sized for print and legible in black and white, regardless
+  of which color theme you're using in the editor.
+
+- **The inspector panel now color-codes what you've selected** — blue for a node type, orange
+  for an edge type, purple for a mixin — instead of one plain heading for all three.
+
+### Fixed
+
+- **Edge lines and labels could be nearly unreadable** on a dark editor theme paired with a
+  light-mode OS, or the reverse. They now follow your editor's own theme instead of your
+  system's light/dark setting.
+
 ## [0.6.1] — 2026-09-05
 
 ### Fixed

@@ -4,6 +4,33 @@ All notable changes to LPG Modeler are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] — 2026-09-06
+
+### Added
+
+- **Export the diagram as PNG or SVG.** A toolbar Export control rasterizes
+  `.react-flow__viewport` with `html-to-image`, framed the same way `fitView` frames it, and
+  hands the host a data URL to save — the webview has no filesystem access of its own.
+  `toSvg` wraps the captured HTML in a `<foreignObject>` rather than emitting pure vector
+  paths, so the file opens correctly in a browser or image viewer but is not the kind of SVG
+  a vector editor decomposes into shapes.
+
+- **A "light" export mode for print.** A checkbox beside Export swaps in a fixed white/dark-ink
+  palette for the duration of the capture — chosen for contrast after grayscale conversion,
+  not just for hue — without touching the live canvas's theme.
+
+- **The inspector heading is color-coded by what's selected.** A node type, an edge type, and
+  a mixin all rendered the same plain heading; blue, orange, and purple now tell them apart
+  at a glance.
+
+### Fixed
+
+- **An edge and its label could go nearly invisible.** Both defaulted to React Flow's own
+  light/dark heuristic, which follows the OS color-scheme setting rather than VS Code's
+  theme — a dark VS Code theme on a light-mode OS rendered them in React Flow's light-mode
+  colors, low-contrast against a dark canvas. Both now track the same theme variables the
+  rest of the canvas does.
+
 ## [0.6.1] — 2026-09-05
 
 ### Fixed
