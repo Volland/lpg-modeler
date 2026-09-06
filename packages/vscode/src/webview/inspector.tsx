@@ -291,7 +291,7 @@ function EdgeInspector(
   }
   return (
     <aside className="inspector">
-      <h2 className="insp-title">{edge.name}<span className="insp-dim"> edge</span></h2>
+      <h2 className="insp-title insp-title-edge">{edge.name}<span className="insp-dim"> edge</span></h2>
 
       <h3 className="insp-h">Type</h3>
       <label className="insp-field">
@@ -381,7 +381,7 @@ function MixinInspector(
 ): React.ReactElement {
   return (
     <aside className="inspector">
-      <h2 className="insp-title">◇ {mixin.name}<span className="insp-dim"> mixin</span></h2>
+      <h2 className="insp-title insp-title-mixin">◇ {mixin.name}<span className="insp-dim"> mixin</span></h2>
       <div className="insp-dim">
         A bag of properties. Applying it copies them into a type; it declares no supertype
         and no identity of its own.
@@ -492,7 +492,7 @@ export function Inspector(
 
   return (
     <aside className="inspector">
-      <h2 className="insp-title">{node.name}</h2>
+      <h2 className="insp-title insp-title-node">{node.name}</h2>
 
       <NodeIdentity node={node} nodes={nodes} emit={emit} />
 

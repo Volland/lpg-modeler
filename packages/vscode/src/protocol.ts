@@ -185,3 +185,8 @@ export type ViewMessage =
   | { type: 'generate'; target: string }
   /** The canvas selects; the inspector renders whatever is selected. */
   | { type: 'select'; elementId: string | undefined }
+  /**
+   * The webview has no filesystem access, so it rasterizes the diagram itself and hands
+   * the host a data URL to save. See lat.md/architecture#Rendering#Exporting the diagram.
+   */
+  | { type: 'export'; format: 'png' | 'svg'; dataUrl: string }

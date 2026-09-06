@@ -215,6 +215,47 @@ describe('authoring a hierarchy from the canvas', () => {
   })
 })
 
+// @lat: [[architecture#Rendering#Exporting the diagram]]
+describe('exporting the diagram', () => {
+  it('writes what the webview rasterized to the chosen PNG path', async () => {
+    const c = await canvas()
+    const out = path.join(root, 'social.png')
+    harness.saveDialog = Uri.file(out)
+
+    const pngBytes = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+    await c.send({
+      type: 'export', format: 'png',
+      dataUrl: `data:image/png;base64,${pngBytes.toString('base64')}`,
+    })
+
+    expect(fs.readFileSync(out)).toEqual(pngBytes)
+    expect(harness.errors).toEqual([])
+    expect(harness.infos).toEqual(['Exported social.png.'])
+  })
+
+  it('percent-decodes an SVG data URL rather than treating it as base64', async () => {
+    const c = await canvas()
+    const out = path.join(root, 'social.svg')
+    harness.saveDialog = Uri.file(out)
+
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg"><text>Thing &amp; Other</text></svg>'
+    await c.send({ type: 'export', format: 'svg', dataUrl: `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}` })
+
+    expect(fs.readFileSync(out, 'utf8')).toBe(svg)
+    expect(harness.errors).toEqual([])
+  })
+
+  it('does nothing when the save dialog is dismissed', async () => {
+    const c = await canvas()
+    harness.saveDialog = undefined
+
+    await c.send({ type: 'export', format: 'png', dataUrl: 'data:image/png;base64,AAAA' })
+
+    expect(fs.readdirSync(root)).toEqual(['social.lpg.yaml'])
+    expect(harness.errors).toEqual([])
+  })
+})
+
 // @lat: [[architecture#Editing Surface#Asking]]
 describe('the canvas asks its questions in the document', () => {
   it('never reaches for a dialog the webview sandbox discards', () => {

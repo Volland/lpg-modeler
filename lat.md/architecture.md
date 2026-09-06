@@ -88,6 +88,8 @@ Bounds, patterns and [[metamodel#Named Constraints]] have no place on an ERD box
 
 A mixin is edited here too, selected from a chip on any type that applies it or from the panel's own list, and applied through a checkbox per mixin rather than a parent dropdown — the metamodel's distinction, made visible. The list is what the panel shows when nothing is selected, because a mixin no type applies has no box to be reached from.
 
+The panel heading is the same `<h2>` for a node, an edge and a mixin, so its color carries the only cue for which kind is selected: blue for a node type, orange for an edge type, purple for a mixin, matching no other accent used on the canvas.
+
 ## Examples
 
 The example models the documentation site offers for download live under `docs/`, and a test resolves and generates every one of them.
@@ -125,6 +127,18 @@ An edge declared on an ancestor is drawn on the ancestor's box alone, and listed
 The diagram says where a thing is written: drawing `OWNS` again from every subtype of `Party` would suggest four declarations where the model has one, and on a hierarchy of any depth it multiplies the lines faster than it adds information. The reading a user actually needs — what can this type relate to — is a list rather than a picture, so the panel gives it, marked with the type each edge is declared on. What the [[emitters#Ladybug Target|targets]] do with the same fact is expansion, which is theirs to do and not the diagram's.
 
 A property row shows its type with a `[]` suffix when it is a [[metamodel#Lists|list]] and the [[metamodel#Enums|enum]] it is limited to; an open type carries a badge. An inherited property names its source with `↑` and a [[metamodel#Type Hierarchy#Mixins|mixin's]] with `◇`, because a supertype and a bag of properties are not the same claim about the type. [[metamodel#Cardinality]] rides in the edge label rather than as crow's-foot markers at each end: React Flow's default edge carries one label, and endpoint markers would need a custom edge whose geometry cannot be checked without looking at it. A number that is certainly right beats a marker that might be drawn wrong.
+
+### Exporting the diagram
+
+The toolbar's PNG and SVG buttons rasterize `.react-flow__viewport` with `html-to-image` — the transformed layer holding boxes and edges, not the dotted `<Background>` or the zoom `<Controls>` beside it, so the export reads as the diagram alone.
+
+The webview has no filesystem access, so it computes a tight crop with `getNodesBounds` and `getViewportForBounds` (the same utilities `fitView` uses), rasterizes at that framing, and sends the host a data URL over the existing `postMessage` channel. The host only asks where to save it and writes the bytes: a PNG data URL is base64, but `toSvg` percent-encodes the markup instead, so the two formats decode differently on the way to disk.
+
+`toSvg` wraps the captured HTML in a `<foreignObject>` rather than emitting pure vector paths — a real limitation of rasterizing a DOM-based canvas, and the reason [[architecture#Rendering|React Flow itself]] was chosen despite it. The file opens correctly in a browser or image viewer; it is not the kind of SVG a vector editor decomposes into shapes.
+
+Both formats depend on the same theme variables the rest of the canvas uses. React Flow's own edge-label and edge-stroke defaults track the OS light/dark preference rather than VS Code's theme, which goes unreadable exactly when those two disagree (a dark VS Code theme on a light-mode OS renders label text in React Flow's light-mode black); `--xy-edge-label-color`, `--xy-edge-label-bg-color`, `--xy-edge-stroke` and `--xy-edge-stroke-selected` are overridden in `styles.css` to the same `--fg`/`--bg`/`--line` the rest of the panel uses, so both the live canvas and an export are legible under whatever theme produced them.
+
+The toolbar's "light" checkbox asks for a print-safe capture instead: white background, dark ink, no color-only cues. It adds an `.export-light` class to `.react-flow__viewport` for the duration of the capture and removes it once the data URL is sent, rather than switching the live canvas's theme — the class pins `--bg`, `--fg`, `--line`, `--muted`, `--accent` and the two raw editor-background names the box and title bar read directly, to fixed values chosen for contrast after grayscale conversion rather than for hue (`--accent` is a dark blue, not a bright one, so it doesn't wash out to the same lightness as the background on a black-and-white printout). Everything else the diagram draws already routes through those five variables, so nothing else needs to change for the export to come out print-safe.
 
 ## Roadmap
 

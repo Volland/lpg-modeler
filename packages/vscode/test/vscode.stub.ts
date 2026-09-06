@@ -75,6 +75,7 @@ export const harness = {
   foundFiles: [] as Uri[],
   errors: [] as string[],
   warnings: [] as string[],
+  infos: [] as string[],
   openedEditors: [] as string[],
   panels: [] as FakePanel[],
   workspaceRoot: undefined as string | undefined,
@@ -86,6 +87,7 @@ export const harness = {
     this.foundFiles = []
     this.errors = []
     this.warnings = []
+    this.infos = []
     this.openedEditors = []
     this.panels = []
     this.workspaceRoot = root
@@ -149,6 +151,7 @@ export const window = {
   showQuickPick: (_items: unknown, _opts?: unknown) => Promise.resolve(harness.quickPicks.shift()),
   showErrorMessage: (m: string) => { harness.errors.push(m); return Promise.resolve(undefined) },
   showWarningMessage: (m: string) => { harness.warnings.push(m); return Promise.resolve(undefined) },
+  showInformationMessage: (m: string) => { harness.infos.push(m); return Promise.resolve(undefined) },
   showTextDocument: (doc: TextDocument, _opts?: unknown) => {
     harness.openedEditors.push(doc.uri.fsPath)
     window.activeTextEditor = { document: doc }

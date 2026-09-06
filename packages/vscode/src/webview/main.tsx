@@ -2,9 +2,11 @@ import * as React from 'react'
 import { createRoot } from 'react-dom/client'
 import {
   Background, Controls, ReactFlow, ReactFlowProvider, useReactFlow,
+  getNodesBounds, getViewportForBounds,
   type Connection, type Edge, type FinalConnectionState, type Node,
   type NodeChange, applyNodeChanges,
 } from '@xyflow/react'
+import { toPng, toSvg } from 'html-to-image'
 import ELK from 'elkjs/lib/elk.bundled.js'
 import type { HostMessage, Intent, Projection, ViewMessage } from '../protocol'
 import { ErdNode, type ErdNodeData } from './nodes'
@@ -87,10 +89,47 @@ function App(): React.ReactElement {
   const [edges, setEdges] = React.useState<Edge[]>([])
   const [dialog, setDialog] = React.useState<Dialog | undefined>()
   const [selected, setSelected] = React.useState<string | undefined>(undefined)
-  const { fitView } = useReactFlow()
+  const [lightExport, setLightExport] = React.useState(false)
+  const { fitView, getNodes } = useReactFlow()
   // Read inside the projection effect without making that effect depend on selection.
   const selectedRef = React.useRef<string | undefined>(undefined)
   selectedRef.current = selected
+
+  /**
+   * The webview cannot write files, so it rasterizes `.react-flow__viewport` itself and
+   * hands the host a data URL to save. Only that element is captured -- not the dotted
+   * `<Background>` or the zoom `<Controls>`, which sit beside it rather than inside it --
+   * so the export reads as the diagram alone. `light` swaps in the print-safe palette
+   * defined as `.export-light` in styles.css for the duration of the capture, so an
+   * export doesn't depend on switching VS Code's own theme first. See
+   * lat.md/architecture#Rendering#Exporting the diagram.
+   */
+  const exportDiagram = React.useCallback(async (format: 'png' | 'svg', light: boolean) => {
+    const viewportEl = document.querySelector<HTMLElement>('.react-flow__viewport')
+    const flowNodes = getNodes()
+    if (!viewportEl || flowNodes.length === 0) return
+    const bounds = getNodesBounds(flowNodes)
+    const width = Math.ceil(bounds.width)
+    const height = Math.ceil(bounds.height)
+    const { x, y, zoom } = getViewportForBounds(bounds, width, height, 0.1, 2, FIT_VIEW.padding)
+    if (light) viewportEl.classList.add('export-light')
+    try {
+      const options = {
+        backgroundColor: getComputedStyle(viewportEl).getPropertyValue('--bg').trim(),
+        width,
+        height,
+        style: {
+          width: `${width}px`,
+          height: `${height}px`,
+          transform: `translate(${x}px, ${y}px) scale(${zoom})`,
+        },
+      }
+      const dataUrl = format === 'png' ? await toPng(viewportEl, options) : await toSvg(viewportEl, options)
+      post({ type: 'export', format, dataUrl })
+    } finally {
+      if (light) viewportEl.classList.remove('export-light')
+    }
+  }, [getNodes])
 
   React.useEffect(() => {
     const onMessage = (event: MessageEvent<HostMessage>) => {
@@ -159,7 +198,7 @@ function App(): React.ReactElement {
           target: to?.id ?? '',
           label: `${e.name}${props}${mult}`,
           labelStyle: { fontSize: 11 },
-          labelBgStyle: e.cardinality.constrained ? { fill: 'var(--vscode-editor-background)' } : undefined,
+          labelBgStyle: e.cardinality.constrained ? { fill: 'var(--bg)' } : undefined,
           animated: false,
           data: { edgeName: e.name },
         }
@@ -249,6 +288,21 @@ function App(): React.ReactElement {
         <button title="A named bag of properties types can apply"
           onClick={() => setDialog({ kind: 'newMixin' })}>+ mixin</button>
         <span className="spacer" />
+        <label>
+          Export{' '}
+          <label className="toolbar-check"
+            title="Print-safe palette: white background, dark ink, no color-only cues">
+            <input type="checkbox" checked={lightExport}
+              onChange={(e) => setLightExport(e.target.checked)} /> light
+          </label>{' '}
+          <button title="Save the diagram as a PNG image" onClick={() => void exportDiagram('png', lightExport)}>
+            PNG
+          </button>{' '}
+          <button title="Save the diagram as an SVG image" onClick={() => void exportDiagram('svg', lightExport)}>
+            SVG
+          </button>
+        </label>
+        <span className="toolbar-sep" />
         <label>
           Generate{' '}
           <select value="" onChange={(e) => {

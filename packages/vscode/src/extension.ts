@@ -326,6 +326,10 @@ class Canvas {
         await generate(this.modelPath, message.target)
         return
 
+      case 'export':
+        await exportDiagram(this.modelPath, message.format, message.dataUrl)
+        return
+
       case 'intent':
         await this.applyIntent(message.intent)
         await this.refresh()
@@ -403,6 +407,28 @@ async function generate(modelPath: string, target: string): Promise<void> {
   }
   const doc = await vscode.workspace.openTextDocument(vscode.Uri.file(outPath))
   await vscode.window.showTextDocument(doc, { preview: true, viewColumn: vscode.ViewColumn.Beside })
+}
+
+/**
+ * The webview rasterized the diagram and handed back a data URL -- the host's job is
+ * only to ask where to put it and write the bytes. A PNG data URL is base64; `toSvg`
+ * percent-encodes the markup instead, per html-to-image's own `svgToDataURL`.
+ */
+async function exportDiagram(modelPath: string, format: 'png' | 'svg', dataUrl: string): Promise<void> {
+  const stem = path.basename(modelPath).replace(/\.lpg\.ya?ml$/, '')
+  const body = dataUrl.slice(dataUrl.indexOf(',') + 1)
+  const chosen = await vscode.window.showSaveDialog({
+    title: `Export diagram as ${format.toUpperCase()}`,
+    defaultUri: vscode.Uri.file(path.join(path.dirname(modelPath), `${stem}.${format}`)),
+    filters: format === 'png' ? { 'PNG image': ['png'] } : { 'SVG image': ['svg'] },
+  })
+  if (!chosen) return
+
+  const bytes = format === 'png'
+    ? Buffer.from(body, 'base64')
+    : Buffer.from(decodeURIComponent(body), 'utf8')
+  await vscode.workspace.fs.writeFile(chosen, bytes)
+  void vscode.window.showInformationMessage(`Exported ${path.basename(chosen.fsPath)}.`)
 }
 
 /**

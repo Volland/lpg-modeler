@@ -4,6 +4,35 @@
   --bg: var(--vscode-editor-background, #1e1e1e);
   --accent: var(--vscode-focusBorder, #007acc);
   --muted: var(--vscode-descriptionForeground, #999);
+  /* React Flow's own edge-label and edge-stroke defaults track the OS light/dark
+     preference, not VS Code's theme -- a dark VS Code theme on a light-mode OS renders
+     the label in React Flow's light-mode black, unreadable against a dark canvas. */
+  --xy-edge-label-color: var(--fg);
+  --xy-edge-label-bg-color: var(--bg);
+  --xy-edge-stroke: var(--line);
+  --xy-edge-stroke-selected: var(--fg);
+}
+
+/**
+ * A print-safe palette the export path applies to `.react-flow__viewport` right before
+ * rasterizing -- pinned rather than derived, because a print-friendly capture needs
+ * guaranteed light/dark values, not "whatever the current VS Code theme happens to be."
+ * Every other export color (edge stroke, edge label, flags, badges, mixin chips) already
+ * routes through `--fg`/`--bg`/`--line`/`--muted`/`--accent`, so overriding just these
+ * five, plus the two raw editor-background names the box and title bar read directly,
+ * covers the whole diagram. Chosen for contrast against white after grayscale
+ * conversion, not just for hue: `--accent` is a dark blue rather than a bright one, so
+ * a black-and-white printout doesn't lose it to a same-lightness wash.
+ */
+.export-light {
+  --bg: #fff;
+  --fg: #1a1a1a;
+  --line: #888;
+  --muted: #595959;
+  --accent: #0b5fa5;
+  --vscode-editor-background: #fff;
+  --vscode-editorWidget-background: #fff;
+  --vscode-titleBar-activeBackground: #f0f0f0;
 }
 
 body { margin: 0; font-family: var(--vscode-font-family, sans-serif); color: var(--fg); background: var(--bg); }
@@ -16,6 +45,7 @@ body { margin: 0; font-family: var(--vscode-font-family, sans-serif); color: var
 }
 .toolbar .spacer { flex: 1; }
 .toolbar-sep { width: 1px; align-self: stretch; background: var(--line); }
+.toolbar-check { font-weight: 400; color: var(--muted); display: inline-flex; align-items: center; gap: 3px; }
 .toolbar button.primary { background: var(--vscode-button-background, #0e639c); color: var(--vscode-button-foreground, #fff); border-color: transparent; }
 .toolbar button:disabled { opacity: 0.5; cursor: default; }
 .toolbar button, .toolbar select {
@@ -93,6 +123,10 @@ body { margin: 0; font-family: var(--vscode-font-family, sans-serif); color: var
 .inspector { width: 260px; flex: none; overflow-y: auto; padding: 10px 12px;
   border-left: 1px solid var(--line); background: var(--panel); font-size: 11px; }
 .insp-title { font-size: 13px; margin: 0 0 8px; }
+/* Same heading, three kinds of selection: color tells node/edge/mixin apart at a glance. */
+.insp-title-node { color: var(--vscode-charts-blue, #3794ff); }
+.insp-title-edge { color: var(--vscode-charts-orange, #d18616); }
+.insp-title-mixin { color: var(--vscode-charts-purple, #b180d7); }
 .insp-h { font-size: 10px; text-transform: uppercase; color: var(--muted);
   margin: 14px 0 6px; letter-spacing: .04em; }
 .insp-empty { color: var(--muted); font-style: italic; }
