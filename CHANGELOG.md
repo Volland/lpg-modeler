@@ -4,6 +4,78 @@ All notable changes to LPG Modeler are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.0] — 2026-09-10
+
+### Added
+
+- **Importers: a model may now start from a schema that already exists.** Every entry point
+  before this one needed a model file to already be there, and the only way to get one was
+  the `Thing` placeholder `LPG: New Model` writes. A team with a shapes graph, an ontology or
+  a database schema had no way in short of retyping it. Three sources are read:
+
+  ```bash
+  npx lpg-modeler-cli import domain.shacl.ttl domain.owl.ttl --out domain.lpg.yaml
+  ```
+
+  Several files are read together rather than one at a time, because neither RDF artifact is
+  a model on its own. SHACL says which class carries which property, its datatype, whether it
+  is required and whether the type is closed — but a shape is flat, so an inherited property
+  is copied onto every subtype and an abstract parent emits no shape at all. OWL has exactly
+  what SHACL lacks, `rdfs:subClassOf` and `owl:hasKey`, and lacks exactly what SHACL has,
+  because the OWL subset deliberately asserts no `rdfs:domain` and so knows every property in
+  the vocabulary and not one of the types it belongs to. Read together they reconstruct
+  nearly the whole model; read apart, each yields a fragment.
+
+- **The LadybugDB DDL is read as a third, complementary source.** It is the only artifact
+  carrying an edge's endpoints and the exact width of every column, the scalar set having
+  been drawn from what that engine stores. So `INT128`, `UUID`, `JSON` and a nested `STRUCT`
+  survive a round trip that RDF alone flattens — `xsd:integer` is written by two scalars and
+  `xsd:string` by three, and a collision cannot be undone by care afterwards. A datatype from
+  the DDL therefore overrides the one read from RDF, applied to whichever ancestor declares
+  the property rather than to the subtype the generator copied it onto.
+
+  One spelling is translated rather than taken at face value: LadybugDB writes the 32-bit
+  float as `FLOAT`, where the metamodel reads a bare `FLOAT` as the 64-bit one. Reading the
+  DDL with the generic table would widen every `FLOAT32` to a `DOUBLE`, which is the opposite
+  of why the DDL is consulted.
+
+- **An expanded endpoint set collapses back to the abstract type it came from.** An edge on
+  an abstract endpoint is generated as one `FROM … TO …` pair per concrete subtype. Given the
+  hierarchy from an ontology in the same import, a set of pairs that is exactly the concrete
+  descendants of one type becomes that type again — `STATIONED_AT` returns as one declaration
+  on `Asset` rather than three. Without a hierarchy there is nothing to collapse to, so the
+  first pair stands and the rest are reported as dropped.
+
+- **A model serializer**, which had no equivalent: the only serializers wrote the sidecars.
+  Key order is fixed rather than incidental, so serializing one model twice gives the same
+  bytes — which is what the deferred lockfile diff would be built on, so the ordering is
+  settled here rather than left to whatever order fields happen to be set in.
+
+- **`LPG: Import Model…`**, which reads the files you pick, writes the model, opens it, and
+  opens the canvas beside it — the same ending as `LPG: New Model`.
+
+- **What could not be recovered is reported, not glossed.** Import diagnostics are the
+  inbound direction of the capability matrix: the ambiguous datatypes, every property hoisted
+  back onto a parent, every endpoint set collapsed or dropped, and the flat statement that
+  RDF cannot express an abstract type, a mixin or a uniqueness constraint. A property carried
+  identically by every subtype is moved up to the parent, but two agreeing subtypes are the
+  least that justifies it: a property on the *only* child of a type is exactly as consistent
+  with the child declaring it as with the parent doing so, so nothing is hoisted through one.
+
+### Changed
+
+- **The SHACL artifact asserts an edge's endpoints instead of only describing them.** A
+  relation shape now carries `sh:class`, and both ends of a reified edge carry one, alongside
+  the `# (:From)-[:EDGE]->(:To)` comment that was previously the only record. A comment is
+  prose for a reader; anything a machine has to read back has to be asserted. The change adds
+  eight lines to the `social` SHACL golden and removes none, and the OWL artifact is
+  untouched — its assertional subset was already the reason the endpoints had nowhere to go.
+
+- **Two `sh:property` shapes on one path are read as one property.** SHACL conjoins them,
+  which is how the raw `shacl:` escape hatch adds a constraint to a property the model
+  already declares. Merging takes the tightest of each bound, so a `max` of 30 narrowed by an
+  escape hatch to 14 arrives as 14 rather than as a duplicate key.
+
 ## [0.7.0] — 2026-09-06
 
 ### Added
