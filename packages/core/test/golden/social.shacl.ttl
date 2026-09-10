@@ -43,6 +43,7 @@ social:CompanyShape a sh:NodeShape ;
   sh:property [
     sh:path social:owns ;
     # (:Party)-[:OWNS]->(:Car)
+    sh:class social:Car ;
   ] .
 
 social:PersonShape a sh:NodeShape ;
@@ -77,14 +78,17 @@ social:PersonShape a sh:NodeShape ;
   sh:property [
     sh:path social:knows ;
     # (:Person)-[:KNOWS]->(:Person)
+    sh:class social:Person ;
   ] ;
   sh:property [
     sh:path social:likes ;
     # (:Person)-[:LIKES]->(:Company)
+    sh:class social:Company ;
   ] ;
   sh:property [
     sh:path social:owns ;
     # (:Party)-[:OWNS]->(:Car)
+    sh:class social:Car ;
   ] .
 
 # Reified from (:Person)-[:KNOWS]->(:Person)
@@ -92,10 +96,12 @@ social:KnowsShape a sh:NodeShape ;
   sh:targetClass social:Knows ;
   sh:property [
     sh:path social:knowsSubject ;
+    sh:class social:Person ;
     sh:minCount 1 ; sh:maxCount 1 ;
   ] ;
   sh:property [
     sh:path social:knowsObject ;
+    sh:class social:Person ;
     sh:minCount 1 ; sh:maxCount 1 ;
   ] ;
   sh:property [
@@ -109,10 +115,12 @@ social:OwnsShape a sh:NodeShape ;
   sh:targetClass social:Owns ;
   sh:property [
     sh:path social:ownsSubject ;
+    sh:class social:Party ;
     sh:minCount 1 ; sh:maxCount 1 ;
   ] ;
   sh:property [
     sh:path social:ownsObject ;
+    sh:class social:Car ;
     sh:minCount 1 ; sh:maxCount 1 ;
   ] ;
   sh:property [

@@ -67,6 +67,10 @@
         "title": "LPG: New Model"
       },
       {
+        "command": "lpg.import",
+        "title": "LPG: Import Model…"
+      },
+      {
         "command": "lpg.openCanvas",
         "title": "LPG: Open Canvas"
       },

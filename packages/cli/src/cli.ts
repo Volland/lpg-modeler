@@ -2,8 +2,9 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs'
 import { join, resolve as resolvePath, basename } from 'node:path'
 import {
-  applyEdits, backfillIdEdits, emit, parseViews, resolveModel, sidecarPaths,
-  targetNames, validateModel, type Diagnostic, type EmitOptions,
+  applyEdits, backfillIdEdits, emit, importModel, importerNames, parseViews,
+  resolveModel, serializeModel, sidecarPaths, targetNames, validateModel,
+  type Diagnostic, type EmitOptions,
 } from '@lpg/core'
 
 const read = (p: string): string | undefined => {
@@ -54,13 +55,20 @@ function usage(): number {
 Usage:
   lpg check <model.lpg.yaml>
   lpg emit  <model.lpg.yaml> --target <${targetNames().join('|')}> [options]
-  lpg ids   <model.lpg.yaml>        assign any missing stable element ids
+  lpg ids    <model.lpg.yaml>       assign any missing stable element ids
+  lpg import <file...> [--from <${importerNames().join('|')}>] [--out <model.lpg.yaml>]
   lpg targets
 
 Options:
   --target <name>       generation target (repeatable)
-  --out <dir>           write artifacts to this directory instead of stdout
+  --out <path>          emit: a directory to write artifacts into
+                        import: the model file to write, instead of stdout
+  --from <name>         import: what the inputs are, when the names do not say
   --edition <name>      neo4j edition: community (default) or enterprise
+
+Several files are imported together: a SHACL shapes graph and the OWL ontology
+beside it each carry half of a model, and the DDL adds the endpoints and the
+exact column widths neither of them keeps.
 `)
   return 2
 }
@@ -72,11 +80,13 @@ function parseArgs(argv: string[]) {
   const positional: string[] = []
   const targets: string[] = []
   let out: string | undefined
+  let from: string | undefined
   let edition: 'community' | 'enterprise' | undefined
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]
     if (a === '--target') targets.push(argv[++i] ?? '')
     else if (a === '--out') out = argv[++i]
+    else if (a === '--from') from = argv[++i]
     else if (a === '--edition') {
       const v = argv[++i]
       if (v !== 'community' && v !== 'enterprise') throw new UsageError()
@@ -84,7 +94,46 @@ function parseArgs(argv: string[]) {
     } else if (a?.startsWith('--')) throw new UsageError()
     else if (a) positional.push(a)
   }
-  return { positional, targets, out, edition }
+  return { positional, targets, out, from, edition }
+}
+
+/**
+ * Read one or more foreign schemas into a model. The result is written through the
+ * normal pipeline rather than trusted: it is serialized, then resolved and validated
+ * from that text, so what the user is told is true of the file they now have.
+ * See lat.md/importers#Importers.
+ */
+function runImport(files: string[], from: string | undefined, out: string | undefined): number {
+  const inputs: Array<{ path: string; text: string }> = []
+  for (const file of files) {
+    const abs = resolvePath(file)
+    const text = read(abs)
+    if (text === undefined) { process.stderr.write(`cannot read ${abs}\n`); return 1 }
+    inputs.push({ path: abs, text })
+  }
+
+  const { model, diagnostics } = importModel(inputs, from)
+  const source = serializeModel(model, {
+    header: [
+      `Imported by lpg-modeler from ${files.map((f) => basename(f)).join(', ')}.`,
+      '',
+      'Check anything the import reported: RDF cannot express an abstract type, a',
+      'mixin or a uniqueness constraint, and several scalars share one XSD datatype.',
+    ],
+  })
+
+  if (!out) {
+    process.stdout.write(source)
+    report(diagnostics)
+    return diagnostics.some((d) => d.severity === 'error') ? 1 : 0
+  }
+
+  const target = resolvePath(out)
+  writeFileSync(target, source)
+  process.stdout.write(`${target}\n`)
+  // Validate what was actually written, not the model in memory.
+  const { errors } = report([...diagnostics, ...analyse(target).diagnostics])
+  return errors > 0 ? 1 : 0
 }
 
 function main(argv: string[]): number {
@@ -95,9 +144,11 @@ function main(argv: string[]): number {
     return 0
   }
 
-  const { positional, targets, out, edition } = parseArgs(rest)
+  const { positional, targets, out, from, edition } = parseArgs(rest)
   const modelPath = positional[0]
   if (!modelPath) return usage()
+
+  if (command === 'import') return runImport(positional, from, out)
 
   if (command === 'ids') {
     const abs = resolvePath(modelPath)

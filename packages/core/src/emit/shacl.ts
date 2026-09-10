@@ -137,6 +137,22 @@ function propertyShape(
   return lines
 }
 
+/**
+ * The qualified term for a node type named by an edge endpoint. Looked up rather than
+ * built from the referring type's prefix, so an endpoint in an imported model keeps its
+ * own namespace.
+ */
+function classTerm(model: ModelIR, name: string): string | undefined {
+  const node = model.nodes.find((n) => n.name === name)
+  return node ? term(node) : undefined
+}
+
+/** The `sh:class` line for an endpoint, or nothing when the type is not in the model. */
+function endpointClass(model: ModelIR, name: string): string[] {
+  const t = classTerm(model, name)
+  return t ? [`    sh:class ${t} ;`] : []
+}
+
 /** The property an edge is reached by: its own for a plain edge, the shortcut otherwise. */
 function relationTerm(edge: EdgeTypeIR): string {
   const m = mapEdge(edge)
@@ -159,6 +175,11 @@ function relationShape(model: ModelIR, node: NodeTypeIR, edge: EdgeTypeIR): stri
     `    sh:path ${relationTerm(edge)} ;`,
     `    # (:${edge.from})-[:${edge.name}]->(:${edge.to})`,
   ]
+  // The far endpoint, asserted rather than only described. The near one is implied by
+  // the shape this property sits on. Without it an edge's endpoints live in a comment,
+  // which nothing but a human can read. See lat.md/importers#Reading Edges.
+  const target = classTerm(model, edge.to)
+  if (target) lines.push(`    sh:class ${target} ;`)
   // The bound at the 'to' end says how many targets one source may have, which is a
   // plain count on the forward path.
   const b = edge.cardinality.to
@@ -255,10 +276,12 @@ export function emitShacl(model: ModelIR, _options: EmitOptions = {}): EmitResul
       `  sh:targetClass ${term(m.edge, m.className)} ;`,
       '  sh:property [',
       `    sh:path ${term(m.edge, m.subjectProperty)} ;`,
+      ...endpointClass(model, m.edge.from),
       '    sh:minCount 1 ; sh:maxCount 1 ;',
       '  ] ;',
       '  sh:property [',
       `    sh:path ${term(m.edge, m.objectProperty)} ;`,
+      ...endpointClass(model, m.edge.to),
       '    sh:minCount 1 ; sh:maxCount 1 ;',
       '  ] ;',
     ]

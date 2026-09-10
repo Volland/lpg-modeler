@@ -6,7 +6,8 @@ import {
   pruneLayout,
   removeFromView, removeFromViews, renameInViews, resolveModel, serializeLayout,
   serializeViews, setPosition,
-  isValidPrefix, newModelSource, sidecarPaths, targetNames, validateModel,
+  importModel, isValidPrefix, newModelSource, serializeModel, sidecarPaths,
+  targetNames, validateModel,
   ORDERED_TYPES, SCALAR_TYPES, TEXT_TYPES,
   type Assertion, type Diagnostic, type Layout, type ModelIR, type TextEdit, type ViewDef,
   type ViewsFile,
@@ -451,6 +452,82 @@ function reporting<T>(label: string, body: () => Promise<T>): () => Promise<void
 
 export function activate(context: vscode.ExtensionContext): void {
   const diagnostics = vscode.languages.createDiagnosticCollection('lpg')
+  /**
+   * Read foreign schemas into a model. Several files are chosen at once because a SHACL
+   * shapes graph and the OWL ontology beside it each carry half of a model, and the
+   * LadybugDB DDL adds the endpoints and exact widths neither keeps.
+   * See lat.md/importers#Importers.
+   */
+  const importSchemas = async (): Promise<vscode.Uri | undefined> => {
+    const picked = await vscode.window.showOpenDialog({
+      title: 'Import SHACL, OWL or LadybugDB DDL',
+      openLabel: 'Import',
+      canSelectMany: true,
+      filters: { 'Schemas': ['ttl', 'owl', 'shacl', 'n3', 'cypher', 'ddl'] },
+    })
+    if (!picked || picked.length === 0) return undefined
+
+    const inputs = await Promise.all(picked.map(async (uri) => ({
+      path: uri.fsPath,
+      text: new TextDecoder().decode(await vscode.workspace.fs.readFile(uri)),
+    })))
+    const { model, diagnostics } = importModel(inputs)
+
+    const errors = diagnostics.filter((d) => d.severity === 'error')
+    if (errors.length > 0) {
+      void vscode.window.showErrorMessage(`Import failed: ${errors[0]?.message ?? ''}`)
+      return undefined
+    }
+    if (model.nodes.length === 0) {
+      void vscode.window.showWarningMessage(
+        'Nothing was imported: no owl:Class, sh:NodeShape or CREATE TABLE was found in those files.')
+      return undefined
+    }
+
+    const folder = vscode.workspace.workspaceFolders?.[0]
+    const chosen = await vscode.window.showSaveDialog({
+      title: 'Save imported model',
+      saveLabel: 'Save model',
+      filters: { 'LPG model': ['yaml', 'yml'] },
+      ...(folder
+        ? { defaultUri: vscode.Uri.joinPath(folder.uri, `${model.namespace.prefix}.lpg.yaml`) }
+        : {}),
+    })
+    if (!chosen) return undefined
+
+    const target = withModelSuffix(chosen)
+    const source = serializeModel(model, {
+      header: [
+        `Imported by lpg-modeler from ${picked.map((u) => path.basename(u.fsPath)).join(', ')}.`,
+        '',
+        'RDF cannot express an abstract type, a mixin or a uniqueness constraint, and',
+        'several scalars share one XSD datatype. Check what the import reported.',
+      ],
+    })
+    await vscode.workspace.fs.writeFile(target, new TextEncoder().encode(source))
+
+    const doc = await vscode.workspace.openTextDocument(target)
+    await vscode.window.showTextDocument(doc, vscode.ViewColumn.One)
+    await openCanvas(target)
+
+    // What could not be recovered is the whole reason to look at the file, so it is
+    // said once here rather than left only in the Problems panel.
+    const lossy = diagnostics.filter((d) => d.code.startsWith('import-'))
+    if (lossy.length > 0) {
+      void vscode.window.showInformationMessage(
+        `Imported ${model.nodes.length} type(s) and ${model.edges.length} edge(s), with ${lossy.length} note(s) on what RDF and DDL could not carry.`,
+        'Show notes',
+      ).then((pick) => {
+        if (pick === 'Show notes') {
+          const channel = vscode.window.createOutputChannel('LPG Import')
+          for (const d of lossy) channel.appendLine(`${d.severity}: ${d.message}`)
+          channel.show(true)
+        }
+      })
+    }
+    return target
+  }
+
   const newModel = async (): Promise<vscode.Uri | undefined> => {
     const entered = await vscode.window.showInputBox({
       title: 'New LPG model',
@@ -548,6 +625,7 @@ function withModelSuffix(uri: vscode.Uri): vscode.Uri {
 
   context.subscriptions.push(
     vscode.commands.registerCommand('lpg.newModel', reporting('LPG: New Model', newModel)),
+    vscode.commands.registerCommand('lpg.import', reporting('LPG: Import Model', importSchemas)),
     vscode.commands.registerCommand('lpg.openCanvas', reporting('LPG: Open Canvas', () => openCanvas())),
     vscode.commands.registerCommand('lpg.generate', reporting('LPG: Generate Schema', async () => {
       const uri = await modelForCommand()

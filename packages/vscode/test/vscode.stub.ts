@@ -69,6 +69,10 @@ export const harness = {
   commands: new Map<string, (...args: unknown[]) => unknown>(),
   inputs: [] as (string | undefined)[],
   saveDialog: undefined as Uri | undefined,
+  /** What the file picker returns; import chooses several files at once. */
+  openDialog: undefined as Uri[] | undefined,
+  /** Lines the extension wrote to an output channel, by channel name. */
+  channels: new Map<string, string[]>(),
   /** Answers to successive quick picks, in order: a flow can ask more than once. */
   quickPicks: [] as (string | undefined)[],
   /** What `findFiles` returns, i.e. the model files the workspace holds. */
@@ -83,6 +87,8 @@ export const harness = {
     this.commands.clear()
     this.inputs = []
     this.saveDialog = undefined
+    this.openDialog = undefined
+    this.channels.clear()
     this.quickPicks = []
     this.foundFiles = []
     this.errors = []
@@ -148,6 +154,12 @@ export const window = {
   activeTextEditor: undefined as { document: TextDocument } | undefined,
   showInputBox: (_opts?: unknown) => Promise.resolve(harness.inputs.shift()),
   showSaveDialog: (_opts?: unknown) => Promise.resolve(harness.saveDialog),
+  showOpenDialog: (_opts?: unknown) => Promise.resolve(harness.openDialog),
+  createOutputChannel: (name: string) => {
+    const lines: string[] = []
+    harness.channels.set(name, lines)
+    return { appendLine: (l: string) => lines.push(l), show: (_p?: boolean) => undefined }
+  },
   showQuickPick: (_items: unknown, _opts?: unknown) => Promise.resolve(harness.quickPicks.shift()),
   showErrorMessage: (m: string) => { harness.errors.push(m); return Promise.resolve(undefined) },
   showWarningMessage: (m: string) => { harness.warnings.push(m); return Promise.resolve(undefined) },

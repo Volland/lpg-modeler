@@ -5,6 +5,7 @@ export * from './scaffold'
 export * from './resolve'
 export * from './validate'
 export * from './views'
+export * from './serialize'
 export * from './mutate'
 export * from './capabilities'
 export { emit, targetNames, capabilitiesOf, registerTarget, type Emitter } from './emit/index'
@@ -16,3 +17,9 @@ export { GQL_CAPABILITIES } from './emit/gql'
 export { PGSCHEMA_CAPABILITIES } from './emit/pgschema'
 export { LINKML_CAPABILITIES } from './emit/linkml'
 export * from './emit/reify'
+export {
+  importModel, importerNames, registerImporter, detectFormat, resolveFormat,
+  type ImportInput, type ImportResult, type Importer,
+} from './import/index'
+export { importRdf } from './import/rdf'
+export { importLadybug } from './import/ladybug'

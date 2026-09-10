@@ -116,3 +116,68 @@ describe('LPG: Generate Schema', () => {
     expect(harness.errors).toEqual([])
   })
 })
+
+// @lat: [[importers#Importers]]
+describe('LPG: Import Model', () => {
+  /** A shapes graph and the ontology beside it, written into the workspace. */
+  function artifacts(): vscode.Uri[] {
+    const model = writeModel('social')
+    const source = fs.readFileSync(
+      path.join(__dirname, '..', '..', 'core', 'test', 'fixtures', 'social.lpg.yaml'), 'utf8')
+    fs.writeFileSync(model, source)
+    const { resolveModel, emit } = require('@lpg/core')
+    const resolved = resolveModel(model, (p: string) => {
+      try { return fs.readFileSync(p, 'utf8') } catch { return undefined }
+    })
+    const out: vscode.Uri[] = []
+    for (const target of ['shacl', 'owl']) {
+      const file = path.join(root, `social.${target}.ttl`)
+      fs.writeFileSync(file, emit(resolved.model, target).content)
+      out.push(Uri.file(file))
+    }
+    return out
+  }
+
+  it('reads the chosen files into a model, opens it, and opens the canvas', async () => {
+    activate(context())
+    harness.openDialog = artifacts()
+    harness.saveDialog = Uri.file(path.join(root, 'imported.lpg.yaml'))
+
+    await harness.commands.get('lpg.import')?.()
+
+    const written = fs.readFileSync(path.join(root, 'imported.lpg.yaml'), 'utf8')
+    expect(written).toContain('extends: Party')
+    expect(harness.openedEditors).toContain(path.join(root, 'imported.lpg.yaml'))
+    expect(harness.panels.length).toBe(1)
+  })
+
+  it('says how much arrived and what could not be carried', async () => {
+    activate(context())
+    harness.openDialog = artifacts()
+    harness.saveDialog = Uri.file(path.join(root, 'imported.lpg.yaml'))
+
+    await harness.commands.get('lpg.import')?.()
+
+    expect(harness.infos.join(' ')).toMatch(/Imported \d+ type\(s\)/)
+  })
+
+  it('does nothing when the picker is dismissed', async () => {
+    activate(context())
+    harness.openDialog = undefined
+
+    await harness.commands.get('lpg.import')?.()
+
+    expect(harness.openedEditors).toEqual([])
+  })
+
+  it('warns rather than writing an empty model when nothing was recognised', async () => {
+    activate(context())
+    const empty = path.join(root, 'empty.ttl')
+    fs.writeFileSync(empty, '@prefix ex: <https://example.org/x#> .\n')
+    harness.openDialog = [Uri.file(empty)]
+
+    await harness.commands.get('lpg.import')?.()
+
+    expect(harness.warnings.join(' ')).toContain('Nothing was imported')
+  })
+})

@@ -3,3 +3,4 @@ This directory defines the high-level concepts, business logic, and architecture
 - [[architecture]] — source of truth, package boundary, editing surface, views, and the v1 cut line.
 - [[metamodel]] — what a model may say: type hierarchy, identity, stable ids, composition, namespaces.
 - [[emitters]] — capability matrix, Ladybug/Neo4j/template targets, RDF mapping, migrations, verification.
+- [[importers]] — reading SHACL, OWL and LadybugDB DDL back into a model, and what each source cannot carry.

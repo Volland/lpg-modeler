@@ -8,8 +8,12 @@
     "build": "tsc -p tsconfig.json"
   },
   "dependencies": {
+    "n3": "^2.7.12",
     "yaml": "^2.6.0"
   },
   "private": true,
-  "description": "Parsing, IR, validation and generators for LPG Modeler. Bundled into the CLI and the extension rather than published."
+  "description": "Parsing, IR, validation and generators for LPG Modeler. Bundled into the CLI and the extension rather than published.",
+  "devDependencies": {
+    "@types/n3": "^1.26.3"
+  }
 }

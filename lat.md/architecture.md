@@ -142,7 +142,7 @@ The toolbar's "light" checkbox asks for a print-safe capture instead: white back
 
 ## Roadmap
 
-v1 is a visual modeler: the full compiler pipeline plus a canvas that authors the model, generating Ladybug DDL, Neo4j constraints, SHACL shapes, and an OWL ontology.
+v1 is a visual modeler: the full compiler pipeline plus a canvas that authors the model, generating Ladybug DDL, Neo4j constraints, SHACL shapes, and an OWL ontology. It reads the RDF artifacts and the Ladybug DDL back as well — see [[importers]].
 
 The original plan deferred interactive editing to v2 and shipped a read-only canvas first. That was amended: building the compiler first would have left the tool unusable for its stated purpose until a second release, and the IR is exercised by every canvas action anyway, so real use validates the metamodel rather than tests alone.
 
@@ -150,7 +150,7 @@ The original plan deferred interactive editing to v2 and shipped a read-only can
 
 Migrations and the lockfile diff, the Memgraph target, and user-supplied template targets remain out of scope.
 
-Nothing in the implementation assumes a lockfile exists. The IR serializer nevertheless orders keys stably, so introducing one later is a serialization call rather than a rework.
+Nothing in the implementation assumes a lockfile exists. The model serializer that [[importers#Serializing a Model|importing]] needed orders keys stably and is checked for it, so introducing one later is a serialization call rather than a rework.
 
 ## Packages
 
@@ -193,3 +193,13 @@ An Impressum is arguably not required for a free, non-commercial project — § 
 The Marketplace page renders `packages/vscode/README.md`, which is a separate document from the repository README rather than a copy of it.
 
 The two have different readers. The repository README explains the monorepo to someone about to change it; the Marketplace README sells the extension to someone deciding whether to install it, and so leads with the problem, the generated artifacts, and the capability reporting. Images there use absolute `raw.githubusercontent.com` URLs, because relative paths do not resolve on the Marketplace.
+
+### Announcement writing
+
+Long-form posts about the tool live in `article/`, referencing the site's own diagrams and screenshots by relative path rather than carrying copies.
+
+Keeping them in the repository is what makes a claim checkable: several are version-pinned measurements — LadybugDB 0.19.1 rejecting `NOT NULL`, Neo4j existence constraints being Enterprise-only, the number of targets — and a post held elsewhere would keep asserting them after [[emitters#Capability Matrix]] had moved. One copy of each image also means an article cannot show a [[architecture#Distribution#Documentation site#Screenshots|screenshot]] the site has already replaced. The folder's README carries the absolute `raw.githubusercontent.com` forms, for the same reason the [[architecture#Distribution#Marketplace page]] needs them: a renderer outside the repository does not resolve a relative path.
+
+A publishing platform that takes uploads rather than URLs needs the files themselves, so each article also has an `article/<slug>-images/` folder of copies, numbered in the order the post uses them. These are an export, not a source: the markdown still references `../docs/assets/`, so a regenerated diagram reaches the article but leaves the upload set behind until it is re-copied.
+
+A long read also gets a feed-sized companion — `article/linkedin-<slug>.md` for LinkedIn — carrying the post body to paste, its first comment, and its hashtags. It compresses the long read rather than restating it: every claim in it is one the long read already makes, so a version-pinned measurement that moves gets corrected in one place. The body is stored between rules and free of markdown, because the feed renders none, and the links live in the first comment rather than the post.

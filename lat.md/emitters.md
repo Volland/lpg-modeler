@@ -14,7 +14,7 @@ Constraint downgrades are reported at `info` rather than `warning`. Five of the 
 
 A capability value is not always a yes or a no. LadybugDB declares [[metamodel#Cardinality]] as `upper-bound-only`, because its multiplicity keyword says an end holds at most one and nothing else. Collapsing that to `enforced` would be the exact overstatement the matrix exists to prevent, so the partial case gets its own value rather than being rounded up.
 
-A comment is also injected at the lossy site in the generated file, so an operator reading the DDL sees the same information as the author reading the editor.
+A comment is also injected at the lossy site in the generated file, so an operator reading the DDL sees the same information as the author reading the editor. A comment is prose for a reader, not a record: anything a machine has to read back is asserted instead — see [[importers#Reading Edges]].
 
 Three lossiness cases exist before a line of emitter code is written: Ladybug has no multi-label nodes, Neo4j existence and node-key constraints are Enterprise-only, and generic Cypher engines have no schema facility at all. Silent best-effort was rejected because a `required` constraint that quietly vanishes is a data-integrity bug that surfaces in production. This declared capability set is also the seam the deferred public plugin API will expose — see [[architecture#Modularity]].
 
@@ -113,6 +113,8 @@ An [[metamodel#Enums|enum]] is the one constraint that does cross over, as an OW
 ### Gradual Reification
 
 An edge with no properties becomes a plain object property. An edge that carries properties becomes an n-ary relation class plus a shortcut property, and its SHACL shape targets that class.
+
+The subject and object properties of a reified class each carry an `sh:class`, which is what lets a reader tell a relationship from an ordinary node type without parsing a comment. See [[importers#Reading Edges]].
 
 Reifying only what needs it follows the treatment of property graphs as accidental metagraphs in the author's work, where edge properties are already implicit reified edges. Staying inside OWL DL keeps reasoners working, at the cost of the graph shape differing between edge types. RDF-star was rejected as the uniform representation because OWL DL reasoners do not handle quoted triples and SHACL cannot constrain them.
 

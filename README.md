@@ -28,6 +28,7 @@ as ERD-like diagrams, and generating database DDL and RDF artifacts from a singl
 - **Edits it on a canvas beside the file.** Every canvas action becomes a targeted text splice, applied as a workspace edit. Coordinates live in a sidecar, so moving a box produces no semantic diff.
 - **Models inheritance and mixins as separate tools.** An abstract label hierarchy says what a thing *is* and carries keys and edges down to every descendant; a mixin is a bag of properties a type applies, with no supertype and no identity. Both are flattened before any generator sees the model.
 - **Generates seven targets** from one model: LadybugDB DDL, Neo4j constraints, SHACL shapes, and an OWL ontology — plus three standards artifacts, GQL graph types (ISO/IEC 39075), PG-Schema, and LinkML.
+- **Imports what you already have.** A model can start from a SHACL shapes graph, an OWL ontology or LadybugDB DDL rather than from an empty file. Several files are read together, because each carries what the others cannot — and whatever could not be recovered is reported rather than guessed.
 - **Reports every downgrade.** Anything a target cannot enforce becomes an editor diagnostic *and* a comment at the lossy line of the artifact. Nothing disappears quietly.
 - **Models lists, enums, open types and cardinality** — and cardinality is genuinely enforced where it can be: LadybugDB rejects a violating write, and SHACL bounds both directions.
 - **Stays interoperable.** The model file is self-describing, its scalar types answer to their GQL names, and the JSON Schema is 2020-12 — so a model is readable outside this tool, not only inside it.
@@ -96,6 +97,13 @@ npx lpg-modeler-cli check fleet.lpg.yaml
 npx lpg-modeler-cli emit  fleet.lpg.yaml --target ladybug --target shacl --out ./schema
 ```
 
+Or start from a schema you already have, reading the shapes graph and the ontology together
+because each carries what the other cannot:
+
+```bash
+npx lpg-modeler-cli import domain.shacl.ttl domain.owl.ttl --out domain.lpg.yaml
+```
+
 Browse them with commentary: **https://volland.github.io/lpg-modeler/examples.html**
 
 ## Install
@@ -119,7 +127,7 @@ A monorepo of three packages.
 
 | Package | Holds |
 | --- | --- |
-| [`packages/core`](packages/core) | Parsing, the intermediate representation, resolution, validation, targeted edits, and every generator |
+| [`packages/core`](packages/core) | Parsing, the intermediate representation, resolution, validation, targeted edits, every generator, and the importers |
 | [`packages/cli`](packages/cli) | The `lpg` command, wrapping core for continuous integration |
 | [`packages/vscode`](packages/vscode) | The extension: webview canvas, diagnostics, commands |
 
