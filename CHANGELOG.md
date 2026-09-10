@@ -78,6 +78,13 @@ All notable changes to LPG Modeler are recorded here. The format follows
   `core/dist` was already there from an earlier build. The script now names the three in the
   order the README always said it used.
 
+- **The live LadybugDB tests bound the engine's resource defaults.** Each opens its own
+  database, and `maxDBSize` reserves 8 TiB of address space by default, so fourteen of them
+  running alongside the other test files exhausted the mapping — `Mmap for size
+  8796093022208 failed` outright on a CI runner, and intermittently under load locally. The
+  buffer pool is capped for the same reason. Both limits are far above what a fixture of a
+  handful of rows needs.
+
 - **Two `sh:property` shapes on one path are read as one property.** SHACL conjoins them,
   which is how the raw `shacl:` escape hatch adds a constraint to a property the model
   already declares. Merging takes the tightest of each bound, so a `max` of 30 narrowed by an

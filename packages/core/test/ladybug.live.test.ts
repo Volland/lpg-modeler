@@ -10,8 +10,20 @@ import { loadFixture } from './helpers'
  */
 // @lat: [[emitters#Verification]]
 describe('ladybug emitter, executed', () => {
+  /**
+   * Every test opens its own database, and two defaults have to be bounded for that to be
+   * affordable. `maxDBSize` is a virtual address-space reservation, 8 TiB by default, so
+   * fourteen of them alongside the other files vitest runs in parallel exhausts the
+   * mapping and fails with `Mmap for size 8796093022208 failed` -- outright on a CI
+   * runner, intermittently under load locally. The buffer pool is sized from system
+   * memory by default and is capped for the same reason. These fixtures hold a handful of
+   * rows, so neither limit is near being reached.
+   */
+  const BUFFER_POOL = 256 * 1024 * 1024
+  const MAX_DB_SIZE = 1024 * 1024 * 1024
+
   const connect = async () => {
-    const db = new lbug.Database(':memory:')
+    const db = new lbug.Database(':memory:', BUFFER_POOL, true, false, MAX_DB_SIZE)
     return new lbug.Connection(db)
   }
 
