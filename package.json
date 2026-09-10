@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.8.0",
   "scripts": {
-    "build": "npm run build --workspaces --if-present",
+    "build": "npm run build -w packages/core && npm run build -w packages/cli && npm run build -w packages/vscode",
     "test": "vitest run",
     "lint": "eslint packages --ext .ts,.tsx"
   },

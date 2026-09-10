@@ -71,6 +71,13 @@ All notable changes to LPG Modeler are recorded here. The format follows
   eight lines to the `social` SHACL golden and removes none, and the OWL artifact is
   untouched — its assertional subset was already the reason the endpoints had nowhere to go.
 
+- **The root build runs the workspaces in dependency order.** `npm run build --workspaces`
+  visits them alphabetically — `cli`, then `core`, then `vscode` — so the CLI compiled
+  against a `@lpg/core` that had not emitted its types yet and continuous integration failed
+  on `Cannot find module '@lpg/core'`. It passed on a developer machine only because
+  `core/dist` was already there from an earlier build. The script now names the three in the
+  order the README always said it used.
+
 - **Two `sh:property` shapes on one path are read as one property.** SHACL conjoins them,
   which is how the raw `shacl:` escape hatch adds a constraint to a property the model
   already declares. Merging takes the tightest of each bound, so a `max` of 30 narrowed by an
