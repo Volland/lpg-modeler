@@ -27,7 +27,7 @@ as ERD-like diagrams, and generating database DDL and RDF artifacts from a singl
 - **Authors the model as reviewable YAML**, validated by a contributed JSON Schema — so completion and hover come from the YAML tooling you already have.
 - **Edits it on a canvas beside the file.** Every canvas action becomes a targeted text splice, applied as a workspace edit. Coordinates live in a sidecar, so moving a box produces no semantic diff.
 - **Models inheritance and mixins as separate tools.** An abstract label hierarchy says what a thing *is* and carries keys and edges down to every descendant; a mixin is a bag of properties a type applies, with no supertype and no identity. Both are flattened before any generator sees the model.
-- **Generates seven targets** from one model: LadybugDB DDL, Neo4j constraints, SHACL shapes, and an OWL ontology — plus three standards artifacts, GQL graph types (ISO/IEC 39075), PG-Schema, and LinkML.
+- **Generates eight targets** from one model: LadybugDB DDL, Neo4j constraints, FalkorDB schema, SHACL shapes, and an OWL ontology — plus three standards artifacts, GQL graph types (ISO/IEC 39075), PG-Schema, and LinkML.
 - **Imports what you already have.** A model can start from a SHACL shapes graph, an OWL ontology or LadybugDB DDL rather than from an empty file. Several files are read together, because each carries what the others cannot — and whatever could not be recovered is reported rather than guessed.
 - **Reports every downgrade.** Anything a target cannot enforce becomes an editor diagnostic *and* a comment at the lossy line of the artifact. Nothing disappears quietly.
 - **Models lists, enums, open types and cardinality** — and cardinality is genuinely enforced where it can be: LadybugDB rejects a violating write, and SHACL bounds both directions.
@@ -80,7 +80,7 @@ what a thing is. `createdAt` on twenty types does not make twenty subtypes of a
 ## Examples
 
 Five complete models, each checked in continuous integration — a test resolves every one of
-them and generates all seven targets, so the file you download is the file the test checked.
+them and generates all eight targets, so the file you download is the file the test checked.
 
 | Model | Shows |
 | --- | --- |

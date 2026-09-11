@@ -65,6 +65,8 @@ Options:
                         import: the model file to write, instead of stdout
   --from <name>         import: what the inputs are, when the names do not say
   --edition <name>      neo4j edition: community (default) or enterprise
+  --graph-key <key>     falkordb: the Redis key the graph lives under
+                        (default: the model's namespace prefix)
 
 Several files are imported together: a SHACL shapes graph and the OWL ontology
 beside it each carry half of a model, and the DDL adds the endpoints and the
@@ -81,12 +83,14 @@ function parseArgs(argv: string[]) {
   const targets: string[] = []
   let out: string | undefined
   let from: string | undefined
+  let graphKey: string | undefined
   let edition: 'community' | 'enterprise' | undefined
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]
     if (a === '--target') targets.push(argv[++i] ?? '')
     else if (a === '--out') out = argv[++i]
     else if (a === '--from') from = argv[++i]
+    else if (a === '--graph-key') graphKey = argv[++i]
     else if (a === '--edition') {
       const v = argv[++i]
       if (v !== 'community' && v !== 'enterprise') throw new UsageError()
@@ -94,7 +98,7 @@ function parseArgs(argv: string[]) {
     } else if (a?.startsWith('--')) throw new UsageError()
     else if (a) positional.push(a)
   }
-  return { positional, targets, out, from, edition }
+  return { positional, targets, out, from, graphKey, edition }
 }
 
 /**
@@ -144,7 +148,7 @@ function main(argv: string[]): number {
     return 0
   }
 
-  const { positional, targets, out, from, edition } = parseArgs(rest)
+  const { positional, targets, out, from, graphKey, edition } = parseArgs(rest)
   const modelPath = positional[0]
   if (!modelPath) return usage()
 
@@ -180,7 +184,10 @@ function main(argv: string[]): number {
     return 1
   }
 
-  const options: EmitOptions = edition ? { neo4jEdition: edition } : {}
+  const options: EmitOptions = {
+    ...(edition ? { neo4jEdition: edition } : {}),
+    ...(graphKey ? { falkorGraphKey: graphKey } : {}),
+  }
   const collected: Diagnostic[] = [...diagnostics.filter((d) => d.severity !== 'error')]
   for (const target of targets) {
     const result = emit(model, target, options)

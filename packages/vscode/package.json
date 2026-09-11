@@ -68,7 +68,7 @@
       },
       {
         "command": "lpg.import",
-        "title": "LPG: Import Model…"
+        "title": "LPG: Import Model\u2026"
       },
       {
         "command": "lpg.openCanvas",
@@ -99,6 +99,11 @@
           ],
           "default": "community",
           "description": "Neo4j edition. Community cannot enforce existence or node key constraints."
+        },
+        "lpg.targets.falkordb.graphKey": {
+          "type": "string",
+          "default": "",
+          "description": "FalkorDB: the Redis key the graph lives under. Empty means the model's own namespace prefix names it."
         }
       }
     }

@@ -40,7 +40,7 @@ Registering the canvas as a `CustomTextEditorProvider` was rejected: it would be
 
 Every other entry point needs a model file to already exist — the canvas, and every CLI verb — so without this the first step was to know the shape of a file nobody had shown you yet. The template carries stable ids and one seeded node type with a key, because a model that generates nothing on its first run reads as a broken tool rather than an empty one. The seed is named `Thing` rather than after the model, so that it reads as a placeholder to rename.
 
-The file suffix is forced to `.lpg.yaml` whatever the save dialog returns. A model saved as plain `.yaml` gets no schema validation and no canvas, which looks like the extension failing rather than a naming mistake. Keeping the template in `core` is what lets a test resolve it, validate it, and generate all seven targets from it without an editor.
+The file suffix is forced to `.lpg.yaml` whatever the save dialog returns. A model saved as plain `.yaml` gets no schema validation and no canvas, which looks like the extension failing rather than a naming mistake. Keeping the template in `core` is what lets a test resolve it, validate it, and generate all eight targets from it without an editor.
 
 ### Reaching a model
 

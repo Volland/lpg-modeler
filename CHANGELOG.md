@@ -64,6 +64,35 @@ All notable changes to LPG Modeler are recorded here. The format follows
   on `Asset` rather than three. Without a hierarchy there is nothing to collapse to, so the
   first pair stands and the rest are reported as dropped.
 
+- **An eighth target: FalkorDB.** It is schema-optional and multi-label, so like Neo4j it
+  carries a hierarchy as labels. What it does not share is the edition split —
+  `MANDATORY` enforces existence on any instance, which makes it the only *database*
+  target where a required property is genuinely enforced rather than reported. Ladybug can
+  hold presence on the key alone, and Neo4j needs Enterprise.
+
+  The artifact is a shell script over `redis-cli`, not a `.cypher` file, because the schema
+  is split across two protocols: an index is Cypher, a constraint is the Redis command
+  `GRAPH.CONSTRAINT CREATE`, and no client applies both. That also settles where the
+  downgrade notes go — a line a redis pipe does not understand is an error, while a shell
+  comment is a comment.
+
+  Order is load-bearing rather than cosmetic. A unique constraint requires its exact-match
+  index to already exist, so each index is emitted immediately above the constraint needing
+  it. A key emits `UNIQUE` over its properties plus `MANDATORY` on each, because `UNIQUE`
+  alone is enforced only where every constrained property is non-null, which is not what a
+  key claims.
+
+  Two operational facts are stated in the artifact rather than left to be discovered:
+  enforcement is asynchronous — the command returns `PENDING`, and a constraint that
+  existing data violates ends `FAILED` and is never enforced — and there is no
+  `IF NOT EXISTS` for an index or a constraint, so a second run reports each as already
+  existing. A map cannot be stored as a property value, so a composite is reported exactly
+  as it is on Neo4j; an array can be, so a list is native.
+
+  The graph key every command names defaults to the model's namespace prefix. Override it
+  with `--graph-key` on the CLI, `lpg.targets.falkordb.graphKey` in the editor, or
+  `GRAPH_KEY` in the environment when running the script.
+
 - **A model serializer**, which had no equivalent: the only serializers wrote the sidecars.
   Key order is fixed rather than incidental, so serializing one model twice gives the same
   bytes — which is what the deferred lockfile diff would be built on, so the ordering is

@@ -30,7 +30,7 @@
 <main>
 <div class="wrap hero">
   <span class="eyebrow">Reference</span>
-  <h1>Seven targets, and what each one refuses to promise</h1>
+  <h1>Eight targets, and what each one refuses to promise</h1>
   <p class="lede">
     Every generator publishes a typed capability set. The compiler works out what your model
     requires, compares the two, and reports every gap — as an editor diagnostic and as a
@@ -106,6 +106,47 @@
 CREATE CONSTRAINT person_key_unique IF NOT EXISTS
   FOR (n:Person) REQUIRE (n.id) IS UNIQUE;</code></pre>
   <p>Set the editions setting to <code>enterprise</code>, or pass <code>--edition enterprise</code> to the CLI, and the real constraints are emitted instead.</p>
+
+  <hr class="rule">
+
+  <h2>falkordb</h2>
+  <p>
+    FalkorDB is schema-optional and multi-label, so like Neo4j it carries a hierarchy as labels
+    — a <code>Person</code> node carries <code>:Person :Party</code>. What it does not share is
+    the edition split: <code>MANDATORY</code> enforces existence on any instance, which makes
+    this the only database target where a required property is genuinely enforced rather than
+    reported. Output extension: <code>.sh</code>.
+  </p>
+  <h3>Why a shell script and not Cypher</h3>
+  <p>
+    The schema is split across two protocols. An index is Cypher; a constraint is the Redis
+    command <code>GRAPH.CONSTRAINT CREATE</code>. No single client applies both, so the artifact
+    is a script over <code>redis-cli</code>. That also settles where the downgrade notes go: a
+    line a redis pipe does not understand is an error, while a shell comment is a comment.
+  </p>
+<pre><code><span class="c-com"># Person carries labels :Person :Party (hierarchy flattened to labels).</span>
+$REDIS_CLI GRAPH.QUERY "$GRAPH_KEY" "CREATE INDEX FOR (n:Person) ON (n.email)"
+$REDIS_CLI GRAPH.CONSTRAINT CREATE "$GRAPH_KEY" UNIQUE NODE Person PROPERTIES 1 email
+$REDIS_CLI GRAPH.CONSTRAINT CREATE "$GRAPH_KEY" MANDATORY NODE Person PROPERTIES 1 createdAt</code></pre>
+  <p>
+    A unique constraint requires its exact-match index to already exist, so each index is
+    emitted immediately above the constraint that needs it: the order of the file is the order
+    the engine requires. A key emits <code>UNIQUE</code> over its properties plus
+    <code>MANDATORY</code> on each, because <code>UNIQUE</code> alone is enforced only where
+    every constrained property is non-null — which is not what a key claims.
+  </p>
+  <h3>Two things the artifact says out loud</h3>
+  <p>
+    Enforcement is asynchronous: the command returns <code>PENDING</code>, and a constraint that
+    data already in the graph violates ends <code>FAILED</code> and is never enforced. And there
+    is no <code>IF NOT EXISTS</code> for an index or a constraint, so a second run reports each
+    as already existing. Both are in the generated header rather than left to be discovered.
+  </p>
+  <p>
+    The graph key every command names defaults to the model's namespace prefix; override it with
+    <code>--graph-key</code> on the CLI, or with <code>GRAPH_KEY</code> in the environment when
+    running the script.
+  </p>
 
   <hr class="rule">
 
@@ -210,7 +251,7 @@ CREATE CONSTRAINT person_key_unique IF NOT EXISTS
   <h2>pgschema</h2>
   <p>
     <strong>PG-Schema</strong>, the formalism from the LDBC Property Graph Schema Working Group
-    that GQL&rsquo;s graph types grew out of. This is the most faithful target of the seven:
+    that GQL&rsquo;s graph types grew out of. This is the most faithful target of the eight:
     <code>ABSTRACT</code>, inheritance, mixins and keys all have direct counterparts, so nothing
     about the hierarchy is flattened. Output extension: <code>.pgs</code>.
   </p>
@@ -269,9 +310,11 @@ CREATE CONSTRAINT person_key_unique IF NOT EXISTS
 <section class="wrap narrow">
   <h2>Targets that are deliberately absent</h2>
   <p>
-    Cypher compatibility is a marketing category rather than a dialect: Ladybug, Neo4j, Memgraph
-    and Apache AGE disagree on nearly everything schema-related, so a generic Cypher generator
-    would have no reference implementation to test against.
+    Cypher compatibility is a marketing category rather than a dialect: Ladybug, Neo4j, FalkorDB,
+    Memgraph and Apache AGE disagree on nearly everything schema-related, so a generic Cypher
+    generator would have no reference implementation to test against. Each of the three that
+    ship is a generator for one named engine, held to that engine's published commands — which
+    is why FalkorDB is a target and &ldquo;Cypher&rdquo; is not.
   </p>
   <p>
     The rule is about reference implementations rather than running engines, which is why the
@@ -317,7 +360,7 @@ CREATE CONSTRAINT person_key_unique IF NOT EXISTS
   </p>
   <p>
     Constraint downgrades are reported at <code>info</code> rather than <code>warning</code>.
-    Five of the seven targets carry no value or named constraint at all, so a warning apiece
+    Six of the eight targets carry no value or named constraint at all, so a warning apiece
     would bury the downgrades that are genuinely surprising — a <code>required</code> property
     that silently vanishes is a different class of problem from SHACL being the only place a
     regular expression can live.

@@ -19,7 +19,7 @@ describe('lpg cli', () => {
     const r = run(['targets'])
     expect(r.status).toBe(0)
     expect(r.stdout.trim().split('\n').sort()).toEqual(
-      ['gql', 'ladybug', 'linkml', 'neo4j', 'owl', 'pgschema', 'shacl'])
+      ['falkordb', 'gql', 'ladybug', 'linkml', 'neo4j', 'owl', 'pgschema', 'shacl'])
   })
 
   it('checks a valid model and exits zero', () => {

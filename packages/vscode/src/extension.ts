@@ -389,9 +389,15 @@ async function generate(modelPath: string, target: string): Promise<void> {
     return
   }
 
-  const edition = vscode.workspace.getConfiguration('lpg')
-    .get<'community' | 'enterprise'>('targets.neo4j.edition', 'community')
-  const result = emit(model, target, { neo4jEdition: edition })
+  const config = vscode.workspace.getConfiguration('lpg')
+  const edition = config.get<'community' | 'enterprise'>('targets.neo4j.edition', 'community')
+  // Left empty by default so the model's own namespace prefix names the graph, which is
+  // what a model with one graph per namespace wants.
+  const graphKey = config.get<string>('targets.falkordb.graphKey', '').trim()
+  const result = emit(model, target, {
+    neo4jEdition: edition,
+    ...(graphKey ? { falkorGraphKey: graphKey } : {}),
+  })
   if (result.diagnostics.some((d) => d.severity === 'error')) {
     void vscode.window.showErrorMessage(`Cannot generate ${target}.`)
     return

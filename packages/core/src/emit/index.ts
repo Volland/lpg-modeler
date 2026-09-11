@@ -2,6 +2,7 @@ import type { ModelIR } from '../ir'
 import type { Capabilities, EmitOptions, EmitResult } from '../capabilities'
 import { emitLadybug, LADYBUG_CAPABILITIES } from './ladybug'
 import { emitNeo4j, NEO4J_CAPABILITIES } from './neo4j'
+import { emitFalkorDb, FALKORDB_CAPABILITIES } from './falkordb'
 import { emitShacl, SHACL_CAPABILITIES } from './shacl'
 import { emitOwl, OWL_CAPABILITIES } from './owl'
 import { emitGql, GQL_CAPABILITIES } from './gql'
@@ -22,6 +23,7 @@ interface Registration {
 const REGISTRY = new Map<string, Registration>([
   ['ladybug', { capabilities: LADYBUG_CAPABILITIES, emit: emitLadybug }],
   ['neo4j', { capabilities: NEO4J_CAPABILITIES, emit: emitNeo4j }],
+  ['falkordb', { capabilities: FALKORDB_CAPABILITIES, emit: emitFalkorDb }],
   ['shacl', { capabilities: SHACL_CAPABILITIES, emit: emitShacl }],
   ['owl', { capabilities: OWL_CAPABILITIES, emit: emitOwl }],
   ['gql', { capabilities: GQL_CAPABILITIES, emit: emitGql }],

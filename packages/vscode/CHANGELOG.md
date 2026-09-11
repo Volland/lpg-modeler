@@ -36,6 +36,21 @@ All notable changes to LPG Modeler are recorded here. The format follows
 
 - **`lpg import` in the CLI**, for the same thing without an editor open.
 
+- **A new generation target: FalkorDB.** Pick it from `LPG: Generate Schema` like any
+  other. It is the only database target that enforces a required property without a paid
+  edition — Neo4j needs Enterprise for the same thing — so constraints your model declares
+  are more likely to be real ones.
+
+  What you get is a shell script rather than a `.cypher` file, because FalkorDB creates
+  indexes with Cypher but constraints with Redis commands, and no single client runs both.
+  Run it with `sh`, and set `GRAPH_KEY` to choose the graph. The header tells you the two
+  things that will bite otherwise: constraints apply in the background and can quietly end
+  up unenforced if existing data violates them, and re-running the script reports
+  everything as already existing.
+
+  The graph is named after your model's namespace prefix unless you set
+  `lpg.targets.falkordb.graphKey`.
+
 ### Changed
 
 - **Generated SHACL now states an edge's endpoints** as `sh:class`, not only as a comment.

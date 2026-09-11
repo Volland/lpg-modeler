@@ -10,7 +10,7 @@ The set covers the hierarchy, identity, and edge properties, plus [[metamodel#Li
 
 A downgrade is reported only when a model actually uses the feature. A target that cannot enforce closure says so in the capability set, but does not raise a diagnostic on every closed type, which would be noise on every model rather than information.
 
-Constraint downgrades are reported at `info` rather than `warning`. Five of the seven targets can carry no [[metamodel#Value Constraints|value]] or [[metamodel#Named Constraints|named]] constraint at all, so a warning apiece would bury the downgrades that are genuinely surprising — a `required` property that silently vanishes is a different class of problem from SHACL being the only place a regular expression can live. One shared reporter emits them, so the five cannot drift apart in what they say.
+Constraint downgrades are reported at `info` rather than `warning`. Six of the eight targets can carry no [[metamodel#Value Constraints|value]] or [[metamodel#Named Constraints|named]] constraint at all, so a warning apiece would bury the downgrades that are genuinely surprising — a `required` property that silently vanishes is a different class of problem from SHACL being the only place a regular expression can live. One shared reporter emits them, so the five cannot drift apart in what they say.
 
 A capability value is not always a yes or a no. LadybugDB declares [[metamodel#Cardinality]] as `upper-bound-only`, because its multiplicity keyword says an end holds at most one and nothing else. Collapsing that to `enforced` would be the exact overstatement the matrix exists to prevent, so the partial case gets its own value rather than being rounded up.
 
@@ -45,6 +45,20 @@ The alternative of a single root table with a discriminator column is the idiom 
 Neo4j is schema-optional: there is no table DDL, only constraints and indexes. Multi-label nodes are native, so an abstract hierarchy flattens to labels rather than to separate tables.
 
 The emitter is edition-aware. Existence and node-key constraints require Enterprise, so under a Community configuration they are reported as downgrades and emitted as comments rather than silently dropped.
+
+## FalkorDB Target
+
+FalkorDB is schema-optional and multi-label, so like Neo4j it carries a hierarchy as labels rather than as tables. What it does not share is the edition split.
+
+`MANDATORY` enforces existence on any instance, so a required property is genuinely enforced here — the only database target where it is. Ladybug can enforce presence on the key alone, and Neo4j needs Enterprise, so this is the one target where the model's commonest constraint costs nothing to hold.
+
+The schema is split across two protocols: an index is Cypher, a constraint is the Redis command `GRAPH.CONSTRAINT CREATE`. No client applies both, so the artifact is a shell script over `redis-cli` rather than a `.cypher` file. That also settles where the downgrade notes go: a line a redis pipe does not understand is an error, while a shell comment is a comment.
+
+A unique constraint requires its exact-match index to already exist, so the index is emitted immediately above the constraint needing it rather than in a block of its own — the order of the file is the order the engine requires. A key emits `UNIQUE` over its properties plus `MANDATORY` on each, because `UNIQUE` alone is enforced only where every constrained property is non-null, which is not what a key claims.
+
+Two operational facts are stated in the artifact rather than assumed away. Enforcement is asynchronous — the command returns `PENDING`, and a constraint that existing data violates ends `FAILED` and is never enforced — and there is no `IF NOT EXISTS` for either an index or a constraint, so a second run reports each as already existing.
+
+A map cannot be stored as a property value, so a [[metamodel#Composite Types|composite]] has nowhere to go and is reported, exactly as on [[emitters#Neo4j Target|Neo4j]]. An array can be stored, so a list is native.
 
 ## Standards Targets
 

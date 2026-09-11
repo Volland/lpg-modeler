@@ -57,6 +57,12 @@ export interface Capabilities {
 export interface EmitOptions {
   /** Community cannot enforce existence or node key constraints. */
   neo4jEdition?: 'community' | 'enterprise'
+  /**
+   * The Redis key the FalkorDB graph lives under. Every command names it, and a server
+   * holds many graphs, so it is not derivable from the model alone; the namespace prefix
+   * is the default because that is what the model calls itself.
+   */
+  falkorGraphKey?: string
 }
 
 export interface EmitResult {
