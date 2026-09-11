@@ -4,27 +4,9 @@ All notable changes to LPG Modeler are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.8.0] — 2026-09-10
+## [0.9.0] — 2026-09-11
 
 ### Added
-
-- **Importers: a model may now start from a schema that already exists.** Every entry point
-  before this one needed a model file to already be there, and the only way to get one was
-  the `Thing` placeholder `LPG: New Model` writes. A team with a shapes graph, an ontology or
-  a database schema had no way in short of retyping it. Three sources are read:
-
-  ```bash
-  npx lpg-modeler-cli import domain.shacl.ttl domain.owl.ttl --out domain.lpg.yaml
-  ```
-
-  Several files are read together rather than one at a time, because neither RDF artifact is
-  a model on its own. SHACL says which class carries which property, its datatype, whether it
-  is required and whether the type is closed — but a shape is flat, so an inherited property
-  is copied onto every subtype and an abstract parent emits no shape at all. OWL has exactly
-  what SHACL lacks, `rdfs:subClassOf` and `owl:hasKey`, and lacks exactly what SHACL has,
-  because the OWL subset deliberately asserts no `rdfs:domain` and so knows every property in
-  the vocabulary and not one of the types it belongs to. Read together they reconstruct
-  nearly the whole model; read apart, each yields a fragment.
 
 - **An ontology this project did not generate is read through `rdfs:domain`.** The OWL
   subset asserts none, so on a round trip of our own output the shapes supply every
@@ -43,26 +25,6 @@ All notable changes to LPG Modeler are recorded here. The format follows
   cardinality, no value constraints, no open/closed distinction, and no way to tell a
   reified relation class from a node type, an n-ary relation being an ordinary class
   to OWL.
-
-- **The LadybugDB DDL is read as a third, complementary source.** It is the only artifact
-  carrying an edge's endpoints and the exact width of every column, the scalar set having
-  been drawn from what that engine stores. So `INT128`, `UUID`, `JSON` and a nested `STRUCT`
-  survive a round trip that RDF alone flattens — `xsd:integer` is written by two scalars and
-  `xsd:string` by three, and a collision cannot be undone by care afterwards. A datatype from
-  the DDL therefore overrides the one read from RDF, applied to whichever ancestor declares
-  the property rather than to the subtype the generator copied it onto.
-
-  One spelling is translated rather than taken at face value: LadybugDB writes the 32-bit
-  float as `FLOAT`, where the metamodel reads a bare `FLOAT` as the 64-bit one. Reading the
-  DDL with the generic table would widen every `FLOAT32` to a `DOUBLE`, which is the opposite
-  of why the DDL is consulted.
-
-- **An expanded endpoint set collapses back to the abstract type it came from.** An edge on
-  an abstract endpoint is generated as one `FROM … TO …` pair per concrete subtype. Given the
-  hierarchy from an ontology in the same import, a set of pairs that is exactly the concrete
-  descendants of one type becomes that type again — `STATIONED_AT` returns as one declaration
-  on `Asset` rather than three. Without a hierarchy there is nothing to collapse to, so the
-  first pair stands and the rest are reported as dropped.
 
 - **An eighth target: FalkorDB.** It is schema-optional and multi-label, so like Neo4j it
   carries a hierarchy as labels. What it does not share is the edition split —
@@ -93,6 +55,64 @@ All notable changes to LPG Modeler are recorded here. The format follows
   with `--graph-key` on the CLI, `lpg.targets.falkordb.graphKey` in the editor, or
   `GRAPH_KEY` in the environment when running the script.
 
+### Fixed
+
+- **The root build runs the workspaces in dependency order.** `npm run build --workspaces`
+  visits them alphabetically — `cli`, then `core`, then `vscode` — so the CLI compiled
+  against a `@lpg/core` that had not emitted its types yet and continuous integration failed
+  on `Cannot find module '@lpg/core'`. It passed on a developer machine only because
+  `core/dist` was already there from an earlier build. The script now names the three in the
+  order the README always said it used.
+
+- **The live LadybugDB tests bound the engine's resource defaults.** Each opens its own
+  database, and `maxDBSize` reserves 8 TiB of address space by default, so fourteen of them
+  running alongside the other test files exhausted the mapping — `Mmap for size
+  8796093022208 failed` outright on a CI runner, and intermittently under load locally. The
+  buffer pool is capped for the same reason. Both limits are far above what a fixture of a
+  handful of rows needs.
+
+## [0.8.0] — 2026-09-10
+
+### Added
+
+- **Importers: a model may now start from a schema that already exists.** Every entry point
+  before this one needed a model file to already be there, and the only way to get one was
+  the `Thing` placeholder `LPG: New Model` writes. A team with a shapes graph, an ontology or
+  a database schema had no way in short of retyping it. Three sources are read:
+
+  ```bash
+  npx lpg-modeler-cli import domain.shacl.ttl domain.owl.ttl --out domain.lpg.yaml
+  ```
+
+  Several files are read together rather than one at a time, because neither RDF artifact is
+  a model on its own. SHACL says which class carries which property, its datatype, whether it
+  is required and whether the type is closed — but a shape is flat, so an inherited property
+  is copied onto every subtype and an abstract parent emits no shape at all. OWL has exactly
+  what SHACL lacks, `rdfs:subClassOf` and `owl:hasKey`, and lacks exactly what SHACL has,
+  because the OWL subset deliberately asserts no `rdfs:domain` and so knows every property in
+  the vocabulary and not one of the types it belongs to. Read together they reconstruct
+  nearly the whole model; read apart, each yields a fragment.
+
+- **The LadybugDB DDL is read as a third, complementary source.** It is the only artifact
+  carrying an edge's endpoints and the exact width of every column, the scalar set having
+  been drawn from what that engine stores. So `INT128`, `UUID`, `JSON` and a nested `STRUCT`
+  survive a round trip that RDF alone flattens — `xsd:integer` is written by two scalars and
+  `xsd:string` by three, and a collision cannot be undone by care afterwards. A datatype from
+  the DDL therefore overrides the one read from RDF, applied to whichever ancestor declares
+  the property rather than to the subtype the generator copied it onto.
+
+  One spelling is translated rather than taken at face value: LadybugDB writes the 32-bit
+  float as `FLOAT`, where the metamodel reads a bare `FLOAT` as the 64-bit one. Reading the
+  DDL with the generic table would widen every `FLOAT32` to a `DOUBLE`, which is the opposite
+  of why the DDL is consulted.
+
+- **An expanded endpoint set collapses back to the abstract type it came from.** An edge on
+  an abstract endpoint is generated as one `FROM … TO …` pair per concrete subtype. Given the
+  hierarchy from an ontology in the same import, a set of pairs that is exactly the concrete
+  descendants of one type becomes that type again — `STATIONED_AT` returns as one declaration
+  on `Asset` rather than three. Without a hierarchy there is nothing to collapse to, so the
+  first pair stands and the rest are reported as dropped.
+
 - **A model serializer**, which had no equivalent: the only serializers wrote the sidecars.
   Key order is fixed rather than incidental, so serializing one model twice gives the same
   bytes — which is what the deferred lockfile diff would be built on, so the ordering is
@@ -118,25 +138,10 @@ All notable changes to LPG Modeler are recorded here. The format follows
   eight lines to the `social` SHACL golden and removes none, and the OWL artifact is
   untouched — its assertional subset was already the reason the endpoints had nowhere to go.
 
-- **The root build runs the workspaces in dependency order.** `npm run build --workspaces`
-  visits them alphabetically — `cli`, then `core`, then `vscode` — so the CLI compiled
-  against a `@lpg/core` that had not emitted its types yet and continuous integration failed
-  on `Cannot find module '@lpg/core'`. It passed on a developer machine only because
-  `core/dist` was already there from an earlier build. The script now names the three in the
-  order the README always said it used.
-
-- **The live LadybugDB tests bound the engine's resource defaults.** Each opens its own
-  database, and `maxDBSize` reserves 8 TiB of address space by default, so fourteen of them
-  running alongside the other test files exhausted the mapping — `Mmap for size
-  8796093022208 failed` outright on a CI runner, and intermittently under load locally. The
-  buffer pool is capped for the same reason. Both limits are far above what a fixture of a
-  handful of rows needs.
-
 - **Two `sh:property` shapes on one path are read as one property.** SHACL conjoins them,
   which is how the raw `shacl:` escape hatch adds a constraint to a property the model
   already declares. Merging takes the tightest of each bound, so a `max` of 30 narrowed by an
   escape hatch to 14 arrives as 14 rather than as a duplicate key.
-
 ## [0.7.0] — 2026-09-06
 
 ### Added

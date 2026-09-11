@@ -4,37 +4,15 @@ All notable changes to LPG Modeler are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.8.0] — 2026-09-10
+## [0.9.0] — 2026-09-11
 
 ### Added
-
-- **Import a schema you already have.** `LPG: Import Model…` reads SHACL shapes, an OWL
-  ontology and LadybugDB DDL, and writes a model file — then opens it on the canvas. Until
-  now the only way to start was an empty template, which is no help if your domain is already
-  written down somewhere.
-
-- **Pick several files at once, and you get a better model.** A shapes graph knows which type
-  has which property; an ontology knows the inheritance and the keys; the DDL knows an edge's
-  endpoints and the exact width of every column. None of them knows all three, so importing
-  them together reconstructs far more than importing any one alone.
 
 - **Ontologies from elsewhere work, not just ones this tool wrote.** Most published
   ontologies say which class a property belongs to with `rdfs:domain`, and that is now
   read — so importing someone else's ontology gives you its properties and relationships,
   not just a list of empty types. Anything the file declares but never attaches to a type
   is listed rather than quietly skipped.
-
-- **Inheritance is put back.** SHACL copies an inherited property onto every subtype, so a
-  naive read gives you the same property on five types. Properties every subtype shares are
-  moved back up to the parent they most likely came from, and each move is reported so you
-  can check it.
-
-- **You are told what could not be carried.** RDF has no way to say a type is abstract, that
-  properties travelled together as a mixin, or that a value is unique — and several of the
-  model's types share one XSD datatype. Rather than guess quietly, the import lists what it
-  could not recover and what it had to choose between, so you know exactly what to review.
-
-- **`lpg import` in the CLI**, for the same thing without an editor open.
 
 - **A new generation target: FalkorDB.** Pick it from `LPG: Generate Schema` like any
   other. It is the only database target that enforces a required property without a paid
@@ -51,11 +29,36 @@ All notable changes to LPG Modeler are recorded here. The format follows
   The graph is named after your model's namespace prefix unless you set
   `lpg.targets.falkordb.graphKey`.
 
+## [0.8.0] — 2026-09-10
+
+### Added
+
+- **Import a schema you already have.** `LPG: Import Model…` reads SHACL shapes, an OWL
+  ontology and LadybugDB DDL, and writes a model file — then opens it on the canvas. Until
+  now the only way to start was an empty template, which is no help if your domain is already
+  written down somewhere.
+
+- **Pick several files at once, and you get a better model.** A shapes graph knows which type
+  has which property; an ontology knows the inheritance and the keys; the DDL knows an edge's
+  endpoints and the exact width of every column. None of them knows all three, so importing
+  them together reconstructs far more than importing any one alone.
+
+- **Inheritance is put back.** SHACL copies an inherited property onto every subtype, so a
+  naive read gives you the same property on five types. Properties every subtype shares are
+  moved back up to the parent they most likely came from, and each move is reported so you
+  can check it.
+
+- **You are told what could not be carried.** RDF has no way to say a type is abstract, that
+  properties travelled together as a mixin, or that a value is unique — and several of the
+  model's types share one XSD datatype. Rather than guess quietly, the import lists what it
+  could not recover and what it had to choose between, so you know exactly what to review.
+
+- **`lpg import` in the CLI**, for the same thing without an editor open.
+
 ### Changed
 
 - **Generated SHACL now states an edge's endpoints** as `sh:class`, not only as a comment.
   Existing shapes gain a line; nothing is removed, and the OWL output is unchanged.
-
 ## [0.7.0] — 2026-09-06
 
 ### Added
