@@ -26,6 +26,24 @@ All notable changes to LPG Modeler are recorded here. The format follows
   the vocabulary and not one of the types it belongs to. Read together they reconstruct
   nearly the whole model; read apart, each yields a fragment.
 
+- **An ontology this project did not generate is read through `rdfs:domain`.** The OWL
+  subset asserts none, so on a round trip of our own output the shapes supply every
+  property and this contributes nothing. A foreign ontology is the other way round: domain
+  and range are usually the only statement of where a property lives, so without reading
+  them every property in it was dropped — silently, which is the one thing this project
+  does not do. A domain written as an `owl:unionOf` resolves to the nearest type its
+  members share, and an object property with both a domain and a range becomes an edge.
+
+  The fallback never overrides a shape. A shape knows cardinality, closure and value
+  constraints that a domain and a range cannot express, so it contributes only properties
+  no shape placed.
+
+- **A property that no type could claim is reported rather than dropped**, and an import
+  carrying no shapes at all says what is therefore missing: an ontology alone has no
+  cardinality, no value constraints, no open/closed distinction, and no way to tell a
+  reified relation class from a node type, an n-ary relation being an ordinary class
+  to OWL.
+
 - **The LadybugDB DDL is read as a third, complementary source.** It is the only artifact
   carrying an edge's endpoints and the exact width of every column, the scalar set having
   been drawn from what that engine stores. So `INT128`, `UUID`, `JSON` and a nested `STRUCT`

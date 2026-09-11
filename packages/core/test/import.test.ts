@@ -258,3 +258,72 @@ describe('every published example survives the round trip', () => {
     expect(edge(model, 'STATIONED_AT')).toMatchObject({ from: 'Asset', to: 'Depot' })
   })
 })
+
+/**
+ * An ontology this project did not generate is the case `rdfs:domain` exists for. Our own
+ * OWL asserts none, so these are the only tests that exercise the fallback at all.
+ */
+const FOREIGN_OWL = `@prefix owl:  <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .
+@prefix ex:   <https://example.org/hr#> .
+
+ex:Agent    a owl:Class .
+ex:Employee a owl:Class ; rdfs:subClassOf ex:Agent .
+ex:Team     a owl:Class .
+
+ex:name    a owl:DatatypeProperty ; rdfs:domain ex:Agent    ; rdfs:range xsd:string .
+ex:badge   a owl:DatatypeProperty ; rdfs:domain ex:Employee ; rdfs:range xsd:string .
+ex:hired   a owl:DatatypeProperty ; rdfs:domain ex:Employee ; rdfs:range xsd:date .
+ex:teamOf  a owl:ObjectProperty   ; rdfs:domain ex:Employee ; rdfs:range ex:Team .
+ex:orphan  a owl:DatatypeProperty ; rdfs:range xsd:string .
+ex:shared  a owl:DatatypeProperty ; rdfs:range xsd:string ;
+  rdfs:domain [ owl:unionOf ( ex:Employee ex:Team ) ] .
+`
+
+const foreign = () => importRdf([{ path: '/tmp/hr.owl.ttl', text: FOREIGN_OWL }])
+
+// @lat: [[importers#What Only OWL Says]]
+describe('reading a foreign ontology through rdfs:domain', () => {
+  it('places a property on the class its domain names', () => {
+    const { model } = foreign()
+    expect(node(model, 'Agent')?.props.map((p) => p.name)).toEqual(['name'])
+    expect(node(model, 'Employee')?.props.map((p) => p.name).sort())
+      .toEqual(['badge', 'hired', 'shared'])
+  })
+
+  it('takes the datatype from the range', () => {
+    const { model } = foreign()
+    expect(node(model, 'Employee')?.props.find((p) => p.name === 'hired')?.type).toBe('date')
+  })
+
+  it('reads an object property with a domain and a range as an edge', () => {
+    const { model } = foreign()
+    expect(edge(model, 'TEAM_OF')).toMatchObject({ from: 'Employee', to: 'Team' })
+  })
+
+  it('reports a property no type could claim rather than dropping it', () => {
+    const { diagnostics } = foreign()
+    const d = diagnostics.find((x) => x.code === 'import-unplaced')
+    expect(d?.message).toContain('orphan')
+    expect(d?.severity).toBe('warning')
+  })
+
+  it('says that an ontology with no shapes carries no constraints', () => {
+    expect(codes(foreign().diagnostics)).toContain('import-no-shapes')
+  })
+
+  it('never overrides a shape: our own round trip gains nothing from the fallback', () => {
+    // This project's OWL asserts no domain, so the property set has to come out the same
+    // whether or not the ontology is read alongside the shapes.
+    const social = loadFixture('social.lpg.yaml')
+    const withOwl = reimport(social, ['shacl', 'owl'])
+    const shaclOnly = importRdf([{ path: '/tmp/x.shacl.ttl', text: emit(social, 'shacl').content }])
+    // Compare distinct property names, not owners: the hierarchy only OWL carries moves
+    // `id` off Person and Company and onto the Party they share, which changes who
+    // declares it without introducing or losing a property.
+    const names = (m: ModelIR) =>
+      [...new Set(m.nodes.flatMap((n) => n.props.map((p) => p.name)))].sort()
+    expect(names(withOwl.model)).toEqual(names(shaclOnly.model))
+  })
+})

@@ -24,6 +24,18 @@ OWL has exactly what SHACL lacks — `rdfs:subClassOf` for the hierarchy and `ow
 
 Read together they reconstruct nearly the whole model. Read apart, each yields a fragment that would need the other to make sense of it.
 
+## What Only OWL Says
+
+A foreign ontology usually does assert `rdfs:domain` and `rdfs:range`, and those are then the only statement of where a property lives. Reading them is what makes an ontology this project did not generate importable at all.
+
+The fallback runs after the shapes have been read and never overrides them: a shape knows the cardinality, the closure and the value constraints that a domain and a range cannot express. It contributes only properties no shape placed. On a round trip of this project's own output it therefore adds nothing, because [[emitters#RDF Targets#OWL Subset|the OWL subset]] asserts no domain — and on a foreign ontology it is the whole of the import.
+
+A domain may name several classes, written as an `owl:unionOf` over a blank node. Those are read as the property belonging to the nearest type they all descend from, for the same reason a plain edge seen once per subtype is collapsed.
+
+An object property with both a domain and a range becomes an edge. One with neither, and no shape naming it, cannot be attached to anything: it is reported as unplaced rather than dropped, because a property in the vocabulary that reached no type is exactly the kind of loss the [[emitters#Capability Matrix|capability matrix]] exists to surface, pointed inbound.
+
+An import carrying no shapes at all is told so. An ontology alone has no cardinality, no value constraints, no open/closed distinction, and no way to tell a reified relation class from a node type — an n-ary relation is an ordinary class to OWL.
+
 ## Reading Edges
 
 An edge is recovered from `sh:class` on the property shape that reaches it, and a reified edge from the subject/object pair its class carries.

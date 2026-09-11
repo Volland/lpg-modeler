@@ -9,6 +9,7 @@ import {
   AMBIGUOUS, RDF, WELL_KNOWN, XSD, localName, namespaceOf, owl, rdfs,
   scalarForDatatype, sh, upperSnake,
 } from './vocab'
+import { lowerCamel } from '../emit/reify'
 
 /**
  * Reads SHACL and OWL back into a model. The two are read together rather than one
@@ -194,6 +195,15 @@ export function importRdf(inputs: ImportInput[]): ImportResult {
     }
   }
 
+  // Without shapes there is no evidence of cardinality, closure, value constraints, or
+  // which classes are relations rather than types -- an n-ary relation class is an
+  // ordinary class to an ontology. Saying so beats reading a relation back as a node type
+  // and leaving the user to notice.
+  if (shapes.size === 0 && store.size > 0) {
+    diagnostics.push(info('import-no-shapes',
+      'No SHACL node shapes were supplied. An ontology alone carries no cardinality, no value constraints, no open/closed distinction, and no way to tell a reified relation class from a node type. Import the shapes graph alongside it for those.'))
+  }
+
   // --- Reified edges -------------------------------------------------------------
   // An edge that carries properties was reified into a class with a subject/object
   // pair. Recognising that pair is what keeps a relationship from being read back as
@@ -316,6 +326,63 @@ export function importRdf(inputs: ImportInput[]): ImportResult {
 
   const byName = new Map(nodes.map((n) => [n.name, n]))
 
+  // --- What only OWL says --------------------------------------------------------
+  // This project's own ontology asserts no rdfs:domain, so on a round trip the block
+  // below adds nothing and SHACL supplies every property. A foreign ontology is the
+  // other way round: domain and range are usually the only statement of where a
+  // property lives, and without reading them every property in it would be dropped.
+  // See lat.md/importers#What Only OWL Says.
+
+  /** A domain may be one class, or a union of them written as a blank node. */
+  const domainsOf = (iri: string): string[] => {
+    const out: string[] = []
+    for (const d of all(iri, rdfs('domain'))) {
+      if (d.termType !== 'BlankNode') { out.push(d.value); continue }
+      const union = one(d, owl('unionOf'))
+      if (union) for (const m of list(union)) out.push(m.value)
+    }
+    return out.filter(isOwn)
+  }
+
+  /** Named somewhere already, so a shape has placed it and OWL need not. */
+  const placed = (local: string) =>
+    nodes.some((n) => n.props.some((p) => p.name === local))
+
+  const unplaced = new Set<string>()
+
+  for (const prop of store.getSubjects(RDF + 'type', owl('DatatypeProperty'), null)) {
+    const iri = prop.value
+    if (!isOwn(iri)) continue
+    const local = nameOf(iri)
+    const domains = domainsOf(iri)
+    if (domains.length === 0) {
+      if (!placed(local)) unplaced.add(local)
+      continue
+    }
+    const range = one(iri, rdfs('range'))?.value
+    for (const d of domains) {
+      const node = byName.get(nameOf(d))
+      if (!node || node.props.some((p) => p.name === local)) continue
+      let type: ScalarType = 'string'
+      if (range) {
+        const scalar = scalarForDatatype(range)
+        if (scalar) {
+          type = scalar
+          if (range.startsWith(XSD) && AMBIGUOUS.has(range.slice(XSD.length))) {
+            ambiguous.add(`${node.name}.${local}`)
+          }
+        } else {
+          diagnostics.push(warn('import-datatype',
+            `Property '${node.name}.${local}' has range <${range}>, which is not an XSD type this metamodel knows. Read as string.`))
+        }
+      }
+      node.props.push({
+        id: deriveId('prop', local, node.name),
+        name: local, type, list: false, required: false, unique: false,
+      })
+    }
+  }
+
   // --- Edges ---------------------------------------------------------------------
   const edges: EdgeTypeIR[] = []
   const makeEdge = (name: string, from: string, to: string, props: PropertyIR[],
@@ -395,6 +462,38 @@ export function importRdf(inputs: ImportInput[]): ImportResult {
       : { from: inverseBound(r.base), to: { min: 0, max: null } }
     edges.push(makeEdge(name, r.from ? nameOf(r.from) : '', r.to ? nameOf(r.to) : '',
       byPath(r.props).map((p) => toProperty(name, p)), cardinality))
+  }
+
+  // The same for relations: an object property with a domain and a range is an edge,
+  // unless a shape already produced one for it.
+  const takenEdge = new Set<string>()
+  for (const e of edges) takenEdge.add(lowerCamel(e.name))
+  for (const r of reified.values()) {
+    takenEdge.add(r.base)
+    takenEdge.add(`${r.base}Subject`)
+    takenEdge.add(`${r.base}Object`)
+  }
+
+  for (const prop of store.getSubjects(RDF + 'type', owl('ObjectProperty'), null)) {
+    const iri = prop.value
+    if (!isOwn(iri)) continue
+    const local = nameOf(iri)
+    if (takenEdge.has(local)) continue
+    const domains = domainsOf(iri)
+    const range = one(iri, rdfs('range'))?.value
+    if (domains.length === 0 || !range || !isOwn(range) || !byName.has(nameOf(range))) {
+      unplaced.add(local)
+      continue
+    }
+    takenEdge.add(local)
+    const label = one(iri, rdfs('label'))?.value
+    edges.push(makeEdge(label ?? upperSnake(local), commonAncestor(domains.map(nameOf)),
+      nameOf(range), [], { from: { min: 0, max: null }, to: { min: 0, max: null } }))
+  }
+
+  if (unplaced.size > 0) {
+    diagnostics.push(warn('import-unplaced',
+      `${unplaced.size} propert${unplaced.size === 1 ? 'y is' : 'ies are'} declared in the vocabulary but could not be attached to a type, because nothing says which type carries them — no SHACL shape names them and they have no rdfs:domain (${[...unplaced].sort().slice(0, 8).join(', ')}${unplaced.size > 8 ? ', …' : ''}). They were not imported.`))
   }
 
   // --- Un-flatten inheritance ----------------------------------------------------

@@ -18,6 +18,12 @@ All notable changes to LPG Modeler are recorded here. The format follows
   endpoints and the exact width of every column. None of them knows all three, so importing
   them together reconstructs far more than importing any one alone.
 
+- **Ontologies from elsewhere work, not just ones this tool wrote.** Most published
+  ontologies say which class a property belongs to with `rdfs:domain`, and that is now
+  read — so importing someone else's ontology gives you its properties and relationships,
+  not just a list of empty types. Anything the file declares but never attaches to a type
+  is listed rather than quietly skipped.
+
 - **Inheritance is put back.** SHACL copies an inherited property onto every subtype, so a
   naive read gives you the same property on five types. Properties every subtype shares are
   moved back up to the parent they most likely came from, and each move is reported so you
