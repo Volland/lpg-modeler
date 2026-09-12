@@ -4,6 +4,22 @@ All notable changes to LPG Modeler are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.1] — 2026-09-12
+
+### Fixed
+
+- **Mixins on an abstract parent type no longer go missing.** If you applied a mixin to an
+  abstract type and put your real types under it, the mixin's properties reached the
+  generated schema for PG-Schema but were silently absent from LadybugDB, Neo4j, FalkorDB,
+  GQL, SHACL and OWL. They are now carried down to every subtype, so all eight targets
+  agree. The inspector marks them with `◇` and names the mixin, as it does anywhere else.
+
+  Regenerate any schema built from a model shaped that way: the columns it was missing will
+  appear.
+
+- **A comment in the generated OWL read back to front.** The note explaining why an abstract
+  type becomes an ordinary OWL class had its two lines swapped.
+
 ## [0.10.0] — 2026-09-12
 
 ### Added

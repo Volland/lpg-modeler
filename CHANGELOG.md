@@ -4,6 +4,42 @@ All notable changes to LPG Modeler are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.1] — 2026-09-12
+
+### Fixed
+
+- **A mixin applied to an abstract parent now reaches that parent's subtypes.** Flattening
+  walked each ancestor's *declared* properties only, so a mixin on a parent contributed
+  nothing below it — and because the parent is usually abstract when this pattern is
+  reached for, the properties landed nowhere at all.
+
+  What made it a defect rather than a stricter reading is that the targets disagreed.
+  PG-Schema declares the type chain rather than flattening it, so the
+  mixin arrived through the parent and the property was there; LadybugDB, Neo4j, FalkorDB,
+  GQL, SHACL and OWL copy the flattened set down and emitted the property missing. One
+  model, two answers.
+
+  An ancestor's mixins are now walked with its declared properties, nearest ancestor first
+  and declared-before-mixin within each, so *the nearer declaration wins* still reads the
+  same way. The flattened property names the mixin rather than the ancestor it was applied
+  on, which is where a reader finds it written, and is what the canvas marks with `◇`.
+
+  A type's own `mixins:` list is unchanged, so the key, the `unused-mixin` warning, the
+  serializer's round-trip, and the two targets that declare a mixin rather than flatten it
+  behave exactly as before and nothing is emitted twice. An undeclared mixin name is still
+  reported once, against the type that wrote it, rather than once per descendant.
+
+- **The two-line note about abstract classes in the OWL export is no longer reversed.** It
+  was written with two successive `unshift` calls, so every generated ontology carried the
+  explanation above the thing it explains. Nothing the ontology asserts changed.
+
+### Note
+
+Unlike previous bumps, generated artifacts do change here: a model with a mixin on an
+abstract parent gains the columns that were wrongly absent, and the OWL note swaps two
+comment lines. No file-format key is added or removed, so a 0.10.0 model resolves exactly
+as it did.
+
 ## [0.10.0] — 2026-09-12
 
 ### Added
