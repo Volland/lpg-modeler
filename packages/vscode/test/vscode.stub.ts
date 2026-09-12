@@ -115,7 +115,10 @@ class FakePanel {
     postMessage: (m: unknown) => { this.messages.push(m); return Promise.resolve(true) },
     onDidReceiveMessage: (cb: (m: unknown) => unknown) => { this.listeners.push(cb); return { dispose() {} } },
   }
+  /** How many times the extension brought this panel to the front. */
+  revealed = 0
   constructor(readonly viewType: string, readonly title: string) {}
+  reveal(_column?: ViewColumn, _preserveFocus?: boolean): void { this.revealed += 1 }
   onDidDispose(_cb: () => void): { dispose(): void } { return { dispose() {} } }
   /**
    * Drive the webview -> host direction the way the real bundle does. The host's handler

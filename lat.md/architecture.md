@@ -140,6 +140,16 @@ Both formats depend on the same theme variables the rest of the canvas uses. Rea
 
 The toolbar's "light" checkbox asks for a print-safe capture instead: white background, dark ink, no color-only cues. It adds an `.export-light` class to `.react-flow__viewport` for the duration of the capture and removes it once the data URL is sent, rather than switching the live canvas's theme — the class pins `--bg`, `--fg`, `--line`, `--muted`, `--accent` and the two raw editor-background names the box and title bar read directly, to fixed values chosen for contrast after grayscale conversion rather than for hue (`--accent` is a dark blue, not a bright one, so it doesn't wash out to the same lightness as the background on a black-and-white printout). Everything else the diagram draws already routes through those five variables, so nothing else needs to change for the export to come out print-safe.
 
+#### Entry points outside the canvas
+
+`lpg.exportPng` and `lpg.exportSvg` reach the same capture from the command palette and from a title-bar button, shown on a model file and on the canvas tab.
+
+The toolbar buttons only exist once the canvas is open, which makes an export something you can only ask for after finding the panel that draws it. The commands take the model the same way every other command does — see [[architecture#Editing Surface#Reaching a model]] — and open the canvas when it is closed, so "export this model as a PNG" is one gesture rather than three.
+
+Only the webview can rasterize, so the host relays an `exportRequest` and the bytes come back over the existing `export` message. A request that arrives before the projection is laid out is held until there are boxes, plus a tick for React Flow to measure them: capturing immediately would write an empty picture, which is worse than a slow one. The panel is revealed without taking focus, because a command that writes a picture of a diagram nobody can see is hard to trust, and because a hidden webview is not a dependable thing to screenshot.
+
+The `light` checkbox stays the single place that preference lives — a command exports print-safe only when the canvas is set to. Duplicating it as a setting or a second pair of commands would give the same question two answers that can disagree.
+
 ## Roadmap
 
 v1 is a visual modeler: the full compiler pipeline plus a canvas that authors the model, generating Ladybug DDL, Neo4j constraints, SHACL shapes, and an OWL ontology. It reads the RDF artifacts and the Ladybug DDL back as well — see [[importers]].

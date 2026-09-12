@@ -131,9 +131,34 @@ function App(): React.ReactElement {
     }
   }, [getNodes])
 
+  /**
+   * A palette command can ask for an export before the canvas has drawn anything:
+   * `lpg.exportPng` on a model whose canvas was closed opens it first, and the request
+   * lands while the projection is still being laid out. Capturing then would write an
+   * empty picture, so the request is held until there are boxes, and a tick longer so
+   * React Flow has measured the ones the crop is computed from -- the same reason the
+   * re-frame after a new type goes through a timeout.
+   * See lat.md/architecture#Rendering#Exporting the diagram.
+   */
+  const [pendingExport, setPendingExport] =
+    React.useState<{ format: 'png' | 'svg'; seq: number } | undefined>()
+
+  React.useEffect(() => {
+    if (!pendingExport || nodes.length === 0) return
+    const { format } = pendingExport
+    setPendingExport(undefined)
+    const timer = window.setTimeout(() => void exportDiagram(format, lightExport), 0)
+    return () => window.clearTimeout(timer)
+  }, [pendingExport, nodes, exportDiagram, lightExport])
+
   React.useEffect(() => {
     const onMessage = (event: MessageEvent<HostMessage>) => {
       const message = event.data
+      if (message.type === 'exportRequest') {
+        // Counted, so asking for the same format twice runs twice.
+        setPendingExport((n) => ({ format: message.format, seq: (n?.seq ?? 0) + 1 }))
+        return
+      }
       if (message.type === 'invalid') { setNotice(message.message); return }
       setNotice(undefined)
       setProjection(message.projection)

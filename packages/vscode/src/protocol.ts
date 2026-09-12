@@ -139,6 +139,12 @@ export type HostMessage =
    * this, rather than going blank. See lat.md/architecture#Editing Surface.
    */
   | { type: 'invalid'; message: string }
+  /**
+   * A palette command or title-bar button asked for an export. Only the canvas can
+   * rasterize itself, so the host relays the request and waits for the `export` message
+   * carrying the bytes. See lat.md/architecture#Rendering#Exporting the diagram.
+   */
+  | { type: 'exportRequest'; format: 'png' | 'svg' }
 
 /** What an intent addresses. A mixin holds properties the same way a type does. */
 export type OwnerKind = 'nodes' | 'edges' | 'mixins'

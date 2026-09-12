@@ -111,6 +111,19 @@ class Canvas {
   get isActive(): boolean { return this.panel.active }
 
   /**
+   * Ask the canvas to rasterize itself; the bytes come back as an `export` message and
+   * take the same path to disk as the toolbar buttons. The panel is revealed first --
+   * without focus, so an export run from the model file leaves the cursor where it was --
+   * because a hidden webview is not a reliable thing to screenshot, and because a command
+   * that writes a picture of a diagram nobody can see is hard to trust.
+   * See lat.md/architecture#Rendering#Exporting the diagram.
+   */
+  requestExport(format: 'png' | 'svg'): void {
+    this.panel.reveal(undefined, true)
+    this.post({ type: 'exportRequest', format })
+  }
+
+  /**
    * One message at a time, and reported rather than swallowed. Two intents in flight --
    * the pair that creates a type and the edge reaching it, say -- would each be computed
    * against the same original text, and the second set of splices would land at offsets
@@ -613,11 +626,11 @@ function withModelSuffix(uri: vscode.Uri): vscode.Uri {
     return picked === undefined ? undefined : byLabel.get(picked)
   }
 
-  const openCanvas = async (uri?: vscode.Uri) => {
+  const openCanvas = async (uri?: vscode.Uri): Promise<Canvas | undefined> => {
     const target = uri ?? await modelForCommand()
-    if (!target) return
+    if (!target) return undefined
     const existing = canvases.get(target.fsPath)
-    if (existing) { await existing.refresh(); return }
+    if (existing) { await existing.refresh(); return existing }
 
     const panel = vscode.window.createWebviewPanel(
       'lpg.canvas', `LPG: ${path.basename(target.fsPath)}`,
@@ -627,12 +640,30 @@ function withModelSuffix(uri: vscode.Uri): vscode.Uri {
     const canvas = new Canvas(panel, target, diagnostics, context.extensionUri)
     canvases.set(target.fsPath, canvas)
     panel.onDidDispose(() => canvases.delete(target.fsPath))
+    return canvas
+  }
+
+  /**
+   * Export from the palette or the title bar. The canvas is the only thing that can draw
+   * the diagram, so the command opens it when it is not already open and lets the webview
+   * hold the request until there is something to capture.
+   * See lat.md/architecture#Rendering#Exporting the diagram.
+   */
+  const exportAs = (format: 'png' | 'svg') => async (): Promise<void> => {
+    const uri = await modelForCommand()
+    if (!uri) return
+    const canvas = await openCanvas(uri)
+    canvas?.requestExport(format)
   }
 
   context.subscriptions.push(
     vscode.commands.registerCommand('lpg.newModel', reporting('LPG: New Model', newModel)),
     vscode.commands.registerCommand('lpg.import', reporting('LPG: Import Model', importSchemas)),
     vscode.commands.registerCommand('lpg.openCanvas', reporting('LPG: Open Canvas', () => openCanvas())),
+    vscode.commands.registerCommand('lpg.exportPng',
+      reporting('LPG: Export Diagram as PNG', exportAs('png'))),
+    vscode.commands.registerCommand('lpg.exportSvg',
+      reporting('LPG: Export Diagram as SVG', exportAs('svg'))),
     vscode.commands.registerCommand('lpg.generate', reporting('LPG: Generate Schema', async () => {
       const uri = await modelForCommand()
       if (!uri) return

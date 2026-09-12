@@ -228,6 +228,12 @@ All five, with commentary on what to read in each:
 | `LPG: New Model` | Creates a model file, opens it, and opens the canvas on it |
 | `LPG: Open Canvas` | Opens the diagram beside the active model file |
 | `LPG: Generate Schema` | Prompts for a target and writes the artifact next to the model |
+| `LPG: Export Diagram as PNG` | Saves the diagram as a PNG, opening the canvas first if it is closed |
+| `LPG: Export Diagram as SVG` | Saves the diagram as an SVG, opening the canvas first if it is closed |
+
+The two export commands are also buttons in the editor title bar, on a model file and on
+the canvas tab. They honour the canvas toolbar's **light** checkbox, which swaps in a
+print-safe palette for the capture.
 
 ## Settings
 

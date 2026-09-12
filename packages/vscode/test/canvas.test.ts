@@ -254,6 +254,29 @@ describe('exporting the diagram', () => {
     expect(fs.readdirSync(root)).toEqual(['social.lpg.yaml'])
     expect(harness.errors).toEqual([])
   })
+
+  it('asks the open canvas to rasterize when the palette command runs', async () => {
+    const c = await canvas()
+
+    await commands.executeCommand('lpg.exportSvg')
+
+    // The same panel, not a second one: the command reaches the canvas already open.
+    expect(harness.panels).toHaveLength(1)
+    expect(c.panel.messages).toContainEqual({ type: 'exportRequest', format: 'svg' })
+    expect(c.panel.revealed).toBeGreaterThan(0)
+    expect(harness.errors).toEqual([])
+  })
+
+  it('opens the canvas first when the command runs with none on screen', async () => {
+    activate(context())
+
+    await commands.executeCommand('lpg.exportPng')
+
+    expect(harness.panels).toHaveLength(1)
+    expect(harness.panels[0]!.messages)
+      .toContainEqual({ type: 'exportRequest', format: 'png' })
+    expect(harness.errors).toEqual([])
+  })
 })
 
 // @lat: [[architecture#Editing Surface#Asking]]

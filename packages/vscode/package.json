@@ -77,8 +77,32 @@
       {
         "command": "lpg.generate",
         "title": "LPG: Generate Schema"
+      },
+      {
+        "command": "lpg.exportPng",
+        "title": "LPG: Export Diagram as PNG",
+        "icon": "$(file-media)"
+      },
+      {
+        "command": "lpg.exportSvg",
+        "title": "LPG: Export Diagram as SVG",
+        "icon": "$(symbol-color)"
       }
     ],
+    "menus": {
+      "editor/title": [
+        {
+          "command": "lpg.exportPng",
+          "group": "navigation@1",
+          "when": "resourceFilename =~ /\\.lpg\\.ya?ml$/ || activeWebviewPanelId == lpg.canvas"
+        },
+        {
+          "command": "lpg.exportSvg",
+          "group": "navigation@2",
+          "when": "resourceFilename =~ /\\.lpg\\.ya?ml$/ || activeWebviewPanelId == lpg.canvas"
+        }
+      ]
+    },
     "jsonValidation": [
       {
         "fileMatch": [
