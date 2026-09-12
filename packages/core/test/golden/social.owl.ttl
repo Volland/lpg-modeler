@@ -20,8 +20,8 @@ social:Company a owl:Class ;
   rdfs:subClassOf social:Party ;
   owl:hasKey ( social:id ) .
 
-# uninstantiable class, so it is emitted as an ordinary class.
 # 'Party' is abstract in the model. OWL has no notion of an
+# uninstantiable class, so it is emitted as an ordinary class.
 social:Party a owl:Class ;
   rdfs:label "Party" ;
   owl:hasKey ( social:id ) .

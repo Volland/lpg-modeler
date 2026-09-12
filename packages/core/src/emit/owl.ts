@@ -68,8 +68,9 @@ export function emitOwl(model: ModelIR, _options: EmitOptions = {}): EmitResult 
       lines.push(`  owl:equivalentClass <${node.previousIri}> ;`)
     }
     if (node.abstract) {
-      lines.unshift(`# '${node.name}' is abstract in the model. OWL has no notion of an`)
-      lines.unshift('# uninstantiable class, so it is emitted as an ordinary class.')
+      lines.unshift(
+        `# '${node.name}' is abstract in the model. OWL has no notion of an`,
+        '# uninstantiable class, so it is emitted as an ordinary class.')
     }
     const last = lines.length - 1
     lines[last] = (lines[last] ?? '').replace(/ ;$/, ' .')
