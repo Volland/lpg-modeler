@@ -1,0 +1,428 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Frames and slots, forty years later — and this time they compile — LPG Modeler</title>
+<meta name="description" content="Minsky's frames were the best authoring model knowledge representation ever had. LPG Modeler gives them eight compilation targets. Here's one, built for a problem that needs it: trust between autonomous agents in e-commerce.">
+<meta property="og:title" content="Frames and slots, forty years later — and this time they compile">
+<meta property="og:description" content="Minsky's frames were the best authoring model knowledge representation ever had. LPG Modeler gives them eight compilation targets. Here's one, built for a problem that needs it: trust between autonomous agents in e-commerce.">
+<meta property="og:type" content="article">
+<meta property="og:image" content="https://www.lpg-modeler.com/assets/diagrams/pipeline.png">
+<link rel="icon" href="../assets/icon.png">
+<link rel="stylesheet" href="../assets/fonts.css">
+<link rel="stylesheet" href="../assets/site.css">
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="../index.html"><img src="../assets/icon.png" alt=""> LPG Modeler</a>
+    <nav class="links">
+      <a href="../index.html">Overview</a>
+      <a href="../getting-started.html">Getting started</a>
+      <a href="../examples.html">Examples</a>
+      <a href="../model-format.html">Model format</a>
+      <a href="../targets.html">Targets</a>
+      <a href="../cli.html">CLI</a>
+      <a href="../architecture.html">Architecture</a>
+      <a href="../blog/index.html" aria-current="page">Blog</a>
+      <a href="https://github.com/Volland/lpg-modeler">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+
+<div class="wrap post-head">
+  <a class="back" href="index.html">← Blog</a>
+  <h1>Frames and slots, forty years later — and this time they compile</h1>
+  <p class="lede">Minsky's frames were the best authoring model knowledge representation ever had. LPG Modeler gives them eight compilation targets. Here's one, built for a problem that needs it: trust between autonomous agents in e-commerce.</p>
+  <p class="post-meta"><time datetime="2026-09-12">12 September 2026</time> · 19 min read</p>
+</div>
+
+<hr class="rule">
+
+<div class="wrap">
+  <article class="post">
+<p>In 1974 Marvin Minsky described a <strong>frame</strong>: a data structure for a stereotyped situation, with named <strong>slots</strong> for the things that vary, and <strong>facets</strong> on each slot saying what may legally fill it. A frame for a hotel room has slots for <code>rate</code> and <code>checkOut</code>; the <code>rate</code> slot has a facet saying it's a number, another saying it's required, another saying it can't be negative.</p>
+<p>That idea ran the field for two decades. KRL, FRL, KEE, CLIPS COOL, OKBC, Protégé-Frames. Ontologists loved it because <strong>it's how people actually describe a domain</strong>: you name a kind of thing, you list what it carries, you say what's allowed in each position, and you say what it's a kind of.</p>
+<p>Then frames lost. Description logics won, OWL got standardized, Protégé-Frames became Protégé-OWL, and the profession traded an authoring model everyone understood for a reasoning model most people got wrong. (Fifteen years later, <code>rdfs:domain</code> is still the single most misunderstood construct in applied semantics — it does not constrain anything; it tells a reasoner to <em>reclassify</em> anything it finds.)</p>
+<p>Frames didn't lose because they were wrong. They lost because <strong>a frame system compiled to nothing</strong>. You described your domain beautifully, and then the schema you actually shipped — the DDL, the constraints, the validation — got written a second time, by hand, by someone else, in a different vocabulary.</p>
+<p><strong>LPG Modeler is a frame system that compiles.</strong></p>
+<pre><code>frame              →  node type
+slot               →  property
+facet              →  type, required, enum, min/max, pattern, length
+is-a               →  extends
+slot bundle        →  mixin
+relational slot    →  edge — first-class, typed, and it carries data</code></pre>
+<p>You author frames and slots as reviewable YAML, edit them on a canvas beside the file, and generate <strong>eight</strong> artifacts: LadybugDB DDL, Neo4j constraints, FalkorDB schema, SHACL shapes, an OWL ontology, GQL graph types (ISO/IEC 39075), PG-Schema, and LinkML.</p>
+<p>Five of those sit on the property-graph side of the fence — LadybugDB, Neo4j, FalkorDB, GQL, PG-Schema. Three sit on the RDF and linked-data side — SHACL, OWL, LinkML. <strong>They come from the same file.</strong></p>
+<figure><img src="../assets/diagrams/pipeline.png" alt=""><figcaption>One model, four artifacts — the compilation pipeline from YAML through parse, resolve, validate, emit</figcaption></figure>
+<hr>
+<h2 id="the-slot-facets-mapped">The slot facets, mapped<a class="anchor" href="#the-slot-facets-mapped" aria-label="Link to this section">#</a></h2>
+<p>This is the part that makes the frames framing more than a nice analogy. The facet vocabulary lines up almost item for item:</p>
+<p><strong><code>:VALUE-TYPE</code></strong> becomes <code>type:</code> — 21 scalars, plus <code>STRUCT</code>, <code>MAP</code>, <code>UNION</code> and <code>ARRAY</code>. LadybugDB stores all of it natively, composites included; <code>uuid</code> and <code>json</code> are reported downgrades on GQL and the RDF targets.</p>
+<p><strong><code>:CARDINALITY</code></strong>, in its single-or-multiple sense, becomes <code>list: true</code> — also spelled <code>LIST&lt;STRING&gt;</code> or <code>STRING[]</code>. Every target carries it.</p>
+<p><strong><code>:CARDINALITY</code></strong>, in its min-and-max-on-a-relation sense, becomes an endpoint bound: <code>cardinality: { to: &quot;3..*&quot; }</code>. SHACL expresses it exactly; LadybugDB enforces the upper bound on write.</p>
+<p><strong><code>:ALLOWED-VALUES</code></strong> becomes <code>enum:</code> — <code>sh:in</code> in SHACL, <code>owl:oneOf</code> in OWL, <code>permissible_values</code> in LinkML.</p>
+<p><strong><code>:NUMERIC-MIN</code> and <code>:NUMERIC-MAX</code></strong> become <code>min:</code> and <code>max:</code>, carried by SHACL and LinkML.</p>
+<p><strong><code>:REQUIRED</code></strong> becomes <code>required: true</code> — genuinely enforced by FalkorDB's <code>MANDATORY</code>, by Neo4j on Enterprise, and by SHACL.</p>
+<p><strong>Slot inheritance</strong> becomes <code>extends:</code>. PG-Schema and GQL keep the hierarchy; LadybugDB flattens it to one table per concrete frame.</p>
+<p>Two things on that list are additions rather than translations. <strong><code>pattern:</code>, <code>minLength:</code> and <code>maxLength:</code></strong> constrain the shape of a string, which no classical frame system offered, and SHACL is the only place they land. And <strong><code>key:</code></strong> — single or composite — declares identity, which frames left to the host system entirely. Here it pays off three times over: a LadybugDB <code>PRIMARY KEY</code>, a Neo4j <code>NODE KEY</code>, and <code>owl:hasKey</code> in the ontology export.</p>
+<p>The gaps, stated up front rather than discovered later. There is <strong>no <code>:DEFAULT</code> facet</strong> and <strong>no <code>:DOCUMENTATION</code> facet</strong> — documentation lives in YAML comments, which survive in the file and not into the artifacts. And there are <strong>no daemons</strong>: no <code>if-added</code>, no <code>if-needed</code>, no procedural attachment. That's deliberate. A schema is a contract, not a runtime, and a frame system that could run code was a frame system nobody could compile.</p>
+<hr>
+<h2 id="a-domain-that-needs-the-whole-vocabulary">A domain that needs the whole vocabulary<a class="anchor" href="#a-domain-that-needs-the-whole-vocabulary" aria-label="Link to this section">#</a></h2>
+<p>Let's build something hard enough to be worth the tooling: <strong>trust between autonomous agents in e-commerce.</strong></p>
+<p>A shopping agent negotiates with a merchant agent. A carrier agent commits to a delivery window. A payment agent holds funds. Nobody owns anybody. Every one of them can lie, be wrong, or go offline mid-transaction.</p>
+<p>The naive model — the one that gets built — puts a <code>trustScore FLOAT</code> column on the agent table and moves on. That model is wrong in a specific, expensive way, and the vocabulary that explains why is <strong>Mark Burgess's Promise Theory</strong>:</p>
+<blockquote>
+<p>An agent can only make promises about <strong>its own</strong> behaviour. Nobody promises on anyone else's behalf. You cannot impose a promise on an autonomous agent — you can only request one, and assess whether it was kept.</p>
+</blockquote>
+<p>Four consequences, each of which is a modelling decision:</p>
+<ol>
+<li><strong>A promise has exactly one issuer</strong>, and it is the agent that will execute it. A marketplace cannot promise delivery. It can only promise to <em>convey</em> a merchant's promise.</li>
+<li><strong>Cooperation requires two promises</strong>, not one. A <code>+</code> promise to give, and a <code>−</code> promise to accept. An offer nobody accepted is not an agreement.</li>
+<li><strong>Trust is first-person and directional.</strong> It is <em>this</em> agent's belief about <em>that</em> agent, in <em>this</em> scope. There is no global trust score, and modelling one is the bug.</li>
+<li><strong>You assess; you don't enforce.</strong> And self-assessment disagreeing with a witness is the most useful signal in the entire system.</li>
+</ol>
+<p>The complete model is <a href="models/agent-trust.lpg.yaml"><code>agent-trust.lpg.yaml</code></a> — 20 frames, 21 relations, 3 mixins and 7 enums. It validates clean, and every excerpt below is taken verbatim from real generated output.</p>
+<hr>
+<h2 id="frames-what-a-thing-is">Frames: what a thing <em>is</em><a class="anchor" href="#frames-what-a-thing-is" aria-label="Link to this section">#</a></h2>
+<p>The agent hierarchy is a frame taxonomy, and the abstract frames earn their place by carrying identity and relations down.</p>
+<pre><code>nodes:
+  Agent:
+    id: n_agent
+    abstract: true
+    key: [agentId]
+    props:
+      agentId:     { id: p_aid, type: STRING, required: true }
+      did:         { id: p_did, type: STRING, pattern: &quot;^did:[a-z0-9]+:.+$&quot; }
+      displayName: { id: p_aname, type: STRING }
+
+  PrincipalAgent:
+    id: n_principal
+    abstract: true
+    extends: Agent
+    props:
+      principalDid: { id: p_pdid, type: STRING, required: true }
+      jurisdiction: { id: p_juris, type: STRING, pattern: &quot;^[A-Z]{2}$&quot; }
+
+  ServiceAgent:
+    id: n_service
+    abstract: true
+    extends: Agent
+    props:
+      endpoint:          { id: p_ep, type: STRING, required: true }
+      declaredUptimePct: { id: p_up, type: float, min: 0, max: 100 }</code></pre>
+<p><code>PrincipalAgent</code> acts for a legal person; <code>ServiceAgent</code> is infrastructure. The distinction is not decorative — <strong>only a principal agent can be sued</strong>, and that is exactly the kind of fact a taxonomy is for.</p>
+<p><code>ShopperAgent</code> and <code>MerchantAgent</code> descend from the first; <code>LogisticsAgent</code>, <code>PaymentAgent</code> and <code>MarketplaceAgent</code> from the second. <code>agentId</code> is declared once, on the root, and every one of the five inherits it as a key.</p>
+<hr>
+<h2 id="mixins-what-a-thing-carries">Mixins: what a thing <em>carries</em><a class="anchor" href="#mixins-what-a-thing-carries" aria-label="Link to this section">#</a></h2>
+<p>Here is where frame systems went wrong, and where the distinction is worth enforcing.</p>
+<p>Classical frame systems had multiple inheritance, so &quot;these twenty frames all have a <code>createdAt</code>&quot; got expressed by inventing a <code>Timestamped</code> superclass and putting twenty frames under it. Do that a few times and your taxonomy is no longer shaped by <em>what things are</em>. It's shaped by <em>which slots happen to travel together</em>.</p>
+<p>A <strong>mixin</strong> is a named bag of slots with no supertype, no identity, and no place in any ancestor chain:</p>
+<pre><code>mixins:
+<span class="c-com">  # Bitemporal: when the world did it, and when we heard about it. Every</span>
+<span class="c-com">  # assessment of a distributed system needs both, and neither makes a subtype.</span>
+  Temporal:
+    id: m_time
+    props:
+      observedAt: { id: p_obs, type: ZONED_DATETIME, required: true }
+      recordedAt: { id: p_rec, type: ZONED_DATETIME }
+
+<span class="c-com">  # Where a claim came from and how sure its author was.</span>
+  Provenanced:
+    id: m_prov
+    props:
+      assertedBy: { id: p_asrt, type: STRING, required: true }
+      sourceUri:  { id: p_src, type: STRING }
+      confidence: { id: p_conf, type: float, min: 0, max: 1 }
+
+<span class="c-com">  # Promise Theory scope: the set of agents in whose view the promise exists.</span>
+<span class="c-com">  # A promise nobody can see is not a promise.</span>
+  Scoped:
+    id: m_scope
+    props:
+      scopeAgents: { id: p_scope, type: LIST&lt;STRING&gt; }
+      public:      { id: p_pub, type: boolean }</code></pre>
+<p>An <code>Assessment</code> applies <code>Temporal</code> and <code>Provenanced</code>. A <code>Promise</code> applies <code>Temporal</code> and <code>Scoped</code>. Neither becomes a subtype of anything, because neither <em>is</em> a kind of timestamp.</p>
+<p>Mixins cost the generators nothing — they're flattened into every frame that applies them before any target sees the model — so a target with rich subtyping and a target with none get identical columns. In the canvas, a slot from a parent shows <code>↑</code> and a slot from a mixin shows <code>◇</code>, because <strong>they are not the same claim about a type</strong>.</p>
+<figure><img src="../assets/screenshots/inspector.png" class="shot" alt=""><figcaption>The inspector, showing an ancestor chain, mixin checkboxes, and inherited edges</figcaption></figure>
+<hr>
+<h2 id="the-autonomy-axiom-as-a-cardinality-bound">The autonomy axiom, as a cardinality bound<a class="anchor" href="#the-autonomy-axiom-as-a-cardinality-bound" aria-label="Link to this section">#</a></h2>
+<p><code>Promise</code> is the abstract frame at the centre of the model:</p>
+<pre><code>  Promise:
+    id: n_promise
+    abstract: true
+    key: [promiseId]
+    mixins: [Temporal, Scoped]
+    props:
+      promiseId: { id: p_prid, type: STRING, required: true }
+      body:      { id: p_body, type: STRING, required: true, maxLength: 2000 }
+      kind:      { id: p_pk, type: STRING, enum: PromiseKind }
+      state:     { id: p_ps, type: STRING, enum: PromiseState }
+      issuedAt:  { id: p_iss, type: ZONED_DATETIME, required: true }
+      expiresAt: { id: p_exp, type: ZONED_DATETIME }</code></pre>
+<p><code>PromiseKind</code> is <code>[give, accept]</code> — Burgess's <code>+</code> and <code>−</code>. <code>PromiseState</code> is <code>[offered, accepted, rejected, in_force, kept, broken, withdrawn, expired]</code>, and <strong><code>rejected</code> is in that list on purpose</strong>. A rejection is data. When a chain of commitments collapses, the refusal that saved you from a worse outcome needs to be on the record, not absent from it.</p>
+<p>Five concrete promises descend from it: <code>DeliveryPromise</code>, <code>PricePromise</code>, <code>SettlementPromise</code>, <code>DataUsePromise</code>, and <code>AcceptancePromise</code> — the <code>−</code> promise, without which there's an offer and no cooperation.</p>
+<p>And then the axiom itself:</p>
+<pre><code>edges:
+<span class="c-com">  # The autonomy axiom, written as a bound. Exactly one agent issues a promise,</span>
+<span class="c-com">  # and it is the agent that will execute it. No &quot;on behalf of&quot; is expressible.</span>
+  ISSUES:
+    id: e_issues
+    from: Agent
+    to: Promise
+    cardinality: { from: &quot;1&quot; }</code></pre>
+<p>That <code>from: &quot;1&quot;</code> is the whole of Promise Theory's first principle, written as a schema constraint. <strong>It is not a comment. It is enforced.</strong> More on that in a moment.</p>
+<hr>
+<h2 id="facets-that-bite">Facets that bite<a class="anchor" href="#facets-that-bite" aria-label="Link to this section">#</a></h2>
+<p>The seven-assertion constraint vocabulary is where slot facets stop describing one value and start describing a frame. It's closed on purpose — <code>lessThan</code>, <code>lessThanOrEquals</code>, <code>equals</code>, <code>disjoint</code>, <code>atLeastOne</code>, <code>exactlyOne</code>, <code>count</code> — because a closed vocabulary can be translated per target or honestly downgraded, where a raw expression could only ever be passed through to one.</p>
+<p><strong>A price is one thing or the other, never both:</strong></p>
+<pre><code>  PricePromise:
+    extends: Promise
+    props:
+      currency:     { type: STRING, required: true, pattern: &quot;^[A-Z]{3}$&quot; }
+      fixedAmount:  { type: &quot;DECIMAL(18,4)&quot;, min: 0 }
+      indexFormula: { type: STRING, maxLength: 500 }
+    constraints:
+      - name: oneBasisOnly
+        assert: { exactlyOne: [fixedAmount, indexFormula] }
+        message: a price is either a fixed amount or an index formula, never both</code></pre>
+<p><strong>A capture may not exceed its authorisation:</strong></p>
+<pre><code>      - name: captureWithinAuthorisation
+        assert: { lessThanOrEquals: [capturedAmount, authorizedAmount] }
+        message: a capture may not exceed the amount that was authorised</code></pre>
+<p><strong>An assessment with no evidence is an opinion:</strong></p>
+<pre><code>  Assessment:
+    key: [assessmentId]
+    mixins: [Temporal, Provenanced]
+    props:
+      verdict:         { type: STRING, enum: Verdict }      # kept | broken | partial | unobservable
+      role:            { type: STRING, enum: AssessorRole } # self | promisee | witness
+      dimensionScores: { type: &quot;MAP(STRING, DOUBLE)&quot; }
+    constraints:
+      - name: evidenceBacked
+        assert: { count: { edge: CITES, of: Evidence, min: 1 } }
+        message: an assessment with no evidence behind it is an opinion</code></pre>
+<p>That <code>role</code> enum is the Promise Theory payoff. Self-assessment and witness assessment are <strong>the same frame with a different filler in one slot</strong>, which means &quot;find every promise the issuer called kept and a witness called broken&quot; is one query, not an architecture.</p>
+<hr>
+<h2 id="there-is-no-global-trust-score">There is no global trust score<a class="anchor" href="#there-is-no-global-trust-score" aria-label="Link to this section">#</a></h2>
+<p>This is the modelling decision the whole ontology exists to make, and it falls out of a composite key:</p>
+<pre><code><span class="c-com">  # First-person and directional: *this* agent's belief about *that* agent,</span>
+<span class="c-com">  # within *this* scope. The composite key is the point — there is no single</span>
+<span class="c-com">  # global trust score to key on, and modelling one would be the bug.</span>
+  TrustBelief:
+    key: [holderId, subjectId, scopeTag]
+    mixins: [Temporal]
+    props:
+      holderId:     { type: STRING, required: true }
+      subjectId:    { type: STRING, required: true }
+      scopeTag:     { type: STRING, required: true }
+      valence:      { type: float, min: -1, max: 1 }
+      sampleSize:   { type: int, min: 0 }
+      halfLifeDays: { type: int, min: 1 }
+    constraints:
+      - name: noSelfTrust
+        assert: { disjoint: [holderId, subjectId] }
+        message: an agent's view of itself is self-assessment, not trust</code></pre>
+<p>Three things this says that a <code>trustScore</code> column cannot:</p>
+<ul>
+<li><strong>Trust is scoped.</strong> You can trust a carrier's delivery windows and distrust its damage claims. Those are different beliefs about the same agent, and the key admits both.</li>
+<li><strong>Trust decays.</strong> <code>halfLifeDays</code> is a slot because a two-year-old assessment is not evidence about today.</li>
+<li><strong>Trust has a denominator.</strong> <code>sampleSize</code> separates &quot;kept forty of forty promises&quot; from &quot;kept one&quot;.</li>
+</ul>
+<p><code>Reputation</code> is a <strong>separate frame</strong> — third-party hearsay, with a <code>population</code> and a <code>method</code> — and keeping it separate is not fastidiousness. Collapsing first-person trust into propagated reputation is precisely how a reputation system becomes gameable.</p>
+<hr>
+<h2 id="the-relationship-that-isn-t-a-pair">The relationship that isn't a pair<a class="anchor" href="#the-relationship-that-isn-t-a-pair" aria-label="Link to this section">#</a></h2>
+<p>Most multi-agent modelling quietly decomposes everything into pairs. But a shopper, a merchant and a carrier settling a delivery window <strong>is not three bilateral negotiations</strong> — no pair of them can reach it alone. The three-way configuration is the thing.</p>
+<p>So <code>Deliberation</code> is reified into a frame of its own, and the bound says what no named multiplicity can:</p>
+<pre><code>  HAS_PARTICIPANT:
+    from: Deliberation
+    to: Agent
+    cardinality: { to: &quot;3..*&quot; }</code></pre>
+<p><code>many-to-one</code>, <code>one-to-many</code> and their siblings cannot express &quot;three or more&quot;. Endpoint bounds can — and this is the bound that stops a genuinely collective decision from being logged as a pair of chats.</p>
+<hr>
+<h2 id="edges-carry-data-and-reify-only-when-they-must">Edges carry data, and reify only when they must<a class="anchor" href="#edges-carry-data-and-reify-only-when-they-must" aria-label="Link to this section">#</a></h2>
+<p><code>LOCKS_WITH</code> is the bilateral lock: a <code>give</code> promise and the <code>accept</code> promise that answers it.</p>
+<pre><code>  LOCKS_WITH:
+    from: Promise
+    to: Promise
+    cardinality: { to: &quot;0..1&quot; }
+    props:
+      lockedAt: { type: ZONED_DATETIME, required: true }
+      channel:  { type: STRING }</code></pre>
+<p>Declared once on the abstract parent, so it holds between any two promise kinds. And it <strong>carries properties</strong>, which in a classical frame system meant inventing a <code>Lock</code> frame by hand, and in RDF means reification.</p>
+<p>LPG Modeler reifies <strong>gradually</strong>: an edge with no properties stays a plain object property; an edge with properties becomes an n-ary class plus a shortcut. From the generated OWL, verbatim:</p>
+<pre><code><span class="c-com"># (:Promise)-[:LOCKS_WITH]-&gt;(:Promise) carries properties, so it is</span>
+<span class="c-com"># reified into a class. 'locksWith' is the shortcut for querying.</span>
+trust:LocksWith a owl:Class ; rdfs:label &quot;LOCKS_WITH&quot; .
+trust:locksWithSubject a owl:ObjectProperty .
+trust:locksWithObject a owl:ObjectProperty .
+trust:locksWith a owl:ObjectProperty .
+trust:lockedAt a owl:DatatypeProperty ; rdfs:range xsd:dateTime .
+
+<span class="c-com"># (:Assessment)-[:MADE_BY]-&gt;(:Agent) carries no properties,</span>
+<span class="c-com"># so it stays a plain object property. No domain or range is asserted.</span>
+trust:madeBy a owl:ObjectProperty ; rdfs:label &quot;MADE_BY&quot; .</code></pre>
+<p>Note what the OWL does <em>not</em> say: no <code>rdfs:domain</code>, no <code>rdfs:range</code>, no cardinality restrictions. The export is restricted to the safe assertional subset — classes, <code>subClassOf</code>, <code>hasKey</code>, disjointness, inverses — because mapping a closed-world schema constraint naively into an open-world ontology doesn't lose information, <strong>it inverts the meaning</strong>. The constraints go to SHACL, where closed-world is what they mean.</p>
+<hr>
+<h2 id="the-escape-hatch">The escape hatch<a class="anchor" href="#the-escape-hatch" aria-label="Link to this section">#</a></h2>
+<p>A closed assertion vocabulary that can't be escaped is a reason not to adopt the tool. So one frame in this model carries raw SHACL:</p>
+<pre><code>  DataUsePromise:
+    extends: Promise
+    props:
+      purposes:       { type: LIST&lt;STRING&gt; }
+      retentionDays:  { type: int, min: 0, max: 3650 }
+      onwardTransfer: { type: boolean }
+    shacl: |
+      sh:property [
+        sh:path trust:retentionDays ;
+        sh:severity sh:Warning ;
+        sh:description &quot;retention beyond a year is reviewed by the data protection officer&quot; ;
+        sh:maxInclusive 365 ;
+      ] ;</code></pre>
+<p><code>sh:Warning</code> — flag for human review, don't reject — has no place in a seven-assertion vocabulary, and shouldn't. It's deliberately unportable, and that's <strong>stated rather than hidden</strong>: every other target reports that it ignored it.</p>
+<hr>
+<h2 id="now-compile-it">Now compile it<a class="anchor" href="#now-compile-it" aria-label="Link to this section">#</a></h2>
+<pre><code>npx lpg-modeler-cli check article/agent-trust.lpg.yaml
+<span class="c-com"># 0 error(s), 0 warning(s)</span>
+
+npx lpg-modeler-cli emit article/agent-trust.lpg.yaml \
+  --target ladybug --target neo4j --target falkordb --target shacl \
+  --target owl --target gql --target pgschema --target linkml \
+  --out ./schema</code></pre>
+<p>Eight artifacts. Here's what each one did with the same frames.</p>
+<h3 id="ladybugdb-the-axiom-enforced-on-write">LadybugDB: the axiom, enforced on write<a class="anchor" href="#ladybugdb-the-axiom-enforced-on-write" aria-label="Link to this section">#</a></h3>
+<p>The hierarchy flattens to one table per concrete frame, so <code>ISSUES</code> — declared between two abstract frames — expands:</p>
+<pre><code>CREATE REL TABLE IF NOT EXISTS ISSUES (
+<span class="c-com">  // 'Agent' and/or 'Promise' are abstract; expanded to 25 endpoint pairs.</span>
+  FROM LogisticsAgent TO AcceptancePromise,
+  FROM LogisticsAgent TO DataUsePromise,
+  ...
+  FROM ShopperAgent TO SettlementPromise,
+<span class="c-com">  // 1-to-*: enforced on write.</span>
+  ONE_MANY
+<span class="c-warn">  // UNENFORCED: a minimum of 1 on 'from'.</span>
+);</code></pre>
+<p>Five agent frames × five promise frames = 25 pairs, written for you. And <code>ONE_MANY</code> is <strong>enforced by the engine on write</strong> — a second agent claiming to have issued the same promise is rejected by the database. The autonomy axiom is not documentation here.</p>
+<p>The composite key gets handled and <em>reported</em>:</p>
+<pre><code>CREATE NODE TABLE IF NOT EXISTS TrustBelief (
+  holderId STRING,
+  ...
+<span class="c-warn">  // SYNTHESIZED: composite key (holderId, subjectId, scopeTag) is not expressible;</span>
+<span class="c-com">  // 'trustbelief_key' must be written as the concatenation of those properties.</span>
+  trustbelief_key STRING,
+  PRIMARY KEY(trustbelief_key)
+);</code></pre>
+<p>And the composite slot type survives intact — <code>destination STRUCT(lat DOUBLE, lon DOUBLE)</code> is a real column here, on the one target that has them.</p>
+<h3 id="shacl-the-constraints-that-no-database-can-hold">SHACL: the constraints that no database can hold<a class="anchor" href="#shacl-the-constraints-that-no-database-can-hold" aria-label="Link to this section">#</a></h3>
+<pre><code>trust:TrustBelief_noSelfTrustShape a sh:NodeShape ;
+  sh:targetClass trust:TrustBelief ;
+  sh:property [
+    sh:path trust:holderId ;
+    sh:disjoint trust:subjectId ;
+    sh:message &quot;an agent's view of itself is self-assessment, not trust&quot; ;
+  ] .
+
+trust:Assessment_evidenceBackedShape a sh:NodeShape ;
+  sh:targetClass trust:Assessment ;
+  sh:property [
+    sh:path trust:cites ;
+    sh:qualifiedValueShape [ sh:class trust:Evidence ] ;
+    sh:qualifiedMinCount 1 ;
+    sh:message &quot;an assessment with no evidence behind it is an opinion&quot; ;
+  ] .</code></pre>
+<p>Each named constraint gets <strong>its own shape</strong>, so each keeps its own <code>sh:message</code> — folded together, one message would appear to explain every rule on the frame.</p>
+<p>Cardinality comes out in <strong>both directions</strong>. The <code>3..*</code> bound:</p>
+<pre><code>  sh:property [
+    sh:path trust:hasParticipant ;
+<span class="c-com">    # *-to-3..*: each Deliberation has 3..* Agent.</span>
+    sh:minCount 3 ;
+  ] .</code></pre>
+<p>And the autonomy axiom again, this time as an inverse path on every promise frame:</p>
+<pre><code>  sh:property [
+    sh:path [ sh:inversePath trust:issues ] ;
+<span class="c-com">    # 1-to-*: each AcceptancePromise has 1 incoming ISSUES.</span>
+    sh:minCount 1 ;
+    sh:maxCount 1 ;
+  ] .</code></pre>
+<p>One <code>cardinality: { from: &quot;1&quot; }</code> in the model. Enforced by LadybugDB on write, enforced by SHACL on validation, in opposite directions, from one line.</p>
+<h3 id="pg-schema-nothing-flattened">PG-Schema: nothing flattened<a class="anchor" href="#pg-schema-nothing-flattened" aria-label="Link to this section">#</a></h3>
+<p>The most faithful target — abstract frames stay abstract, mixins stay mixins:</p>
+<pre><code>CREATE GRAPH TYPE trustType STRICT {
+  ABSTRACT (temporalType {observedAt ZONED DATETIME, OPTIONAL recordedAt ZONED DATETIME}),
+  ABSTRACT (agentType: Agent {agentId STRING, OPTIONAL did STRING, ...}),
+  ABSTRACT (promiseType: temporalType &amp; scopedType &amp; Promise {promiseId STRING, ...}),
+  (deliverypromiseType: promiseType &amp; DeliveryPromise {OPTIONAL earliestDeliveryAt ZONED DATETIME, ...}),
+  ABSTRACT (principalagentType: agentType &amp; PrincipalAgent {principalDid STRING, ...}),
+  (shopperagentType: principalagentType &amp; temporalType &amp; ShopperAgent {...}),
+  ...</code></pre>
+<p>A mixin becomes an abstract type declared without a label — which is precisely what a mixin <em>is</em>.</p>
+<h3 id="the-rest-briefly">The rest, briefly<a class="anchor" href="#the-rest-briefly" aria-label="Link to this section">#</a></h3>
+<p><strong>FalkorDB</strong> is the only database target that enforces <code>required</code> — it emits <code>MANDATORY</code> for every one of them. It also takes the composite key as a <code>UNIQUE</code> over all three slots, with no synthesized column needed.</p>
+<p><strong>Neo4j</strong> turns the hierarchy into labels rather than tables. On Community edition you get uniqueness only, and every existence constraint is reported as an Enterprise-gated downgrade rather than silently dropped.</p>
+<p><strong>GQL</strong> carries the hierarchy by label implication, so <code>ISSUES</code> stays <strong>one</strong> element type instead of expanding to 25 endpoint pairs.</p>
+<p><strong>LinkML</strong> lines <code>is_a</code> and <code>mixins</code> up almost directly with the metamodel, which opens the whole LinkML generator ecosystem to a model authored here.</p>
+<hr>
+<h2 id="nothing-disappears-quietly">Nothing disappears quietly<a class="anchor" href="#nothing-disappears-quietly" aria-label="Link to this section">#</a></h2>
+<p>That emit printed <strong>625 diagnostics and zero errors</strong> — 364 <code>info</code>, 261 <code>warning</code>. Not failures: <strong>downgrades</strong>, each naming a frame, a slot, a target, and where the constraint went instead:</p>
+<pre><code>info  [pgschema] downgrade-named-constraint: Constraint 'TrustBelief.noSelfTrust'
+      asserts 'disjoint', which pgschema cannot express. The SHACL artifact carries it.
+
+warning [linkml] downgrade-cardinality: Edge type 'HAS_PARTICIPANT' declares
+      *-to-3..* cardinality. A LinkML slot expresses only 'multivalued' and
+      'required', so the exact bound is unenforced.
+
+warning [linkml] downgrade-composite: Property 'Assessment.dimensionScores' has
+      composite type MAP(string, float), which linkml has no equivalent for.
+      Declared as string; the structure inside it is not carried.</code></pre>
+<p>Every one is an editor diagnostic <strong>and</strong> a comment at the lossy line of the generated artifact, so the operator reading the DDL learns what the author reading the model already knows. The severities are calibrated: a constraint that moved to SHACL is <code>info</code>; a composite that silently flattened is <code>warning</code>, because that's the surprising kind of loss.</p>
+<p>This is the part frame systems never had and OWL exports usually get wrong. <strong>A schema tool's most important output is an honest account of what it couldn't carry.</strong></p>
+<hr>
+<h2 id="what-it-deliberately-won-t-do">What it deliberately won't do<a class="anchor" href="#what-it-deliberately-won-t-do" aria-label="Link to this section">#</a></h2>
+<p>One more honest line, since this is a model about promises.</p>
+<p>Edges that are themselves endpoints of other edges — the metagraph case — are <strong>outside the core on purpose</strong>. Neo4j can't represent them natively, so admitting them would force every emitter to grow a silent reification path, and silent reification is how a schema stops meaning what it says. If your promise graph needs promises <em>about</em> promises, you reify deliberately — the way <code>Deliberation</code> is reified here — and you can see that you did.</p>
+<p>Likewise, named constraints don't inherit. A constraint written against a subtype's slot would be meaningless on the parent, and a subtype that silently widened its parent's contract would leave the reader of the parent no way to see it. It means <code>captureWithinAuthorisation</code> sits on <code>SettlementPromise</code> rather than on <code>Promise</code>, and that's the right place for it.</p>
+<hr>
+<h2 id="try-it">Try it<a class="anchor" href="#try-it" aria-label="Link to this section">#</a></h2>
+<pre><code>code --install-extension pavlyshyn.lpg-modeler</code></pre>
+<p>The model in this article is <a href="models/agent-trust.lpg.yaml"><code>article/agent-trust.lpg.yaml</code></a> — save it as <code>agent-trust.lpg.yaml</code> in a workspace, open the canvas beside it, and generate whichever of the eight targets your stack actually runs.</p>
+<p>Five more worked models ship with the project: a starter, an inheritance-and-mixins tour, enums and open types, endpoint bounds, and the full constraint vocabulary. Each is checked in CI — a test resolves every one and generates all eight targets, so the file you download is the file the test checked.</p>
+<ul>
+<li><strong>Docs</strong> — https://volland.github.io/lpg-modeler/</li>
+<li><strong>Marketplace</strong> — https://marketplace.visualstudio.com/items?itemName=pavlyshyn.lpg-modeler</li>
+<li><strong>Source</strong> — https://github.com/Volland/lpg-modeler</li>
+</ul>
+<hr>
+<p>Minsky gave us the right way to describe a domain. Burgess gave us the right way to describe agents who don't take orders. Neither of them had a compiler.</p>
+<p>Now you do.</p>
+  </article>
+
+  <p class="post-source">
+    This post is <a href="https://github.com/Volland/lpg-modeler/blob/main/article/frames-and-slots.md" rel="noopener"><code>article/frames-and-slots.md</code></a>
+    in the repository, so a correction to the tool and a correction to the post travel together.
+  </p>
+
+  <div class="next">
+    <a href="index.html"><div class="k">All posts</div><div class="v">Everything written about the tool, longest first.</div></a>
+    <a href="../getting-started.html"><div class="k">Getting started</div><div class="v">Install, write your first model, open the canvas, generate.</div></a>
+  </div>
+</div>
+
+</main>
+
+<footer class="site">
+  <div class="wrap">
+    <span>LPG Modeler — MIT licensed</span>
+    <span class="spacer"><a href="../impressum.html">Impressum</a></span>
+    <span><a href="../datenschutz.html">Datenschutz</a></span>
+    <span><a href="../agb.html">AGB</a></span>
+    <span><a href="https://github.com/Volland/lpg-modeler">Source</a></span>
+    <span><a href="https://github.com/Volland/lpg-modeler/issues">Issues</a></span>
+  </div>
+</footer>
+
+</body>
+</html>

@@ -192,6 +192,20 @@ They are captures of the real webview bundle rendering a projection the extensio
 
 The model in every screenshot is a published [[architecture#Examples|example]], so the file a reader downloads is the one they were shown, and a change that broke it fails the examples test before it reaches the page. A test asserts that every screenshot a page references exists and that the model they are captured from is still published, since a missing image degrades silently to alt text. Like the diagrams, they are committed rather than generated at build time — the site still has no build step.
 
+#### Blog
+
+`article/` is rendered into `docs/blog/` by a generator that is run by hand and whose output is committed, so the published site stays a folder of static files rather than a build.
+
+That is the same arrangement the diagrams already use: `npm run build:blog` is a tool for the author, not a step Pages depends on. A broken toolchain can therefore stop the next post from being rendered, but it cannot take the published ones down.
+
+`article/posts.json` is an allowlist rather than a directory listing. A file reaches the site only by being named there, which is what keeps the folder's own README and the platform-specific companions — a LinkedIn body sized for the feed — out of a section meant for long reads. It also carries the date, since the git history of a file records when it was committed rather than when it was published.
+
+A test renders the articles and compares the result to what is committed, so an article edited without regenerating fails the build instead of publishing the previous version indefinitely. The same test asserts that every page of the site links the section, because a section nothing links to is a section nobody reads.
+
+A model an article is [[architecture#Distribution#Announcement writing|built around]] lives in `article/`, which Pages does not publish, so the generator copies it to `docs/blog/models/` and rewrites the link. The copy is derived, and a test compares it byte for byte against its source — the same rule the upload sets are held to, enforced rather than remembered.
+
+Markup is deliberately thin. Alt text in these articles is written as a caption, so it becomes a `<figcaption>` and the `alt` is emptied rather than read out twice; comment lines in a fenced block pick up the muted and amber classes the hand-written pages already use, and a comment naming a loss an emitter reported is ambered like the ones quoted on the front page. Nothing finer is attempted, because distinguishing a comment from a `#` inside a string needs a grammar per language, and a highlighter that is wrong is worse than none.
+
 ### Legal pages
 
 The site carries a German Impressum, Datenschutzerklärung and Nutzungsbedingungen, linked from every footer, because the operator is a private individual resident in Germany.
@@ -208,7 +222,7 @@ The two have different readers. The repository README explains the monorepo to s
 
 Long-form posts about the tool live in `article/`, referencing the site's own diagrams and screenshots by relative path rather than carrying copies.
 
-Keeping them in the repository is what makes a claim checkable: several are version-pinned measurements — LadybugDB 0.19.1 rejecting `NOT NULL`, Neo4j existence constraints being Enterprise-only, the number of targets — and a post held elsewhere would keep asserting them after [[emitters#Capability Matrix]] had moved. One copy of each image also means an article cannot show a [[architecture#Distribution#Documentation site#Screenshots|screenshot]] the site has already replaced. The folder's README carries the absolute `raw.githubusercontent.com` forms, for the same reason the [[architecture#Distribution#Marketplace page]] needs them: a renderer outside the repository does not resolve a relative path.
+Keeping them in the repository is what makes a claim checkable: several are version-pinned measurements — LadybugDB 0.19.1 rejecting `NOT NULL`, Neo4j existence constraints being Enterprise-only, the number of targets — and a post held elsewhere would keep asserting them after [[emitters#Capability Matrix]] had moved. One copy of each image also means an article cannot show a [[architecture#Distribution#Documentation site#Screenshots|screenshot]] the site has already replaced. The folder's README carries the absolute `raw.githubusercontent.com` forms, for the same reason the [[architecture#Distribution#Marketplace page]] needs them: a renderer outside the repository does not resolve a relative path. The site's own [[architecture#Distribution#Documentation site#Blog|blog]] resolves them a third way, by rewriting each one to the single copy under `docs/assets/` as it renders.
 
 A post whose argument is carried by a worked model keeps that model in `article/` beside it rather than in `docs/examples/`. The examples directory is a curriculum — each file teaches one feature and a test resolves and generates all of them — while an article's model is sized for the argument instead, and nothing but the post reads it. `agent-trust.lpg.yaml` and `assortment.lpg.yaml` are the two, and both are held to a stricter rule than prose: every excerpt quoted in the post is pasted from a real `lpg emit` run, and every count the post states is countable from the model, so a change to any emitter is visible as a diff rather than as a quietly stale number.
 

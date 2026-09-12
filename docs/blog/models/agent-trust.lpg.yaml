@@ -1,0 +1,509 @@
+# Multi-agent trust communication for e-commerce, modelled as frames and slots.
+#
+# The domain vocabulary is Mark Burgess's Promise Theory: autonomous agents
+# coordinate by making voluntary promises about their *own* behaviour, and
+# nobody promises on anyone else's behalf. Trust is not a field on an agent —
+# it is an assessment one agent holds about another, built from evidence, and
+# it decays. Reputation is the third-party hearsay that agents exchange.
+#
+#   lpg check article/agent-trust.lpg.yaml
+#   lpg emit  article/agent-trust.lpg.yaml --target shacl --target owl \
+#             --target ladybug --target pgschema --out ./schema
+lpg: "1.0"
+namespace:
+  prefix: trust
+  iri: https://example.org/vocab/agent-trust#
+
+# Bound so the generated RDF documents resolve the vocabularies this model
+# borrows from, rather than emitting CURIEs no parser can read.
+prefixes:
+  prov: http://www.w3.org/ns/prov#
+  schema: https://schema.org/
+  odrl: http://www.w3.org/ns/odrl/2/
+
+# ---------------------------------------------------------------------------
+# Facets with closed value sets. A slot that names one may only hold a value
+# from it — enforced in SHACL and OWL, reported as a downgrade everywhere else.
+# ---------------------------------------------------------------------------
+enums:
+  # Promise Theory's polarity. A `give` promise offers a behaviour; an `accept`
+  # promise agrees to use it. Cooperation exists only where the two lock.
+  PromiseKind:
+    id: x_pkind
+    values: [give, accept]
+
+  # A rejection is a state, not an absence. Cascade analysis needs it on record.
+  PromiseState:
+    id: x_pstate
+    values: [offered, accepted, rejected, in_force, kept, broken, withdrawn, expired]
+
+  Verdict:
+    id: x_verdict
+    values: [kept, broken, partial, unobservable]
+
+  # Who assessed. Self and witness disagreeing is the single most useful signal
+  # in the graph, so the role is modelled rather than inferred.
+  AssessorRole:
+    id: x_arole
+    values: [self, promisee, witness]
+
+  EvidenceKind:
+    id: x_ekind
+    values: [telemetry, receipt, attestation, human_report, third_party_audit]
+
+  SettlementRail:
+    id: x_rail
+    values: [card, bank_transfer, stablecoin, escrow]
+
+  OrderState:
+    id: x_ostate
+    values: [drafted, placed, fulfilling, delivered, refunded, cancelled]
+
+# ---------------------------------------------------------------------------
+# Slot bundles. A mixin says what a frame *carries*; it never says what a frame
+# *is*. It has no supertype, contributes no identity, and is flattened into
+# every frame that applies it before a generator sees the model.
+# ---------------------------------------------------------------------------
+mixins:
+  # Bitemporal: when the world did it, and when we heard about it. Every
+  # assessment of a distributed system needs both, and neither makes a subtype.
+  Temporal:
+    id: m_time
+    props:
+      observedAt: { id: p_obs, type: ZONED_DATETIME, required: true }
+      recordedAt: { id: p_rec, type: ZONED_DATETIME }
+
+  # Where a claim came from and how sure its author was. Applies to anything an
+  # agent asserts rather than observes directly.
+  Provenanced:
+    id: m_prov
+    props:
+      assertedBy: { id: p_asrt, type: STRING, required: true }
+      sourceUri:  { id: p_src, type: STRING }
+      confidence: { id: p_conf, type: float, min: 0, max: 1 }
+
+  # Promise Theory scope: the set of agents in whose view the promise exists.
+  # A promise nobody can see is not a promise.
+  Scoped:
+    id: m_scope
+    props:
+      scopeAgents: { id: p_scope, type: LIST<STRING> }
+      public:      { id: p_pub, type: boolean }
+
+nodes:
+  # -------------------------------------------------------------------------
+  # AGENTS. The abstract root carries identity and the ISSUES edge, so every
+  # descendant gets both without restating either.
+  # -------------------------------------------------------------------------
+  Agent:
+    id: n_agent
+    abstract: true
+    key: [agentId]
+    props:
+      agentId:     { id: p_aid, type: STRING, required: true }
+      did:         { id: p_did, type: STRING, pattern: "^did:[a-z0-9]+:.+$" }
+      displayName: { id: p_aname, type: STRING }
+
+  # Acts for a legal person and inherits that person's jurisdiction. The
+  # distinction is real: only a principal agent can be sued.
+  PrincipalAgent:
+    id: n_principal
+    abstract: true
+    extends: Agent
+    props:
+      principalDid: { id: p_pdid, type: STRING, required: true }
+      jurisdiction: { id: p_juris, type: STRING, pattern: "^[A-Z]{2}$" }
+
+  # Infrastructure. Promises capability, not intent.
+  ServiceAgent:
+    id: n_service
+    abstract: true
+    extends: Agent
+    props:
+      endpoint:          { id: p_ep, type: STRING, required: true }
+      declaredUptimePct: { id: p_up, type: float, min: 0, max: 100 }
+
+  ShopperAgent:
+    id: n_shopper
+    extends: PrincipalAgent
+    mixins: [Temporal]
+    props:
+      budgetCeiling: { id: p_budget, type: "DECIMAL(18,4)", min: 0 }
+      riskAppetite:  { id: p_risk, type: float, min: 0, max: 1 }
+      preferences:   { id: p_prefs, type: LIST<STRING> }
+
+  MerchantAgent:
+    id: n_merchant
+    extends: PrincipalAgent
+    mixins: [Temporal]
+    props:
+      storefrontUri: { id: p_store, type: STRING, required: true }
+      catalogSize:   { id: p_catsz, type: int, min: 0 }
+      yearsTrading:  { id: p_yrs, type: int, min: 0, max: 200 }
+
+  LogisticsAgent:
+    id: n_logistics
+    extends: ServiceAgent
+    props:
+      coverageRegions:    { id: p_cov, type: LIST<STRING> }
+      medianTransitHours: { id: p_transit, type: int, min: 0 }
+
+  PaymentAgent:
+    id: n_payment
+    extends: ServiceAgent
+    props:
+      rail:                 { id: p_prail, type: STRING, enum: SettlementRail }
+      chargebackWindowDays: { id: p_cbw, type: int, min: 0, max: 540 }
+
+  # The agent most likely to be modelled wrongly. A marketplace cannot promise
+  # delivery — it can only promise to convey a merchant's promise faithfully.
+  # In this ontology that is not a naming convention, it is the ISSUES edge:
+  # the promise it conveys is still issued by the merchant.
+  MarketplaceAgent:
+    id: n_market
+    extends: ServiceAgent
+    props:
+      listedMerchants: { id: p_listed, type: int, min: 0 }
+
+  # -------------------------------------------------------------------------
+  # PROMISES. The abstract frame carries identity, the four universal slots,
+  # and every promise-to-promise edge. Subtypes add only their own body.
+  # -------------------------------------------------------------------------
+  Promise:
+    id: n_promise
+    abstract: true
+    key: [promiseId]
+    mixins: [Temporal, Scoped]
+    props:
+      promiseId: { id: p_prid, type: STRING, required: true }
+      body:      { id: p_body, type: STRING, required: true, maxLength: 2000 }
+      kind:      { id: p_pk, type: STRING, enum: PromiseKind }
+      state:     { id: p_ps, type: STRING, enum: PromiseState }
+      issuedAt:  { id: p_iss, type: ZONED_DATETIME, required: true }
+      expiresAt: { id: p_exp, type: ZONED_DATETIME }
+
+  DeliveryPromise:
+    id: n_pdeliv
+    extends: Promise
+    props:
+      earliestDeliveryAt: { id: p_edel, type: ZONED_DATETIME }
+      latestDeliveryAt:   { id: p_ldel, type: ZONED_DATETIME }
+      transitDaysMax:     { id: p_tdm, type: int, min: 0, max: 180 }
+      # A composite: LadybugDB stores the struct natively, the other seven
+      # targets degrade it to json and say so.
+      destination:        { id: p_dest, type: "STRUCT(lat DOUBLE, lon DOUBLE)" }
+    constraints:
+      - id: c_window
+        name: windowWellFormed
+        assert: { lessThan: [earliestDeliveryAt, latestDeliveryAt] }
+        message: a delivery window must open before it closes
+
+  PricePromise:
+    id: n_pprice
+    extends: Promise
+    props:
+      currency:     { id: p_cur, type: STRING, required: true, pattern: "^[A-Z]{3}$" }
+      fixedAmount:  { id: p_fixed, type: "DECIMAL(18,4)", min: 0 }
+      indexFormula: { id: p_idx, type: STRING, maxLength: 500 }
+    constraints:
+      - id: c_price
+        name: oneBasisOnly
+        assert: { exactlyOne: [fixedAmount, indexFormula] }
+        message: a price is either a fixed amount or an index formula, never both
+
+  SettlementPromise:
+    id: n_psettle
+    extends: Promise
+    props:
+      rail:             { id: p_srail, type: STRING, enum: SettlementRail }
+      authorizedAmount: { id: p_auth, type: "DECIMAL(18,4)", min: 0 }
+      capturedAmount:   { id: p_cap, type: "DECIMAL(18,4)", min: 0 }
+    constraints:
+      - id: c_capture
+        name: captureWithinAuthorisation
+        assert: { lessThanOrEquals: [capturedAmount, authorizedAmount] }
+        message: a capture may not exceed the amount that was authorised
+
+  DataUsePromise:
+    id: n_pdata
+    extends: Promise
+    props:
+      purposes:       { id: p_purp, type: LIST<STRING> }
+      retentionDays:  { id: p_ret, type: int, min: 0, max: 3650 }
+      onwardTransfer: { id: p_onward, type: boolean }
+    # The long tail. A closed assertion vocabulary cannot say "flag for human
+    # review", so it is written as raw SHACL and spliced into this shape alone.
+    # Every other target reports that it ignored it.
+    shacl: |
+      sh:property [
+        sh:path trust:retentionDays ;
+        sh:severity sh:Warning ;
+        sh:description "retention beyond a year is reviewed by the data protection officer" ;
+        sh:maxInclusive 365 ;
+      ] ;
+
+  # The minus promise. Without it there is an offer and no cooperation: an
+  # agent that has not promised to *accept* a behaviour has not agreed to it.
+  AcceptancePromise:
+    id: n_paccept
+    extends: Promise
+    props:
+      conditions:   { id: p_cond, type: LIST<STRING> }
+      maxLatencyMs: { id: p_lat, type: int, min: 0 }
+
+  # -------------------------------------------------------------------------
+  # ASSESSMENT. Promise Theory does not enforce; it assesses. Every verdict is
+  # somebody's verdict, and is worthless without the evidence behind it.
+  # -------------------------------------------------------------------------
+  Assessment:
+    id: n_assess
+    key: [assessmentId]
+    mixins: [Temporal, Provenanced]
+    props:
+      assessmentId:    { id: p_asid, type: STRING, required: true }
+      verdict:         { id: p_verd, type: STRING, enum: Verdict }
+      role:            { id: p_role, type: STRING, enum: AssessorRole }
+      rationale:       { id: p_rat, type: STRING, maxLength: 2000 }
+      # Per-dimension scoring without inventing a column per dimension.
+      dimensionScores: { id: p_dims, type: "MAP(STRING, DOUBLE)" }
+    constraints:
+      - id: c_evid
+        name: evidenceBacked
+        assert: { count: { edge: CITES, of: Evidence, min: 1 } }
+        message: an assessment with no evidence behind it is an opinion
+
+  # Open, because evidence carries payloads this model has no business naming.
+  Evidence:
+    id: n_evid
+    open: true
+    key: [evidenceId]
+    mixins: [Temporal, Provenanced]
+    props:
+      evidenceId: { id: p_evid, type: STRING, required: true }
+      kind:       { id: p_ek, type: STRING, enum: EvidenceKind }
+      digest:     { id: p_dig, type: STRING, unique: true, pattern: "^[0-9a-f]{64}$" }
+      uri:        { id: p_euri, type: STRING }
+
+  # First-person and directional: *this* agent's belief about *that* agent,
+  # within *this* scope. The composite key is the point — there is no single
+  # global trust score to key on, and modelling one would be the bug.
+  TrustBelief:
+    id: n_trust
+    key: [holderId, subjectId, scopeTag]
+    mixins: [Temporal]
+    props:
+      holderId:    { id: p_hold, type: STRING, required: true }
+      subjectId:   { id: p_subj, type: STRING, required: true }
+      scopeTag:    { id: p_stag, type: STRING, required: true }
+      valence:     { id: p_val, type: float, min: -1, max: 1 }
+      sampleSize:  { id: p_samp, type: int, min: 0 }
+      halfLifeDays: { id: p_half, type: int, min: 1 }
+    constraints:
+      - id: c_noself
+        name: noSelfTrust
+        assert: { disjoint: [holderId, subjectId] }
+        message: an agent's view of itself is self-assessment, not trust
+
+  # Third-party hearsay, deliberately a different frame from TrustBelief.
+  # Collapsing the two is how a reputation system becomes gameable.
+  Reputation:
+    id: n_rep
+    key: [reputationId]
+    mixins: [Temporal, Provenanced]
+    props:
+      reputationId: { id: p_rid, type: STRING, required: true }
+      subjectId:    { id: p_rsub, type: STRING, required: true }
+      scopeTag:     { id: p_rtag, type: STRING, required: true }
+      score:        { id: p_score, type: float, min: 0, max: 1 }
+      population:   { id: p_pop, type: int, min: 0 }
+      method:       { id: p_meth, type: STRING }
+
+  # The irreducibly n-ary case. A shopper, a merchant and a carrier settling a
+  # delivery window is not three bilateral negotiations — no pair of them can
+  # reach it alone. Reified as a frame so it can be assessed and referenced.
+  Deliberation:
+    id: n_delib
+    key: [deliberationId]
+    mixins: [Temporal, Scoped]
+    props:
+      deliberationId: { id: p_did2, type: STRING, required: true }
+      topic:          { id: p_topic, type: STRING, required: true }
+      settledAt:      { id: p_settled, type: ZONED_DATETIME }
+      outcome:        { id: p_out, type: STRING }
+
+  Order:
+    id: n_order
+    key: [orderRef]
+    mixins: [Temporal]
+    props:
+      orderRef:    { id: p_oref, type: STRING, required: true, pattern: "^ORD-[0-9A-Z]{10}$" }
+      state:       { id: p_ost, type: STRING, enum: OrderState }
+      currency:    { id: p_ocur, type: STRING, pattern: "^[A-Z]{3}$" }
+      totalAmount: { id: p_total, type: "DECIMAL(18,4)", min: 0 }
+
+# ---------------------------------------------------------------------------
+# RELATIONS, grouped by Semantic Spacetime's four modes: CONTAINS (membership),
+# LEADS_TO (causality), EXPRESSES (attribution), NEAR (proximity).
+# ---------------------------------------------------------------------------
+edges:
+  # --- CONTAINS: who holds what ---------------------------------------------
+
+  # The autonomy axiom, written as a bound. Exactly one agent issues a promise,
+  # and it is the agent that will execute it. No "on behalf of" is expressible.
+  ISSUES:
+    id: e_issues
+    from: Agent
+    to: Promise
+    cardinality: { from: "1" }
+
+  # Scope, as an edge rather than only a string list: a promise addressed to
+  # nobody is not a promise, hence the lower bound.
+  ADDRESSED_TO:
+    id: e_addr
+    from: Promise
+    to: Agent
+    cardinality: { to: "1..*" }
+
+  COVERS:
+    id: e_covers
+    from: Promise
+    to: Order
+    cardinality: { to: "0..1" }
+
+  # Three or more, which no named multiplicity can say. This is the bound that
+  # keeps a genuinely collective decision from being logged as a pair of chats.
+  HAS_PARTICIPANT:
+    id: e_part
+    from: Deliberation
+    to: Agent
+    cardinality: { to: "3..*" }
+
+  PLACED:
+    id: e_placed
+    from: ShopperAgent
+    to: Order
+    cardinality: { from: "1" }
+
+  FULFILS:
+    id: e_fulfils
+    from: MerchantAgent
+    to: Order
+
+  # --- LEADS_TO: what caused what -------------------------------------------
+
+  # The bilateral lock: a give-promise and the accept-promise that answers it.
+  # Declared on the abstract parent, so it holds between any two promise kinds.
+  # It carries properties, so the RDF targets reify it into an n-ary class
+  # while LadybugDB keeps it a rel table with two columns.
+  LOCKS_WITH:
+    id: e_locks
+    from: Promise
+    to: Promise
+    cardinality: { to: "0..1" }
+    props:
+      lockedAt: { id: p_lock, type: ZONED_DATETIME, required: true }
+      channel:  { id: p_chan, type: STRING }
+
+  # A promise that rests on another agent's promise. Following this chain
+  # backwards from a failure is the whole reason to keep a promise graph.
+  DEPENDS_ON:
+    id: e_dep
+    from: Promise
+    to: Promise
+    props:
+      critical: { id: p_crit, type: boolean }
+      fallback: { id: p_fall, type: STRING }
+
+  # Rejection is data. A counter-offer is the edge that makes a refusal
+  # analysable instead of a gap in the log.
+  COUNTERS:
+    id: e_counter
+    from: Promise
+    to: Promise
+    props:
+      reason:      { id: p_rsn, type: STRING, maxLength: 500 }
+      counteredAt: { id: p_cat, type: ZONED_DATETIME, required: true }
+
+  SUPERSEDES:
+    id: e_super
+    from: Promise
+    to: Promise
+    props:
+      renegotiatedAt: { id: p_reneg, type: ZONED_DATETIME, required: true }
+
+  EMITS:
+    id: e_emits
+    from: Deliberation
+    to: Promise
+
+  # --- EXPRESSES: what is claimed about what --------------------------------
+
+  ASSESSES:
+    id: e_assess
+    from: Assessment
+    to: Promise
+    cardinality: { to: "1" }
+
+  MADE_BY:
+    id: e_madeby
+    from: Assessment
+    to: Agent
+    cardinality: { to: "1" }
+
+  CITES:
+    id: e_cites
+    from: Assessment
+    to: Evidence
+    cardinality: { to: "1..*" }
+
+  UPDATES:
+    id: e_updates
+    from: Assessment
+    to: TrustBelief
+    props:
+      weight: { id: p_wt, type: float, min: 0, max: 1 }
+
+  HELD_BY:
+    id: e_held
+    from: TrustBelief
+    to: Agent
+    cardinality: { to: "1" }
+
+  ABOUT:
+    id: e_about
+    from: TrustBelief
+    to: Agent
+    cardinality: { to: "1" }
+
+  AGGREGATES:
+    id: e_agg
+    from: Reputation
+    to: Assessment
+
+  RATES:
+    id: e_rates
+    from: Reputation
+    to: Agent
+    cardinality: { to: "1" }
+
+  # --- NEAR: what resembles what --------------------------------------------
+
+  # Transitive trust, one hop at a time and never automatic. The strength is on
+  # the edge because it belongs to the vouching, not to either agent.
+  VOUCHES_FOR:
+    id: e_vouch
+    from: Agent
+    to: Agent
+    props:
+      since:    { id: p_since, type: date }
+      strength: { id: p_str, type: float, min: 0, max: 1 }
+
+  # Pragmatic proximity: two promises close enough that experience of one
+  # informs expectation of the other. Context-dependent, so the basis is named.
+  SIMILAR_SCOPE:
+    id: e_sim
+    from: Promise
+    to: Promise
+    props:
+      proximity: { id: p_prox, type: float, min: 0, max: 1 }
+      basis:     { id: p_basis, type: STRING }

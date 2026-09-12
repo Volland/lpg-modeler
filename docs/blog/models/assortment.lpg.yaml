@@ -1,0 +1,342 @@
+# A catalog ontology in the shape of a concept graph: concept types with a referent,
+# a type lattice in the schema, a category poset in the data, and the handful of
+# relations that earned a box of their own.
+#
+# Companion model for article/concept-graphs.md.
+lpg: "1.0"
+namespace:
+  prefix: assort
+  iri: https://example.org/vocab/assortment#
+
+# Bound vocabularies. Every one of these appears in the generated RDF documents, so a
+# model that mentions gs1: or schema: by CURIE emits a document a parser can read.
+prefixes:
+  gs1: https://gs1.org/voc/
+  schema: https://schema.org/
+
+enums:
+  # Where a concept sits in its own life, which is not the same as whether it is
+  # currently offered anywhere.
+  Lifecycle:
+    id: x_life
+    values: [draft, active, phasing_out, withdrawn]
+
+  ConditionGrade:
+    id: x_cond
+    values: [new, open_box, refurbished, used]
+
+  Channel:
+    id: x_chan
+    values: [web, app, marketplace, in_store, voice]
+
+  # Why one thing may stand in for another. The reason is not decoration: a recall
+  # substitution and a price-break substitution are answered by different agents.
+  SubstitutionReason:
+    id: x_subr
+    values: [out_of_stock, discontinued, recall, price_break, regional_restriction, seasonal]
+
+  # Substitution is not symmetric by default. A cheaper own-brand may stand in for a
+  # premium one; the reverse is a margin decision nobody authorised.
+  SubstitutionDirection:
+    id: x_subd
+    values: [symmetric, forward_only]
+
+  FitmentStrength:
+    id: x_fit
+    values: [exact, requires_adapter, aftermarket]
+
+  # How a claim came to be believed. A merchandiser's ruling and a clickstream
+  # correlation are both assertions, and telling them apart is the whole job.
+  Basis:
+    id: x_basis
+    values: [merchandiser, supplier_declaration, clickstream, returns_analysis, regulatory]
+
+mixins:
+  # Catalog facts have a shelf life. Nearly every statement here is true of a window
+  # rather than of all time, and none of that makes a subtype.
+  Effective:
+    id: m_eff
+    props:
+      validFrom:  { id: p_vfrom, type: DATE, required: true }
+      validUntil: { id: p_vuntil, type: DATE }
+
+  # Who says so, on what basis, and how sure they were.
+  Asserted:
+    id: m_asrt
+    props:
+      assertedBy: { id: p_aby, type: STRING, required: true }
+      basis:      { id: p_bas, type: STRING, enum: Basis }
+      confidence: { id: p_conf, type: float, min: 0, max: 1 }
+
+  # Text that exists once per locale, not once per concept.
+  Localized:
+    id: m_l10n
+    props:
+      locale:         { id: p_loc, type: STRING, required: true, pattern: "^[a-z]{2}(-[A-Z]{2})?$" }
+      fallbackLocale: { id: p_floc, type: STRING, pattern: "^[a-z]{2}(-[A-Z]{2})?$" }
+
+nodes:
+  # The abstract root of the type lattice. Every rung of the identity ladder is a
+  # catalog concept, which is what makes SUPERSEDED_BY sayable once instead of nine
+  # times. It contributes conceptId as a key, and each rung that has a better
+  # referent of its own overrides it.
+  CatalogConcept:
+    id: n_concept
+    abstract: true
+    key: [conceptId]
+    props:
+      conceptId: { id: p_cid, type: STRING, required: true }
+      lifecycle: { id: p_life, type: STRING, enum: Lifecycle }
+
+  # The intension side: what a thing is, independent of anyone selling it.
+  ProductConcept:
+    id: n_product
+    abstract: true
+    extends: CatalogConcept
+    props:
+      title: { id: p_title, type: STRING, required: true, maxLength: 300 }
+
+  # Rung 1. The manufacturer's thing, identified the way the manufacturer identifies
+  # it: a brand and a part number.
+  ProductModel:
+    id: n_model
+    extends: ProductConcept
+    key: [brandCode, mpn]
+    props:
+      brandCode:  { id: p_brand, type: STRING, required: true, pattern: "^[A-Z0-9]{2,12}$" }
+      mpn:        { id: p_mpn, type: STRING, required: true, maxLength: 64 }
+      launchedOn: { id: p_launch, type: DATE }
+
+  # Rung 2. The thing with a barcode on it. Option values are a map because the
+  # option set differs per category and no schema should pretend otherwise.
+  Variant:
+    id: n_variant
+    extends: ProductConcept
+    key: [gtin]
+    props:
+      gtin:         { id: p_gtin, type: STRING, required: true, pattern: "^([0-9]{8}|[0-9]{12,14})$" }
+      condition:    { id: p_cond, type: STRING, enum: ConditionGrade }
+      optionValues: { id: p_opts, type: "MAP(STRING, STRING)" }
+      dimensions:   { id: p_dims, type: "STRUCT(lengthMm DOUBLE, widthMm DOUBLE, heightMm DOUBLE)" }
+      netWeightG:   { id: p_wt, type: int, min: 0 }
+
+  # Rung 3. The extension side: this merchant, this barcode, this market. Three
+  # properties identify one offer, and none of them alone does.
+  Offer:
+    id: n_offer
+    extends: CatalogConcept
+    mixins: [Effective]
+    key: [merchantId, gtin, marketCode]
+    props:
+      merchantId:   { id: p_mid, type: STRING, required: true }
+      gtin:         { id: p_ogtin, type: STRING, required: true, pattern: "^([0-9]{8}|[0-9]{12,14})$" }
+      marketCode:   { id: p_mkt, type: STRING, required: true, pattern: "^[A-Z]{2}$" }
+      currency:     { id: p_ccy, type: STRING, pattern: "^[A-Z]{3}$" }
+      listPrice:    { id: p_lp, type: "DECIMAL(18,4)", min: 0 }
+      netPrice:     { id: p_np, type: "DECIMAL(18,4)", min: 0 }
+      availableQty: { id: p_qty, type: int, min: 0 }
+    constraints:
+      - id: c_netlist
+        name: netNotAboveList
+        assert: { lessThanOrEquals: [netPrice, listPrice] }
+        message: a net price above the list price is a pricing error, not a discount
+
+  # Rung 4. What a customer actually sees, on one channel, in one locale. Open,
+  # because every channel adds fields this model has no business naming.
+  Listing:
+    id: n_listing
+    extends: CatalogConcept
+    mixins: [Localized]
+    open: true
+    key: [listingId]
+    props:
+      listingId: { id: p_lid, type: STRING, required: true }
+      channel:   { id: p_chan, type: STRING, enum: Channel }
+      headline:  { id: p_head, type: STRING, maxLength: 140 }
+
+  # Rung 5. The physical batch. Recalls and expiries are true of a lot, never of a
+  # variant, and a catalog that cannot say so recalls the wrong things.
+  Lot:
+    id: n_lot
+    extends: CatalogConcept
+    key: [lotCode]
+    props:
+      lotCode:    { id: p_lot, type: STRING, required: true }
+      producedOn: { id: p_prod, type: DATE, required: true }
+      bestBefore: { id: p_bb, type: DATE }
+    constraints:
+      - id: c_bb
+        name: bestBeforeAfterProduction
+        assert: { lessThan: [producedOn, bestBefore] }
+        message: a lot cannot expire before it was made
+
+  # The data-level hierarchy. This is a poset of instances, not a lattice of types,
+  # and the difference is the point: merchandising re-parents categories weekly, and
+  # a re-parenting must never be a schema migration.
+  Category:
+    id: n_cat
+    extends: CatalogConcept
+    key: [path]
+    props:
+      path:   { id: p_path, type: STRING, required: true, pattern: "^(/[a-z0-9-]+)+$" }
+      label:  { id: p_clab, type: STRING, required: true }
+      scheme: { id: p_schm, type: STRING }
+      depth:  { id: p_depth, type: int8, min: 0, max: 8 }
+
+  Merchant:
+    id: n_merch
+    extends: CatalogConcept
+    key: [merchantCode]
+    props:
+      merchantCode: { id: p_mcode, type: STRING, required: true }
+      legalName:    { id: p_lname, type: STRING, required: true }
+      homeMarket:   { id: p_hm, type: STRING, pattern: "^[A-Z]{2}$" }
+
+  # The relation-as-concept layer. A relation lands here when it has more than two
+  # participants, or when something else needs to point at it. Everything that does
+  # not is an edge, and stays one.
+  CatalogRelation:
+    id: n_rel
+    abstract: true
+    extends: CatalogConcept
+    mixins: [Effective, Asserted]
+
+  # The centrepiece, and a four-place relation: what is replaced, what replaces it,
+  # why, and in which market. No binary edge holds that, and no edge property makes
+  # it addressable by the audit that has to explain a swap to a customer.
+  Substitution:
+    id: n_sub
+    extends: CatalogRelation
+    props:
+      reason:           { id: p_srsn, type: STRING, enum: SubstitutionReason, required: true }
+      direction:        { id: p_sdir, type: STRING, enum: SubstitutionDirection }
+      marketCode:       { id: p_smkt, type: STRING, pattern: "^[A-Z]{2}$" }
+      equivalenceScore: { id: p_eqs, type: float, min: 0, max: 1 }
+      ruleId:           { id: p_rule, type: STRING, maxLength: 64 }
+      customerNotice:   { id: p_note, type: STRING, maxLength: 500 }
+    constraints:
+      - id: c_ground
+        name: grounded
+        assert: { atLeastOne: [equivalenceScore, ruleId] }
+        message: a substitution is either measured or ruled; one with neither is a guess
+      - id: c_window
+        name: windowOrdered
+        assert: { lessThanOrEquals: [validFrom, validUntil] }
+        message: a substitution cannot stop applying before it starts
+      - id: c_hasrepl
+        name: hasReplacement
+        assert: { count: { edge: REPLACED_BY, of: Variant, min: 1 } }
+        message: a substitution with nothing on the other side is a stockout, not a substitution
+
+  # Three-place: this part fits these applications, this well. Compatibility is the
+  # relation people most often flatten into a boolean column, and the strength is
+  # exactly the part that gets lost when they do.
+  Fitment:
+    id: n_fit
+    extends: CatalogRelation
+    props:
+      strength:  { id: p_fstr, type: STRING, enum: FitmentStrength, required: true }
+      positions: { id: p_pos, type: LIST<STRING> }
+      note:      { id: p_fnote, type: STRING, maxLength: 300 }
+    # The escape hatch. 'review, do not reject' has no place in a closed assertion
+    # vocabulary, and only SHACL has a severity to carry it.
+    shacl: |
+      sh:property [
+        sh:path assort:strength ;
+        sh:severity sh:Warning ;
+        sh:description "aftermarket fitments are re-checked by the category manager each quarter" ;
+        sh:in ( "exact" "requires_adapter" ) ;
+      ] ;
+
+edges:
+  # Declared once, on the abstract root, because supersession happens at every rung:
+  # a model supersedes a model, a listing supersedes a listing, and a substitution
+  # rule supersedes the rule it replaced.
+  SUPERSEDED_BY:
+    id: e_sup
+    from: CatalogConcept
+    to: CatalogConcept
+    cardinality: { to: "0..1" }
+
+  # Carries data, so the RDF targets reify it and the property graph targets do not.
+  # This is the edge/concept line drawn at its narrowest: two participants, one fact
+  # about the pairing, nothing else pointing at it.
+  IN_CATEGORY:
+    id: e_incat
+    from: ProductConcept
+    to: Category
+    props:
+      primary: { id: p_prim, type: boolean, required: true }
+      rank:    { id: p_rank, type: int16, min: 0 }
+
+  # The category poset, in the data. At most one broader category per category.
+  HAS_BROADER:
+    id: e_broad
+    from: Category
+    to: Category
+    cardinality: { to: "0..1" }
+
+  # Bounded at both ends. Each variant realises exactly one model, and a model with
+  # no variant is a catalog entry nobody can buy.
+  VARIANT_OF:
+    id: e_varof
+    from: Variant
+    to: ProductModel
+    cardinality: { from: "1..*", to: "1" }
+
+  OFFERS:
+    id: e_offers
+    from: Offer
+    to: Variant
+    cardinality: { to: "1" }
+
+  SOLD_BY:
+    id: e_soldby
+    from: Offer
+    to: Merchant
+    cardinality: { to: "1" }
+
+  RENDERS:
+    id: e_rend
+    from: Listing
+    to: Offer
+    cardinality: { to: "1..*" }
+
+  DRAWN_FROM:
+    id: e_drawn
+    from: Offer
+    to: Lot
+
+  # A kit line: quantity and role are facts about the pairing and nothing points at
+  # them, so this one stays an edge. Contrast with Substitution.
+  CONTAINS:
+    id: e_cont
+    from: ProductModel
+    to: Variant
+    props:
+      quantity: { id: p_qtyc, type: int, required: true, min: 1 }
+      role:     { id: p_role, type: STRING, maxLength: 40 }
+
+  REPLACES:
+    id: e_repl
+    from: Substitution
+    to: Variant
+    cardinality: { to: "1" }
+
+  REPLACED_BY:
+    id: e_replby
+    from: Substitution
+    to: Variant
+    cardinality: { to: "1..*" }
+
+  FITS_PART:
+    id: e_fitp
+    from: Fitment
+    to: Variant
+    cardinality: { to: "1" }
+
+  FITS_APPLICATION:
+    id: e_fita
+    from: Fitment
+    to: ProductModel
+    cardinality: { to: "1..*" }

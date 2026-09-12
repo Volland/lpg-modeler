@@ -11,9 +11,31 @@ published post and the tool it describes move together.
 | [`agent-trust.lpg.yaml`](agent-trust.lpg.yaml) | The model `frames-and-slots.md` is built around. Not one of the five checked-in examples — it lives here because the article is the only thing that reads it. |
 | [`concept-graphs.md`](concept-graphs.md) | Long-read on Sowa's conceptual graphs: the bipartite rule read as a decision procedure rather than a storage format, the type lattice against the data-level poset, and gradual reification — worked through catalog identity and substitution. |
 | [`assortment.lpg.yaml`](assortment.lpg.yaml) | The model `concept-graphs.md` is built around, on the same footing as `agent-trust.lpg.yaml`. |
+| [`posts.json`](posts.json) | Publication manifest for the site's blog: which files are published, under which slug, and on which date. A file reaches the site only by being named here. |
 
 A short-form companion compresses the long read rather than restating it loosely: every claim in it
 is one the long read makes, so a correction lands in one place and propagates outward.
+
+## The site's blog
+
+These posts are also published on the documentation site, at
+[`www.lpg-modeler.com/blog/`](https://www.lpg-modeler.com/blog/). They are rendered from the
+markdown here by `npm run build:blog`, and the generated pages under `docs/blog/` are committed —
+the site has no build step, so what is committed is what is served.
+
+Regenerate after editing any published article. A test compares `docs/blog/` against what the
+articles currently render to, so an edit that was not regenerated fails the build rather than
+leaving the previous version online.
+
+Two things the generator does that the markdown does not have to care about:
+
+- **Assets.** `../docs/assets/...` is rewritten to the site's single copy, so the same path keeps
+  working on GitHub and on the site.
+- **Models.** A `.lpg.yaml` an article links to is copied to `docs/blog/models/`, because GitHub
+  Pages publishes `docs/` and nothing above it. That copy is generated, not a second source.
+
+Add a post by naming it in [`posts.json`](posts.json) and regenerating. Leaving a file out is how
+the LinkedIn companion and this README stay off the site.
 
 ## Images
 

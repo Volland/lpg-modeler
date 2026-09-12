@@ -1,6 +1,6 @@
 {
   "version": "1.0.0",
-  "lastScanned": 1788586433312,
+  "lastScanned": 1789227901080,
   "projectRoot": "/Users/volodymyrpavlyshyn/Documents/work/lpg-modeler",
   "techStack": {
     "languages": [
@@ -29,7 +29,7 @@
     "lintCommand": "npm run lint",
     "devCommand": null,
     "scripts": {
-      "build": "npm run build --workspaces --if-present",
+      "build": "npm run build -w packages/core && npm run build -w packages/cli && npm run build -w packages/vscode",
       "test": "vitest run",
       "lint": "eslint packages --ext .ts,.tsx"
     }
@@ -52,11 +52,24 @@
   },
   "customNotes": [],
   "directoryMap": {
+    "article": {
+      "path": "article",
+      "purpose": null,
+      "fileCount": 6,
+      "lastAccessed": 1789227901054,
+      "keyFiles": [
+        "README.md",
+        "agent-trust.layout.json",
+        "agent-trust.lpg.yaml",
+        "frames-and-slots.md",
+        "linkedin-you-dont-have-to-choose.md"
+      ]
+    },
     "docs": {
       "path": "docs",
       "purpose": "Documentation",
       "fileCount": 12,
-      "lastAccessed": 1788586433304,
+      "lastAccessed": 1789227901054,
       "keyFiles": [
         "CNAME",
         "agb.html",
@@ -68,11 +81,12 @@
     "lat.md": {
       "path": "lat.md",
       "purpose": null,
-      "fileCount": 4,
-      "lastAccessed": 1788586433304,
+      "fileCount": 5,
+      "lastAccessed": 1789227901067,
       "keyFiles": [
         "architecture.md",
         "emitters.md",
+        "importers.md",
         "lat.md",
         "metamodel.md"
       ]
@@ -81,7 +95,7 @@
       "path": "openspec",
       "purpose": null,
       "fileCount": 1,
-      "lastAccessed": 1788586433305,
+      "lastAccessed": 1789227901068,
       "keyFiles": [
         "config.yaml"
       ]
@@ -90,14 +104,14 @@
       "path": "packages",
       "purpose": null,
       "fileCount": 0,
-      "lastAccessed": 1788586433305,
+      "lastAccessed": 1789227901068,
       "keyFiles": []
     },
     "docs/assets": {
       "path": "docs/assets",
       "purpose": "Static assets",
       "fileCount": 4,
-      "lastAccessed": 1788586433306,
+      "lastAccessed": 1789227901069,
       "keyFiles": [
         "fonts.css",
         "icon.png",
@@ -107,200 +121,68 @@
     "docs/examples": {
       "path": "docs/examples",
       "purpose": "Example code",
-      "fileCount": 4,
-      "lastAccessed": 1788586433307,
+      "fileCount": 5,
+      "lastAccessed": 1789227901071,
       "keyFiles": [
         "booking.lpg.yaml",
         "catalog.lpg.yaml",
-        "kinship.lpg.yaml"
+        "fleet.lpg.yaml"
       ]
     }
   },
   "hotPaths": [
     {
-      "path": "packages/vscode/src/webview/main.tsx",
-      "accessCount": 14,
-      "lastAccessed": 1788681005302,
-      "type": "file"
-    },
-    {
-      "path": "lat.md/architecture.md",
-      "accessCount": 9,
-      "lastAccessed": 1788681162506,
-      "type": "file"
-    },
-    {
-      "path": "docs/index.html",
-      "accessCount": 7,
-      "lastAccessed": 1788601807324,
-      "type": "file"
-    },
-    {
-      "path": "packages/vscode/src/extension.ts",
-      "accessCount": 7,
-      "lastAccessed": 1788679577146,
-      "type": "file"
-    },
-    {
-      "path": "packages/vscode/src/webview/styles.css",
-      "accessCount": 7,
-      "lastAccessed": 1788681017560,
-      "type": "file"
-    },
-    {
-      "path": "packages/vscode/src/webview/inspector.tsx",
-      "accessCount": 5,
-      "lastAccessed": 1788678309578,
-      "type": "file"
-    },
-    {
-      "path": "packages/vscode/test/canvas.test.ts",
-      "accessCount": 5,
-      "lastAccessed": 1788681125084,
-      "type": "file"
-    },
-    {
-      "path": "docs/assets/diagrams/files.png",
+      "path": "lat.md/metamodel.md",
       "accessCount": 3,
-      "lastAccessed": 1788000080311,
+      "lastAccessed": 1789229177089,
       "type": "file"
     },
     {
-      "path": "packages/vscode/README.md",
-      "accessCount": 3,
-      "lastAccessed": 1788600989754,
-      "type": "file"
-    },
-    {
-      "path": "docs/examples.html",
-      "accessCount": 3,
-      "lastAccessed": 1788601076298,
-      "type": "file"
-    },
-    {
-      "path": "packages/vscode/test/vscode.stub.ts",
-      "accessCount": 3,
-      "lastAccessed": 1788680079489,
-      "type": "file"
-    },
-    {
-      "path": "README.md",
+      "path": "packages/core/src/resolve.ts",
       "accessCount": 2,
-      "lastAccessed": 1788600956062,
+      "lastAccessed": 1789228880858,
       "type": "file"
     },
     {
-      "path": "packages/vscode/src/webview/nodes.tsx",
+      "path": "packages/core/test/features.test.ts",
       "accessCount": 2,
-      "lastAccessed": 1788602099332,
+      "lastAccessed": 1789228955721,
       "type": "file"
     },
     {
-      "path": "packages/vscode/src/protocol.ts",
+      "path": "article/concept-graphs.md",
       "accessCount": 2,
-      "lastAccessed": 1788679517405,
+      "lastAccessed": 1789229107674,
+      "type": "file"
+    },
+    {
+      "path": "article/assortment.lpg.yaml",
+      "accessCount": 1,
+      "lastAccessed": 1789228279682,
+      "type": "file"
+    },
+    {
+      "path": "packages/core/src/emit/owl.ts",
+      "accessCount": 1,
+      "lastAccessed": 1789228885704,
       "type": "file"
     },
     {
       "path": "CHANGELOG.md",
-      "accessCount": 2,
-      "lastAccessed": 1788684357836,
-      "type": "file"
-    },
-    {
-      "path": "packages/vscode/CHANGELOG.md",
-      "accessCount": 2,
-      "lastAccessed": 1788684372730,
-      "type": "file"
-    },
-    {
-      "path": "docs/assets/diagrams/pipeline.png",
       "accessCount": 1,
-      "lastAccessed": 1788000022179,
+      "lastAccessed": 1789229435009,
       "type": "file"
     },
     {
-      "path": "docs/assets/diagrams/architecture.png",
+      "path": "article/posts.json",
       "accessCount": 1,
-      "lastAccessed": 1788000026290,
-      "type": "file"
-    },
-    {
-      "path": "docs/assets/diagrams/reification.png",
-      "accessCount": 1,
-      "lastAccessed": 1788000026809,
-      "type": "file"
-    },
-    {
-      "path": "docs/assets/diagrams/capabilities.png",
-      "accessCount": 1,
-      "lastAccessed": 1788000031053,
-      "type": "file"
-    },
-    {
-      "path": "docs/assets/diagrams/intent-loop.png",
-      "accessCount": 1,
-      "lastAccessed": 1788000080614,
-      "type": "file"
-    },
-    {
-      "path": "docs/assets/icon.png",
-      "accessCount": 1,
-      "lastAccessed": 1788000098462,
-      "type": "file"
-    },
-    {
-      "path": "packages/vscode/src/webview/dialogs.tsx",
-      "accessCount": 1,
-      "lastAccessed": 1788586985738,
-      "type": "file"
-    },
-    {
-      "path": "docs/assets/site.css",
-      "accessCount": 1,
-      "lastAccessed": 1788601009264,
-      "type": "file"
-    },
-    {
-      "path": "docs/model-format.html",
-      "accessCount": 1,
-      "lastAccessed": 1788601099603,
-      "type": "file"
-    },
-    {
-      "path": "docs/getting-started.html",
-      "accessCount": 1,
-      "lastAccessed": 1788601109136,
+      "lastAccessed": 1789230340389,
       "type": "file"
     },
     {
       "path": "packages/core/test/site.test.ts",
       "accessCount": 1,
-      "lastAccessed": 1788601177295,
-      "type": "file"
-    },
-    {
-      "path": "package.json",
-      "accessCount": 1,
-      "lastAccessed": 1788684381348,
-      "type": "file"
-    },
-    {
-      "path": "packages/core/package.json",
-      "accessCount": 1,
-      "lastAccessed": 1788684387145,
-      "type": "file"
-    },
-    {
-      "path": "packages/cli/package.json",
-      "accessCount": 1,
-      "lastAccessed": 1788684391921,
-      "type": "file"
-    },
-    {
-      "path": "packages/vscode/package.json",
-      "accessCount": 1,
-      "lastAccessed": 1788684397101,
+      "lastAccessed": 1789230499427,
       "type": "file"
     }
   ],

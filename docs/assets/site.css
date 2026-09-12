@@ -251,3 +251,67 @@ a:hover { color: var(--accent-ink); }
   border: 1px solid var(--line); border-radius: 999px; padding: 2px 10px; }
 .dl:hover { border-color: var(--accent); }
 p.dim { color: var(--muted); font-size: 14px; }
+
+/* ---- blog ---- */
+/* The index reuses the hero. A post head keeps the standard wrap, so its title starts on the
+   same left edge as the prose beneath it; only the title and lede are measured. */
+.post-head { padding: 54px 0 26px; }
+.post-head h1 { max-width: 20ch; font-size: clamp(33px, 4.6vw, 50px); }
+.post-head .lede { margin-bottom: 18px; max-width: 62ch; }
+.back { font-size: 14px; font-weight: 500; text-decoration: none; display: inline-block; margin-bottom: 20px; }
+.back:hover { text-decoration: underline; }
+.post-meta { color: var(--muted); font-size: 14px; margin: 0; }
+
+/* A single measured column: paragraphs fill it, and code and figures line up with them. */
+.post { max-width: 74ch; margin: 38px 0 10px; }
+.post > * { max-width: none; }
+.post > p { color: var(--ink-2); }
+.post > h2 { margin: 46px 0 14px; }
+.post > h3 { margin: 34px 0 10px; font-size: 19px; }
+.post > h4 { margin: 26px 0 8px; font-size: 16px; }
+.post > hr { height: 1px; background: var(--line); border: 0; margin: 40px 0; }
+.post > figure { margin: 34px 0; }
+.post ul, .post ol { color: var(--ink-2); padding-left: 24px; margin: 0 0 18px; }
+.post li { margin-bottom: 9px; }
+.post li > p { margin-bottom: 9px; }
+.post blockquote {
+  margin: 26px 0; padding: 2px 0 2px 22px;
+  border-left: 3px solid var(--accent); color: var(--ink-2);
+}
+.post blockquote p:last-child { margin-bottom: 0; }
+.post pre { margin-bottom: 20px; }
+
+/* Every heading in a long read is addressable. The mark stays out of the way until the
+   heading is hovered, and out of the reading rhythm entirely on a touch screen. */
+.post .anchor {
+  margin-left: .4em; font-size: .62em; font-weight: 500; text-decoration: none;
+  color: var(--muted); opacity: 0; transition: opacity .12s ease;
+}
+.post h2:hover .anchor, .post h3:hover .anchor, .post .anchor:focus { opacity: 1; }
+.post :target { scroll-margin-top: 84px; }
+.post strong { color: var(--ink); font-weight: 600; }
+
+.post-source {
+  max-width: 74ch; margin: 34px 0 0; padding-top: 22px;
+  border-top: 1px solid var(--line); color: var(--muted); font-size: 14px;
+}
+.post-source code { white-space: nowrap; }
+
+/* ---- blog index ---- */
+.posts { display: grid; gap: 16px; margin-top: 6px; }
+.posts .post-card {
+  display: block; text-decoration: none; color: inherit;
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--radius); padding: 24px 26px;
+}
+.posts .post-card:hover { border-color: var(--accent); }
+.posts .meta {
+  font-size: 12.5px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase;
+  color: var(--muted); margin-bottom: 10px;
+}
+.posts .k {
+  font-family: "Instrument Serif", Georgia, "Times New Roman", serif; font-weight: 400;
+  font-size: clamp(22px, 2.6vw, 28px); line-height: 1.16; letter-spacing: -.012em;
+  margin-bottom: 9px; max-width: 34ch;
+}
+.posts .v { color: var(--muted); font-size: 15px; max-width: 74ch; }

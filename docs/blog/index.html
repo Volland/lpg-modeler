@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Blog — LPG Modeler</title>
+<meta name="description" content="Long-form writing about modelling property graphs: frames and slots, conceptual graphs, and why the choice between RDF and a property graph is a compilation target rather than a commitment.">
+<meta property="og:title" content="LPG Modeler — Blog">
+<meta property="og:description" content="Long-form writing about modelling property graphs: frames and slots, conceptual graphs, and why the choice between RDF and a property graph is a compilation target rather than a commitment.">
+<meta property="og:type" content="article">
+<meta property="og:image" content="https://www.lpg-modeler.com/assets/diagrams/pipeline.png">
+<link rel="icon" href="../assets/icon.png">
+<link rel="stylesheet" href="../assets/fonts.css">
+<link rel="stylesheet" href="../assets/site.css">
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="../index.html"><img src="../assets/icon.png" alt=""> LPG Modeler</a>
+    <nav class="links">
+      <a href="../index.html">Overview</a>
+      <a href="../getting-started.html">Getting started</a>
+      <a href="../examples.html">Examples</a>
+      <a href="../model-format.html">Model format</a>
+      <a href="../targets.html">Targets</a>
+      <a href="../cli.html">CLI</a>
+      <a href="../architecture.html">Architecture</a>
+      <a href="../blog/index.html" aria-current="page">Blog</a>
+      <a href="https://github.com/Volland/lpg-modeler">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+
+<div class="wrap hero">
+  <span class="eyebrow">Blog</span>
+  <h1>Long reads about modelling, and what they compile to.</h1>
+  <p class="lede">
+    Each post is a worked model rather than an overview: every generated excerpt is pasted
+    from a real run, and every count in it is countable from the model beside it. They live
+    in the repository with the tool, so a claim that stops being true shows up as a diff.
+  </p>
+</div>
+
+<hr class="rule">
+
+<section class="wrap">
+  <div class="posts">
+    <a class="post-card" href="concept-graphs.html">
+      <div class="meta"><time datetime="2026-09-12">12 September 2026</time> · 28 min read</div>
+      <div class="k">A concept graph makes every relation a node. Your catalog needs two of them.</div>
+      <div class="v">Sowa's conceptual graphs gave reasoning agents a bipartite discipline and a type lattice. LPG Modeler keeps the discipline, drops the bookkeeping, and compiles the result to eight targets. Worked through the hardest question in retail: what counts as the same product, and what is allowed to stand in for it.</div>
+    </a>
+    <a class="post-card" href="frames-and-slots.html">
+      <div class="meta"><time datetime="2026-09-12">12 September 2026</time> · 19 min read</div>
+      <div class="k">Frames and slots, forty years later — and this time they compile</div>
+      <div class="v">Minsky's frames were the best authoring model knowledge representation ever had. LPG Modeler gives them eight compilation targets. Here's one, built for a problem that needs it: trust between autonomous agents in e-commerce.</div>
+    </a>
+    <a class="post-card" href="you-dont-have-to-choose.html">
+      <div class="meta"><time datetime="2026-09-12">12 September 2026</time> · 18 min read</div>
+      <div class="k">You don't have to choose between RDF and the property graph</div>
+      <div class="v">Introducing LPG Modeler — design your domain the way you actually think about it, then decide what it compiles to.</div>
+    </a>
+  </div>
+</section>
+
+</main>
+
+<footer class="site">
+  <div class="wrap">
+    <span>LPG Modeler — MIT licensed</span>
+    <span class="spacer"><a href="../impressum.html">Impressum</a></span>
+    <span><a href="../datenschutz.html">Datenschutz</a></span>
+    <span><a href="../agb.html">AGB</a></span>
+    <span><a href="https://github.com/Volland/lpg-modeler">Source</a></span>
+    <span><a href="https://github.com/Volland/lpg-modeler/issues">Issues</a></span>
+  </div>
+</footer>
+
+</body>
+</html>

@@ -1,0 +1,337 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>You don't have to choose between RDF and the property graph — LPG Modeler</title>
+<meta name="description" content="Introducing LPG Modeler — design your domain the way you actually think about it, then decide what it compiles to.">
+<meta property="og:title" content="You don't have to choose between RDF and the property graph">
+<meta property="og:description" content="Introducing LPG Modeler — design your domain the way you actually think about it, then decide what it compiles to.">
+<meta property="og:type" content="article">
+<meta property="og:image" content="https://www.lpg-modeler.com/assets/diagrams/pipeline.png">
+<link rel="icon" href="../assets/icon.png">
+<link rel="stylesheet" href="../assets/fonts.css">
+<link rel="stylesheet" href="../assets/site.css">
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="../index.html"><img src="../assets/icon.png" alt=""> LPG Modeler</a>
+    <nav class="links">
+      <a href="../index.html">Overview</a>
+      <a href="../getting-started.html">Getting started</a>
+      <a href="../examples.html">Examples</a>
+      <a href="../model-format.html">Model format</a>
+      <a href="../targets.html">Targets</a>
+      <a href="../cli.html">CLI</a>
+      <a href="../architecture.html">Architecture</a>
+      <a href="../blog/index.html" aria-current="page">Blog</a>
+      <a href="https://github.com/Volland/lpg-modeler">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+
+<div class="wrap post-head">
+  <a class="back" href="index.html">← Blog</a>
+  <h1>You don't have to choose between RDF and the property graph</h1>
+  <p class="lede">Introducing LPG Modeler — design your domain the way you actually think about it, then decide what it compiles to.</p>
+  <p class="post-meta"><time datetime="2026-09-12">12 September 2026</time> · 18 min read</p>
+</div>
+
+<hr class="rule">
+
+<div class="wrap">
+  <article class="post">
+<p>There's a question that shows up in the first week of every graph project, usually before anyone has written a single line of domain logic:</p>
+<blockquote>
+<p><em>&quot;So — are we doing RDF or a property graph?&quot;</em></p>
+</blockquote>
+<p>And whatever you answer, you've just made an architectural commitment on the worst possible day: the day you know the least about your domain.</p>
+<p>Answer <strong>RDF</strong> and you get IRIs, a shared vocabulary, SHACL validation, reasoning, and interoperability with anyone who speaks the same standards. You also get a modelling surface where &quot;this edge has a timestamp&quot; is not a one-liner, and where half your team spends a sprint learning why <code>rdfs:domain</code> doesn't do what its name suggests.</p>
+<p>Answer <strong>property graph</strong> and you get edges that carry data natively, Cypher, an embedded engine you can run in a unit test, and a schema your DBA recognizes. You also get a model that lives inside one vendor's DDL, that nobody outside your org can consume, and that has no story at all for &quot;what does this type <em>mean</em>.&quot;</p>
+<p>The honest answer to the question is: <strong>you don't know yet, and you shouldn't have to.</strong></p>
+<p>That's the premise LPG Modeler is built on.</p>
+<hr>
+<h2 id="the-insight-the-format-is-a-compilation-target-not-a-modelling-decision">The insight: the format is a compilation target, not a modelling decision<a class="anchor" href="#the-insight-the-format-is-a-compilation-target-not-a-modelling-decision" aria-label="Link to this section">#</a></h2>
+<p>Here's the thing almost every graph tool gets backwards.</p>
+<p>When you sit down to describe a domain — a fleet, a catalog, a family tree, a booking system — the things you actually want to say are format-agnostic:</p>
+<ul>
+<li><em>A truck <strong>is</strong> a vehicle, and a vehicle <strong>is</strong> an asset.</em></li>
+<li><em>An asset gets <strong>stationed at</strong> a depot — and that's true of every kind of asset.</em></li>
+<li><em>Half my types <strong>carry</strong> <code>createdAt</code> and <code>updatedAt</code>, and that says nothing about what they are.</em></li>
+<li><em>A child has <strong>exactly two</strong> parents.</em></li>
+<li><em><code>fuel</code> is one of: diesel, electric, hydrogen.</em></li>
+</ul>
+<p>Not one of those sentences mentions RDF or LPG. They're statements about your domain. The format question — <em>how do I express &quot;exactly two&quot; in Neo4j?</em> — is a downstream translation problem, and it's a problem a machine should solve, not you.</p>
+<p>So: <strong>model in the natural vocabulary. Then choose your target. Then choose a different one next quarter.</strong></p>
+<figure><img src="../assets/diagrams/pipeline.png" alt=""><figcaption>One model, four artifacts — the compilation pipeline from YAML through parse, resolve, validate, emit</figcaption></figure>
+<p><em>The YAML file is the only thing you edit. Parse → resolve → validate → emit. A model with errors never produces an artifact at all. The diagram shows the four core targets; three standards artifacts — GQL graph types, PG-Schema, and LinkML — come off the same emit stage.</em></p>
+<hr>
+<h2 id="what-lpg-modeler-is">What LPG Modeler is<a class="anchor" href="#what-lpg-modeler-is" aria-label="Link to this section">#</a></h2>
+<p>A <strong>VS Code extension and a CLI</strong>. You author a Labeled Property Graph schema as reviewable YAML, edit it on an ERD-like canvas beside the file, and generate <strong>seven</strong> artifacts from that single model:</p>
+<div class="table-scroll">
+<table>
+<thead>
+<tr>
+<th>Target</th>
+<th>What it is</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>LadybugDB DDL</strong></td>
+<td>Node and rel tables, typed columns, primary keys, multiplicity — an embedded Cypher engine (formerly Kuzu)</td>
+</tr>
+<tr>
+<td><strong>Neo4j constraints</strong></td>
+<td>Node keys, uniqueness, existence, indexes — edition-aware</td>
+</tr>
+<tr>
+<td><strong>SHACL shapes</strong></td>
+<td>Closed-world validation that genuinely rejects invalid data</td>
+</tr>
+<tr>
+<td><strong>OWL ontology</strong></td>
+<td>The safe assertional subset — classes, <code>subClassOf</code>, <code>hasKey</code>, disjointness, inverses</td>
+</tr>
+<tr>
+<td><strong>GQL graph types</strong></td>
+<td>ISO/IEC 39075 — the actual standard</td>
+</tr>
+<tr>
+<td><strong>PG-Schema</strong></td>
+<td>The LDBC formalism GQL's graph types grew out of</td>
+</tr>
+<tr>
+<td><strong>LinkML</strong></td>
+<td>Opens the whole LinkML generator ecosystem to your model</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>Four of those live on the property-graph side of the fence. Three live on the RDF/linked-data side. <strong>They come from the same file.</strong> That's the whole point.</p>
+<p>You're not picking a religion. You're picking an output directory.</p>
+<pre><code>npx lpg-modeler-cli emit fleet.lpg.yaml \
+  --target ladybug --target shacl --target owl --target pg-schema \
+  --out ./schema</code></pre>
+<hr>
+<h2 id="the-canvas-modelling-that-looks-like-modelling">The canvas: modelling that looks like modelling<a class="anchor" href="#the-canvas-modelling-that-looks-like-modelling" aria-label="Link to this section">#</a></h2>
+<p>The extension opens a canvas beside your YAML file, the way Markdown preview does. Every box is a node type. Every row is a property. Every action on the canvas becomes a <em>targeted text splice</em> into the YAML — not a re-serialization — so moving a box produces no semantic diff at all. Coordinates live in a sidecar file.</p>
+<figure><img src="../assets/screenshots/canvas.png" class="shot" alt=""><figcaption>The LPG Modeler canvas showing an abstract three-level hierarchy, mixin chips, and inherited property rows</figcaption></figure>
+<p>This is <code>fleet.lpg.yaml</code>, one of five checked-in example models. Look at what the diagram is telling you:</p>
+<ul>
+<li><strong><code>Asset</code> and <code>Vehicle</code> are drawn with a dashed border and an <code>ABSTRACT</code> badge.</strong> They emit no table. They exist to say what things <em>are</em>.</li>
+<li><strong><code>Truck</code> sits three levels down.</strong> <code>assetTag</code> arrived from <code>Asset</code>, <code>vin</code> from <code>Vehicle</code> — and each inherited row names its source with <code>↑</code>.</li>
+<li><strong><code>createdAt</code>, <code>latitude</code>, <code>longitude</code> are marked <code>◇</code> instead of <code>↑</code>.</strong> They came from a mixin, and a mixin is not a supertype. Different symbol, because it's a different claim about the type.</li>
+<li><strong><code>STATIONED_AT</code> is drawn from <code>Asset</code> alone</strong> — even though <code>Truck</code>, <code>Van</code>, and <code>Trailer</code> all have it. More on that in a moment; it's the best idea in the tool.</li>
+</ul>
+<p>Every one of those screenshots is a capture of the real webview rendering a real projection of a published example model. Not a mockup. The details a screenshot exists to carry — the <code>↑</code> against the <code>◇</code>, the mixin checkboxes — are exactly the ones a mockup gets subtly wrong.</p>
+<hr>
+<h2 id="feature-1-inheritance-what-a-thing-is">Feature 1: Inheritance — what a thing <em>is</em><a class="anchor" href="#feature-1-inheritance-what-a-thing-is" aria-label="Link to this section">#</a></h2>
+<p>A node type may extend one other type. It gains that type's properties, and — when it declares none of its own — its <strong>key</strong>.</p>
+<pre><code>nodes:
+  Asset:
+    abstract: true
+    key: [assetTag]                    # declared once, inherited by everything below
+    props:
+      assetTag: { type: string, required: true }
+
+  Vehicle:
+    abstract: true
+    extends: Asset
+    props:
+      vin:  { type: string, required: true, unique: true }
+      fuel: { type: string, enum: Fuel }
+
+  Truck:
+    extends: Vehicle                   # three levels deep
+    props:
+      axles: { type: int, min: 2, max: 6 }</code></pre>
+<p>Two things this buys you that are hard to get otherwise.</p>
+<p><strong>One: it kills the copy-paste.</strong> You are not maintaining <code>assetTag</code> in six places and discovering in production that one of them drifted.</p>
+<p><strong>Two — and this is the one people underrate — it is the backbone that makes an ontology export worth producing at all.</strong> Without <code>subClassOf</code>, OWL output degenerates into a flat list of unrelated classes. A hierarchy is the difference between &quot;we exported some RDF&quot; and &quot;we published a vocabulary.&quot;</p>
+<p>The cost of inheritance is borne entirely by the emitters, and they each pay it differently:</p>
+<ul>
+<li><strong>PG-Schema</strong> keeps it whole — <code>ABSTRACT</code>, inheritance, keys, all direct counterparts. Nothing flattened.</li>
+<li><strong>GQL</strong> carries it through <em>label implication</em>: a concrete type is identified by its own label and implies every ancestor's.</li>
+<li><strong>LinkML</strong> maps it to <code>is_a</code>.</li>
+<li><strong>Neo4j</strong> has native multi-label nodes, so the hierarchy flattens to labels.</li>
+<li><strong>LadybugDB</strong> has no inheritance at all, so it flattens to one node table per concrete leaf with inherited columns copied down.</li>
+</ul>
+<p>You wrote one sentence. Five targets translated it five different ways. That's the deal.</p>
+<hr>
+<h2 id="feature-2-mixins-what-a-thing-carries">Feature 2: Mixins — what a thing <em>carries</em><a class="anchor" href="#feature-2-mixins-what-a-thing-carries" aria-label="Link to this section">#</a></h2>
+<p>A mixin is a <strong>named bag of properties</strong> a node type applies. It declares no supertype. It has no identity. It never appears in an ancestor chain.</p>
+<pre><code>mixins:
+  Timestamped:
+    props:
+      createdAt: { type: zoneddatetime, required: true }
+      updatedAt: { type: zoneddatetime }
+
+nodes:
+  Truck:
+    extends: Vehicle
+    mixins: [Timestamped, Located]     # set membership, not subtyping</code></pre>
+<p>This distinction is enforced rather than blurred, and the reason is worth stating plainly:</p>
+<blockquote>
+<p><strong><code>createdAt</code> on twenty types does not make twenty subtypes of a <code>Timestamped</code>.</strong></p>
+</blockquote>
+<p>Conflating reuse with subtyping produces a hierarchy shaped by <em>which properties happen to travel together</em> rather than by <em>what a thing is</em>. That hierarchy then leaks into your ontology, your query patterns, and eventually your team's mental model of the domain. It is one of the most common and most expensive modelling mistakes in graph work, and most tools make it easy because they only give you one mechanism.</p>
+<p>Here it's two mechanisms, and the UI insists on the difference:</p>
+<figure><img src="../assets/screenshots/inspector.png" class="shot" alt=""><figcaption>The inspector for Truck: an Extends dropdown, mixins as checkboxes, and an Edges list marked with inherited sources</figcaption></figure>
+<p><strong><code>Extends</code> is a dropdown.</strong> One parent, or none. <strong>Mixins are checkboxes.</strong> Applying one is set membership, and a type may apply several. That's not a UI preference — it's the metamodel made visible.</p>
+<p>And because a mixin is not a label, <strong>it costs the emitters nothing.</strong> Its properties are flattened into every type that applies it before any target sees the model. A target with rich subtyping and a target with none generate the same columns.</p>
+<p>The resolution rule is: <em>the nearer declaration wins.</em> A type's own property beats a mixin's; a mixin's beats an ancestor's. Both a shadowed property and a mixin nothing applies get reported, because neither is visible in the file.</p>
+<p>Mixins are also editable in their own right:</p>
+<figure><img src="../assets/screenshots/mixin.png" class="shot" alt=""><figcaption>The Timestamped mixin panel — its properties, its value constraints, and every type that applies it</figcaption></figure>
+<p>A mixin has no box on the canvas, because it is not a type. It gets the panel instead — its properties, and <strong>every type that applies it</strong>, so a change to <code>Timestamped</code> shows you what it would touch <em>before</em> you make it. Rename it and every <code>mixins:</code> list that names it gets rewritten as a targeted edit.</p>
+<hr>
+<h2 id="feature-3-relations-are-inherited-too-and-that-s-the-quiet-superpower">Feature 3: Relations are inherited too — and that's the quiet superpower<a class="anchor" href="#feature-3-relations-are-inherited-too-and-that-s-the-quiet-superpower" aria-label="Link to this section">#</a></h2>
+<p>This is the feature I'd lead with if I only got one.</p>
+<pre><code>edges:
+  STATIONED_AT:
+    from: Asset          # the abstract root
+    to: Depot
+    cardinality: { to: &quot;0..1&quot; }</code></pre>
+<p>Declared <strong>once</strong>, on an abstract type that has no instances. Every descendant has it. <code>Truck</code>, <code>Van</code>, <code>Trailer</code> — all stationed at a depot, and you said it a single time.</p>
+<p><em>An edge declared on an abstract parent belonging to every descendant is what makes the parent worth declaring in the first place.</em> A hierarchy that only shares columns is a convenience. A hierarchy that shares <strong>relationships</strong> is a domain model.</p>
+<p>But now look at what the tool does with that fact, because there are three different right answers and it gives all three:</p>
+<p><strong>On the diagram</strong>, <code>STATIONED_AT</code> is drawn on <code>Asset</code> alone. Drawing it again from every subtype would suggest four declarations where the model has one — and on a hierarchy of any real depth it multiplies lines faster than it adds information. <em>The diagram says where a thing is written.</em></p>
+<p><strong>In the inspector</strong>, <code>Truck</code> lists <code>DRIVES ← Driver ↑Vehicle</code> and <code>STATIONED_AT → Depot ↑Asset</code>. Marked with the ancestor each reaches it through. Because the question a modeller actually asks is <em>&quot;what can this type relate to?&quot;</em> — and the honest answer to that is <strong>a list, not a picture.</strong></p>
+<p><strong>In the targets</strong>, expansion — and each one differently:</p>
+<ul>
+<li><strong>GQL</strong> keeps it as one element type, because label implication means the abstract endpoint still resolves.</li>
+<li><strong>PG-Schema</strong> keeps the abstract endpoint verbatim.</li>
+<li><strong>LadybugDB</strong> has no abstract types, so a single <code>STATIONED_AT</code> expands to a <strong>cross-product of four concrete <code>FROM</code>/<code>TO</code> pairs</strong>.</li>
+</ul>
+<p>One line in your model. Four lines of DDL. And when you add a fifth asset subtype next month, you don't touch the edge at all.</p>
+<p>That's the compression. You describe the domain at the altitude the domain actually has, and the tool pays the translation cost at every level below it.</p>
+<hr>
+<h2 id="feature-4-nothing-disappears-quietly">Feature 4: Nothing disappears quietly<a class="anchor" href="#feature-4-nothing-disappears-quietly" aria-label="Link to this section">#</a></h2>
+<p>Here's the part that separates a schema generator from a schema <em>tool</em>.</p>
+<p>Every target ships a <strong>typed capability set</strong>. The compiler computes what your model requires, compares it against what each target can express, and reports every gap — as an editor diagnostic <em>and</em> as a comment injected at the exact lossy line of the generated artifact.</p>
+<figure><img src="../assets/diagrams/capabilities.png" alt=""><figcaption>Capability matrix — what each target can and cannot enforce, per feature</figcaption></figure>
+<p>Read that table carefully, because it's full of things you'd otherwise find out the hard way:</p>
+<ul>
+<li><strong>LadybugDB, measured against 0.19.1: <code>NOT NULL</code> is not accepted by the parser, and a null non-key value inserts successfully.</strong> So a <code>required</code> property that isn't the key is <em>unenforceable there</em>. That is reported, loudly, rather than generated as a comforting lie.</li>
+<li><strong>Neo4j existence and node-key constraints are Enterprise-only.</strong> Under a Community configuration they're emitted as comments and flagged.</li>
+<li><strong><code>unique</code> that isn't the key</strong> needs a SPARQL-based constraint in SHACL, which core SHACL cannot express. Reported.</li>
+<li><strong>A composite key</strong> in LadybugDB doesn't parse, so it's emitted as a synthesized concatenated column. In PG-Schema it needs no synthesis at all.</li>
+</ul>
+<p>A capability value isn't even always yes-or-no. LadybugDB declares cardinality as <strong><code>upper-bound-only</code></strong>, because its multiplicity keyword says &quot;at most one at this end&quot; and <em>nothing else</em>. Rounding that up to &quot;enforced&quot; would be the exact overstatement the matrix exists to prevent.</p>
+<p>The philosophy in one line: <strong>a <code>required</code> constraint that quietly vanishes is a data-integrity bug that surfaces in production.</strong> So it doesn't quietly vanish. It becomes a warning before you ship.</p>
+<p>And where a constraint has <em>nowhere</em> to go? It goes to SHACL. Value bounds, patterns, length limits, named cross-property constraints, edge counts, and a raw-SHACL escape hatch for the long tail. Five of the seven targets can carry no value constraint at all — but the model still records the intent, and every target says out loud that it couldn't hold it.</p>
+<hr>
+<h2 id="the-rdf-crossing-reify-only-what-needs-reifying">The RDF crossing: reify only what needs reifying<a class="anchor" href="#the-rdf-crossing-reify-only-what-needs-reifying" aria-label="Link to this section">#</a></h2>
+<p>If you <em>do</em> take the RDF exit, there's one structural mismatch you can't hand-wave: <strong>RDF has no edge that carries properties.</strong> A triple is three things. Where does <code>since: date</code> go?</p>
+<p>The usual answers are both bad. Reify everything uniformly and your graph becomes unreadable and your queries triple in length. Use RDF-star and OWL DL reasoners stop working, while SHACL can't constrain quoted triples at all.</p>
+<p>LPG Modeler does neither:</p>
+<figure><img src="../assets/diagrams/reification.png" alt=""><figcaption>Gradual reification — a plain edge stays an object property, an edge with properties becomes a relation class plus a shortcut</figcaption></figure>
+<p><strong>An edge with no properties stays a plain object property.</strong> Nothing invented, nothing lost. Notably, no <code>rdfs:domain</code> is asserted either — that would instruct a reasoner to <em>reclassify</em> individuals rather than reject bad data, which is the opposite of a constraint.</p>
+<p><strong>An edge that carries properties becomes an n-ary relation class, plus a shortcut property</strong> so your queries stay short. Its SHACL shape targets the relation class, so <code>since</code> is validated like any other property.</p>
+<p>This is why the RDF export is <strong>split in two</strong>. A property graph schema and an OWL ontology do not mean the same thing: a schema is closed-world constraint, OWL is open-world inference. Mapping constraints naively into OWL doesn't lose information so much as <strong>invert its meaning</strong>. So SHACL gets the constraints, and OWL gets a restricted assertional subset — classes, <code>subClassOf</code>, <code>hasKey</code>, disjointness, inverse properties — that stays inside OWL DL and keeps reasoners working.</p>
+<p><em>(For the curious: property graphs with edge properties are already accidental metagraphs — an edge property is an implicit reified edge. Gradual reification just makes the implicit thing explicit exactly where it has to be, and nowhere else.)</em></p>
+<hr>
+<h2 id="what-else-is-in-the-box">What else is in the box<a class="anchor" href="#what-else-is-in-the-box" aria-label="Link to this section">#</a></h2>
+<p><strong>Twenty-one scalar types</strong>, drawn from what LadybugDB stores natively — five integer widths plus four unsigned, two floats and a parameterized <code>decimal</code>, four temporal types, <code>uuid</code>, <code>blob</code>, <code>json</code>. Every one has at least two spellings: the plain name and the <strong>GQL (ISO/IEC 39075) or LadybugDB name</strong>, so <code>ZONED_DATETIME</code> and <code>zoned datetime</code> are one type and your model reads the way the schema it generates does.</p>
+<p><strong>Composite types</strong> — <code>STRUCT</code>, <code>MAP</code>, <code>UNION</code>, fixed-size <code>ARRAY</code> — nesting to any depth, in LadybugDB's own syntax. They reach a LadybugDB column exactly as written. Everywhere else they degrade to a declared scalar (the element type when it's uniform, <code>json</code> otherwise) and report it.</p>
+<p><strong>Cardinality as bounds, not an enum.</strong> <code>{ to: &quot;2&quot; }</code> means <em>exactly two</em> — &quot;a child has exactly two parents&quot;, which no combination of <code>many</code> and <code>one</code> can express. SHACL carries it exactly and in <strong>both directions</strong>: the forward bound as <code>sh:minCount</code>/<code>sh:maxCount</code>, the reverse as the same counts under an <code>sh:inversePath</code>. The named forms (<code>many-to-one</code> and friends) stayed as sugar.</p>
+<p><strong>Enums, open/closed types, composite keys.</strong> Closure is never inherited — a subtype that admitted extra properties would silently widen its parent's contract, and the reader of the parent would have no way to see it.</p>
+<p><strong>Model composition across files.</strong> Import under a local alias, subtype an imported label, declare edges touching imported types — but never mutate an imported definition. Sealed imports stay referentially transparent, and the diamond case resolves by <strong>IRI identity, not file path</strong>, so a vocabulary vendored at two different paths still resolves to one thing.</p>
+<p><strong>Stable element IDs</strong>, written once by the tool. They make a rename distinguishable from a drop-plus-add — which a structural diff alone cannot do, and which is exactly the mistake that generates a migration that destroys data. They also anchor diagram layout, so renaming a type moves nothing on screen.</p>
+<p><strong>PNG and SVG diagram export</strong>, including a print-safe light mode with a palette chosen for contrast <em>after grayscale conversion</em>, not just for hue.</p>
+<p><strong>And it runs in CI</strong>, with no editor present:</p>
+<pre><code>npx lpg-modeler-cli check model/domain.lpg.yaml</code></pre>
+<p>Gate a pull request on schema validity. The <code>core</code> package is forbidden from importing <code>vscode</code> — enforced by a lint rule <em>and</em> by a test that scans the source — which is precisely what makes this possible.</p>
+<hr>
+<h2 id="who-this-is-for">Who this is for<a class="anchor" href="#who-this-is-for" aria-label="Link to this section">#</a></h2>
+<p><strong>You're standing at the RDF/LPG fork and you don't want to commit yet.</strong> Model now, decide later, change your mind at low cost. This is the whole thesis.</p>
+<p><strong>You're already on Neo4j or LadybugDB and your schema lives in tribal knowledge and a wiki page.</strong> Get a reviewable artifact, a diagram that's always current, and CI enforcement — plus an ontology export you didn't have to plan for.</p>
+<p><strong>You're a knowledge-graph or semantic-web person who needs to hand something to a database team.</strong> They get DDL. You get SHACL and OWL. Nobody has to learn the other side's stack.</p>
+<p><strong>You're doing data integration or an agent memory layer</strong> and need the same domain model expressed for a query engine <em>and</em> for validation <em>and</em> for interchange, without three hand-maintained copies drifting apart.</p>
+<p><strong>You're a team that reviews schema changes in pull requests.</strong> Semantics live in YAML; layout lives in a sidecar. Moving a box produces a zero-line semantic diff. Renaming a type touches exactly the lines that name it.</p>
+<hr>
+<h2 id="the-bet">The bet<a class="anchor" href="#the-bet" aria-label="Link to this section">#</a></h2>
+<p>Most graph modelling tools are a picture <em>of</em> a schema. This one is a <strong>compiler</strong> with a picture attached.</p>
+<p>The bet is that the durable asset in your project isn't the DDL, and isn't the diagram either — it's the <strong>statement of what your domain means</strong>. Formats churn. Engines get replaced. The standards are still settling; GQL was only ratified in 2024. Whatever you commit to today, something will change under you.</p>
+<p>So write down what you actually know: <em>a truck is a vehicle, every asset gets stationed somewhere, half these types just carry timestamps, a child has exactly two parents.</em> Write it once, in a file a human can read and a reviewer can diff.</p>
+<p>Then let the machine argue with each target about how to say it — and let it tell you, out loud, every time a target can't.</p>
+<hr>
+<h2 id="try-it">Try it<a class="anchor" href="#try-it" aria-label="Link to this section">#</a></h2>
+<pre><code><span class="c-com"># VS Code</span>
+code --install-extension pavlyshyn.lpg-modeler
+
+<span class="c-com"># CLI</span>
+npx lpg-modeler-cli check   model/domain.lpg.yaml
+npx lpg-modeler-cli emit    model/domain.lpg.yaml --target ladybug --out schema</code></pre>
+<p>Then run <strong><code>LPG: New Model</code></strong> from the palette. It asks for a prefix and a base IRI, writes the file, and opens the canvas beside it — with one seeded type that already has a key, because a model that generates nothing on its first run reads as a broken tool rather than an empty one.</p>
+<p>Or start from a real one. Five complete examples, each resolved and generated across all seven targets by a test in CI — so the file you download is the file the test checked:</p>
+<div class="table-scroll">
+<table>
+<thead>
+<tr>
+<th>Model</th>
+<th>What it shows</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>social.lpg.yaml</code></td>
+<td>The starter — an abstract parent contributing a key, a mixin, an edge with an abstract endpoint</td>
+</tr>
+<tr>
+<td><code>fleet.lpg.yaml</code></td>
+<td><strong>Inheritance and mixins</strong> — three-level hierarchy, three mixins at different levels, an edge declared once on the root <em>(the model in every screenshot above)</em></td>
+</tr>
+<tr>
+<td><code>catalog.lpg.yaml</code></td>
+<td>Enums, list-valued properties, a composite key, an open type — where the targets start disagreeing</td>
+</tr>
+<tr>
+<td><code>kinship.lpg.yaml</code></td>
+<td>Endpoint bounds — exactly two parents, which no named multiplicity can express</td>
+</tr>
+<tr>
+<td><code>booking.lpg.yaml</code></td>
+<td>Value bounds, patterns, named constraints, and the raw SHACL escape hatch</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p><strong>Docs:</strong> https://volland.github.io/lpg-modeler/
+<strong>Marketplace:</strong> https://marketplace.visualstudio.com/items?itemName=pavlyshyn.lpg-modeler
+<strong>Source:</strong> https://github.com/Volland/lpg-modeler — MIT</p>
+<p>Currently at <strong>v0.7.0</strong>. Migrations, a Memgraph target, and user-supplied template targets are on the roadmap. Issues and modelling war stories both welcome.</p>
+<hr>
+<p><em>Stop choosing your graph format on day one. Choose it on the day you actually know.</em></p>
+  </article>
+
+  <p class="post-source">
+    This post is <a href="https://github.com/Volland/lpg-modeler/blob/main/article/you-dont-have-to-choose.md" rel="noopener"><code>article/you-dont-have-to-choose.md</code></a>
+    in the repository, so a correction to the tool and a correction to the post travel together.
+  </p>
+
+  <div class="next">
+    <a href="index.html"><div class="k">All posts</div><div class="v">Everything written about the tool, longest first.</div></a>
+    <a href="../getting-started.html"><div class="k">Getting started</div><div class="v">Install, write your first model, open the canvas, generate.</div></a>
+  </div>
+</div>
+
+</main>
+
+<footer class="site">
+  <div class="wrap">
+    <span>LPG Modeler — MIT licensed</span>
+    <span class="spacer"><a href="../impressum.html">Impressum</a></span>
+    <span><a href="../datenschutz.html">Datenschutz</a></span>
+    <span><a href="../agb.html">AGB</a></span>
+    <span><a href="https://github.com/Volland/lpg-modeler">Source</a></span>
+    <span><a href="https://github.com/Volland/lpg-modeler/issues">Issues</a></span>
+  </div>
+</footer>
+
+</body>
+</html>
