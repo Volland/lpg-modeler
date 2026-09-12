@@ -4,6 +4,25 @@ All notable changes to LPG Modeler are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.0] — 2026-09-12
+
+### Added
+
+- **The diagram export is reachable without the canvas toolbar.** `LPG: Export Diagram as
+  PNG` and `LPG: Export Diagram as SVG` run the same capture from the command palette, and
+  both are title-bar buttons on a model file as well as on the canvas tab. The commands
+  resolve a model the way every other command does and open the canvas when it is closed,
+  so exporting a model is one gesture rather than three.
+
+  Only the webview can rasterize, so the host relays the request and the bytes come back
+  over the channel the toolbar buttons already used; nothing about the path to disk
+  changed. A request that arrives before the projection is laid out is held until there
+  are boxes to capture, because rasterizing immediately would write an empty picture.
+
+  The canvas toolbar's **light** checkbox stays the only place that preference lives: a
+  command exports print-safe when the canvas is set to, rather than answering the same
+  question in a second place.
+
 ## [0.9.0] — 2026-09-11
 
 ### Added

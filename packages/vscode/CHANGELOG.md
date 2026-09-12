@@ -4,6 +4,19 @@ All notable changes to LPG Modeler are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.0] — 2026-09-12
+
+### Added
+
+- **Export a diagram without hunting for the canvas.** `LPG: Export Diagram as PNG` and
+  `LPG: Export Diagram as SVG` are in the command palette, and both are buttons in the
+  editor title bar — on a model file and on the canvas tab. Run either on a model whose
+  diagram is closed and it opens the canvas for you, so you no longer have to open the
+  panel first to reach a button on it.
+
+  The exports are the same ones the toolbar produces, including the **light** checkbox for
+  a print-safe capture: set it on the canvas and the commands honour it.
+
 ## [0.9.0] — 2026-09-11
 
 ### Added
