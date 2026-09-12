@@ -214,20 +214,34 @@ export function resolveModel(entry: string, readFile: ReadFile): ResolveResult {
     const seenProps = new Set(own.map((p) => p.name))
     const props: PropertyIR[] = [...own]
 
-    for (const mixinName of decl.raw.mixins) {
-      const mp = mixinProps.get(mixinName)
-      if (!mp) {
-        diagnostics.push(err('unresolved-mixin',
-          `Node type '${name}' applies mixin '${mixinName}', which is not declared.`, decl.raw.loc))
-        continue
-      }
-      for (const p of mp) {
-        if (seenProps.has(p.name)) continue
-        seenProps.add(p.name)
-        props.push({ ...p, id: deriveId('prop', p.name, name), inheritedFrom: mixinName })
+    // A mixin contributes wherever it is applied on the chain, not only on this type.
+    // `owner` reports an unresolved name, which only the type that wrote it should do:
+    // an ancestor reports its own when its turn comes, so a subtype stays quiet.
+    const applyMixins = (mixinNames: string[], owner: string | undefined) => {
+      for (const mixinName of mixinNames) {
+        const mp = mixinProps.get(mixinName)
+        if (!mp) {
+          if (owner !== undefined) {
+            diagnostics.push(err('unresolved-mixin',
+              `Node type '${owner}' applies mixin '${mixinName}', which is not declared.`, decl.raw.loc))
+          }
+          continue
+        }
+        for (const p of mp) {
+          if (seenProps.has(p.name)) continue
+          seenProps.add(p.name)
+          props.push({ ...p, id: deriveId('prop', p.name, name), inheritedFrom: mixinName })
+        }
       }
     }
 
+    applyMixins(decl.raw.mixins, name)
+
+    // Nearest ancestor first, and within one ancestor its own properties before its
+    // mixins': the nearer declaration wins, and a declared property beats a mixin's.
+    // An ancestor's mixins have to be walked here because an abstract parent reaches no
+    // artifact of its own, so a subtype that skipped them would lose the properties
+    // outright on every target that flattens the hierarchy.
     for (const ancestor of ancestors) {
       const a = rawNodes.get(ancestor)
       if (!a) continue
@@ -236,6 +250,7 @@ export function resolveModel(entry: string, readFile: ReadFile): ResolveResult {
         seenProps.add(p.name)
         props.push(toProp(p, ancestor, ancestor))
       }
+      applyMixins(a.raw.mixins, undefined)
     }
 
     let key = decl.raw.key

@@ -344,4 +344,58 @@ describe('inheritance and mixins', () => {
     const thing = model.nodes.find((n) => n.name === 'Thing')!
     expect(thing.props.find((p) => p.name === 'createdAt')!.type).toBe('date')
   })
+
+  it('carries a mixin applied on an abstract parent down to the subtype', () => {
+    // The parent is abstract, so it reaches no artifact of its own. A subtype that took
+    // only the parent's *declared* properties would drop the mixin's outright on every
+    // target that flattens the hierarchy, while PG-Schema kept them via the type chain --
+    // the targets would disagree about what the model says.
+    const { model } = inline([
+      'mixins:',
+      '  Stamped:',
+      '    props: { createdAt: { type: datetime, required: true } }',
+      'nodes:',
+      '  Base:',
+      '    abstract: true',
+      '    mixins: [Stamped]',
+      '    key: [id]',
+      '    props: { id: { type: string } }',
+      '  Leaf:',
+      '    extends: Base',
+      '    props: { name: { type: string } }',
+    ].join('\n'))
+    const leaf = model.nodes.find((n) => n.name === 'Leaf')!
+    const createdAt = leaf.props.find((p) => p.name === 'createdAt')
+    expect(createdAt, 'the mixin property reaches the subtype').toBeDefined()
+    // It is named after the mixin rather than the parent, because that is where a reader
+    // finds it written -- and it is what the canvas marks with a diamond, not an arrow.
+    expect(createdAt!.inheritedFrom).toBe('Stamped')
+    // The mixin still contributes no ancestor and no membership of its own.
+    expect(leaf.ancestors).toEqual(['Base'])
+    expect(leaf.mixins).toEqual([])
+
+    for (const target of ['gql', 'ladybug', 'linkml', 'neo4j', 'owl', 'pgschema', 'shacl']) {
+      const { content, diagnostics } = emit(model, target)
+      expect(diagnostics.filter((d) => d.severity === 'error'), target).toEqual([])
+      expect(content, `${target} carries the parent's mixin property`).toMatch(/createdAt/)
+    }
+  })
+
+  it('reports an undeclared mixin once, against the type that wrote it', () => {
+    // Every subtype walks the parent's mixin list now, so the parent's unresolved name
+    // would be reported once per descendant if the subtypes did not stay quiet.
+    const { diagnostics } = inline([
+      'nodes:',
+      '  Base:',
+      '    abstract: true',
+      '    mixins: [Missing]',
+      '    key: [id]',
+      '    props: { id: { type: string } }',
+      '  Leaf:  { extends: Base, props: { a: { type: string } } }',
+      '  Other: { extends: Base, props: { b: { type: string } } }',
+    ].join('\n'))
+    const unresolved = diagnostics.filter((d) => d.code === 'unresolved-mixin')
+    expect(unresolved).toHaveLength(1)
+    expect(unresolved[0]!.message).toContain("Node type 'Base'")
+  })
 })
