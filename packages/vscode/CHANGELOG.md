@@ -4,6 +4,28 @@ All notable changes to LPG Modeler are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.11.0] — 2026-09-15
+
+### Added
+
+- **Mark a constraint as a warning instead of a hard failure.** When you add a constraint in
+  the inspector, pick `violation`, `warning` or `info`; in YAML, write `severity: warning`.
+  A non-default severity shows next to the constraint's name. Generated SHACL reports it
+  with that severity, so a rule like "long stays are reviewed by hand" no longer needs raw
+  SHACL.
+
+### Fixed
+
+- **Counting edges to an imported type works.** A constraint such as
+  `count: { edge: BY, of: common:Person, min: 1 }` generated SHACL pointing at a class that
+  doesn't exist, which rejected every node. Regenerate SHACL for models that do this.
+
+- **A count on a type that can never be at the end of the edge is flagged.** You now get an
+  `incompatible-qualifier` error in the editor instead of a rule that silently never
+  matches.
+
+- **Importing SHACL keeps the message on comparison and count constraints.**
+
 ## [0.10.1] — 2026-09-12
 
 ### Fixed

@@ -2,7 +2,7 @@
   "name": "lpg-modeler",
   "displayName": "LPG Modeler",
   "description": "Visual modeling for labeled property graphs, with Ladybug, Neo4j, SHACL and OWL generation.",
-  "version": "0.10.1",
+  "version": "0.11.0",
   "publisher": "pavlyshyn",
   "license": "MIT",
   "icon": "icon.png",
@@ -68,7 +68,7 @@
       },
       {
         "command": "lpg.import",
-        "title": "LPG: Import Model\u2026"
+        "title": "LPG: Import Model…"
       },
       {
         "command": "lpg.openCanvas",

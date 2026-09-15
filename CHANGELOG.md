@@ -4,6 +4,43 @@ All notable changes to LPG Modeler are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.11.0] — 2026-09-15
+
+### Added
+
+- **A named constraint may declare its severity.** `severity: warning` or `severity: info`
+  marks a rule that should be reported rather than reject the data; `violation` is the
+  default and is never written. Until now the only way to say "flag this" was the raw SHACL
+  escape hatch.
+
+  SHACL carries it as `sh:severity`, beside `sh:message` on whichever shape reports the
+  result — the property shape for a comparison or a count, the node shape for a choice —
+  because a severity on the enclosing node shape never reaches a property shape's results.
+  The importer reads it back, the canvas offers a picker, and the JSON Schema accepts the
+  three values. An unknown severity is an `unknown-severity` error that keeps the rule at
+  the default.
+
+  This adds a file-format key. A 0.10 model resolves exactly as before, but a model that
+  uses `severity` is not readable by 0.10.
+
+### Fixed
+
+- **A count qualified on an imported type named a class that does not exist.** The SHACL
+  emitter built the `sh:class` from the constrained type's prefix, so `of: common:Person`
+  in an `app` model wrote `app:Person` and, with a minimum, rejected every node. The class is
+  now looked up in its own namespace, and a count's edge and qualifier accept an import
+  alias as an endpoint does.
+
+- **A count qualifier unrelated to the edge's target is now an error.** It could never
+  match, so a minimum rejected everything and a maximum constrained nothing. The new
+  `incompatible-qualifier` error allows the target, its subtypes, and its supertypes.
+
+- **A comparison's or count's `sh:message` was lost on SHACL import.** It sits in the
+  property shape, and only the node shape was read.
+
+Generated SHACL changes only for models that hit one of the fixes above or declare a
+severity.
+
 ## [0.10.1] — 2026-09-12
 
 ### Fixed
