@@ -73,7 +73,8 @@ export function intentToEdits(
     }
 
     case 'addConstraint':
-      return addConstraint(text, intent.owner, intent.name, intent.assertion, intent.message)
+      return addConstraint(
+        text, intent.owner, intent.name, intent.assertion, intent.message, undefined, intent.severity)
     case 'deleteConstraint':
       return deleteConstraint(text, intent.owner, intent.name)
   }

@@ -228,6 +228,7 @@ class Canvas {
         constraints: n.constraints.map((k) => ({
           id: k.id, name: k.name, kind: k.assert.kind, summary: summarise(k.assert),
           ...(k.message ? { message: k.message } : {}),
+          ...(k.severity && k.severity !== 'violation' ? { severity: k.severity } : {}),
         })),
         hasRawShacl: n.rawShacl !== undefined,
       })),

@@ -633,10 +633,16 @@ function readConstraint(
   const local = localName(shape)
   const name = local.replace(/Shape$/, '').slice(owner.length + 1)
   const id = deriveId('constraint', name, owner)
-  const message = one(shape, sh('message'))?.value
+  // The emitter writes the message and the severity on whichever shape reports the
+  // result: the node shape for a choice, the property shape for everything else.
+  const reported = (p: string) => one(shape, sh(p))
+    ?? all(shape, sh('property')).map((b) => one(b, sh(p))).find((t) => t !== undefined)
+  const message = reported('message')?.value
+  const severity = { [sh('Warning')]: 'warning', [sh('Info')]: 'info' }[reported('severity')?.value ?? ''] as
+    ConstraintIR['severity']
 
   const finish = (assert: ConstraintIR['assert']): ConstraintIR =>
-    ({ id, name, assert, ...(message ? { message } : {}) })
+    ({ id, name, assert, ...(message ? { message } : {}), ...(severity ? { severity } : {}) })
 
   for (const [kind, pred] of [['lessThan', 'lessThan'], ['lessThanOrEquals', 'lessThanOrEquals'],
     ['equals', 'equals'], ['disjoint', 'disjoint']] as const) {

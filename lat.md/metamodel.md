@@ -150,6 +150,12 @@ The assertion vocabulary is closed — seven kinds, no expression language. That
 
 Constraints are not inherited. One written against a subtype's property would be meaningless on the parent, and a subtype that silently widened its parent's contract would give the reader of the parent no way to see it — the same reasoning as [[metamodel#Open and Closed Types]].
 
+### Severity
+
+A named constraint may declare how a failure is reported: `violation`, the default, `warning` or `info`. An unknown severity is an error, but the rule is kept at the default rather than dropped.
+
+Not every rule is a hard stop. "A long stay is reviewed by hand" is a rule a team wants reported, not one that should reject the data. Before severity, the only way to say that was the [[metamodel#Escape Hatch]], which is a bad reason to leave the closed vocabulary. The three values are SHACL's own, because SHACL is the only target that reports a result at all. The default is never written, neither into the model file nor into the shape, so a file mentions severity only when it means something.
+
 ## Escape Hatch
 
 A node type may carry a raw SHACL fragment, spliced verbatim into its shape. It is the long tail: anything the closed vocabulary cannot say.

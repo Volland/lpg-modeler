@@ -1,5 +1,5 @@
 import type {
-  Assertion, ConstraintIR, Diagnostic, EdgeTypeIR, EnumIR, ModelIR, NodeTypeIR, PropertyIR,
+  Assertion, ConstraintIR, ConstraintSeverity, Diagnostic, EdgeTypeIR, EnumIR, ModelIR, NodeTypeIR, PropertyIR,
 } from '../ir'
 import { concreteNodes, describeCardinality, formatBound, formatValueType, findEnum } from '../ir'
 import {
@@ -45,7 +45,13 @@ function turtleString(value: string): string {
  */
 function constraintShape(node: NodeTypeIR, k: ConstraintIR): string[] {
   const shape = `${node.prefix}:${node.name}_${k.name}Shape`
-  const message = k.message ? `    sh:message ${turtleString(k.message)} ;` : undefined
+  // A message and a severity describe the result, and a result is reported by the shape
+  // that produced it. For a comparison or a count that is the property shape, so both
+  // sit inside it; a severity on the node shape would not reach its results.
+  const reporting = (indent: string) => [
+    ...(k.severity && k.severity !== 'violation' ? [`${indent}sh:severity ${SEVERITY[k.severity]} ;`] : []),
+    ...(k.message ? [`${indent}sh:message ${turtleString(k.message)} ;`] : []),
+  ]
   const head = [`${shape} a sh:NodeShape ;`, `  sh:targetClass ${term(node)} ;`]
   const term_ = (name: string) => `${node.prefix}:${name}`
   const a = k.assert
@@ -56,7 +62,7 @@ function constraintShape(node: NodeTypeIR, k: ConstraintIR): string[] {
       equals: 'sh:equals', disjoint: 'sh:disjoint' }[a.kind]
     return [
       ...head, '  sh:property [', `    sh:path ${term_(a.left)} ;`,
-      `    ${predicate} ${term_(a.right)} ;`, ...(message ? [message] : []), '  ] .', '']
+      `    ${predicate} ${term_(a.right)} ;`, ...reporting('    '), '  ] .', '']
   }
 
   if (a.kind === 'atLeastOne' || a.kind === 'exactlyOne') {
@@ -65,10 +71,7 @@ function constraintShape(node: NodeTypeIR, k: ConstraintIR): string[] {
     const members = a.props
       .map((name) => `[ sh:path ${term_(name)} ; sh:minCount 1 ]`)
       .join('\n    ')
-    return [
-      ...head,
-      ...(k.message ? [`  sh:message ${turtleString(k.message)} ;`] : []),
-      `  ${operator} (`, `    ${members}`, '  ) .', '']
+    return [...head, ...reporting('  '), `  ${operator} (`, `    ${members}`, '  ) .', '']
   }
 
   // A count with no qualifying type is a plain bound on the path; with one, the count
@@ -83,9 +86,13 @@ function constraintShape(node: NodeTypeIR, k: ConstraintIR): string[] {
     if (a.min !== undefined) lines.push(`    sh:minCount ${a.min} ;`)
     if (a.max !== undefined) lines.push(`    sh:maxCount ${a.max} ;`)
   }
-  if (message) lines.push(message)
-  lines.push('  ] .', '')
+  lines.push(...reporting('    '), '  ] .', '')
   return lines
+}
+
+/** The SHACL term for each severity a named constraint may take. */
+const SEVERITY: Record<ConstraintSeverity, string> = {
+  violation: 'sh:Violation', warning: 'sh:Warning', info: 'sh:Info',
 }
 
 /** A Turtle list of quoted literals, for `sh:in`. */

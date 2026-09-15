@@ -106,6 +106,7 @@ function constraintBlock(constraints: ConstraintIR[], indent: string): string[] 
     lines.push(`${indent}  - id: ${k.id}`)
     lines.push(`${indent}    name: ${scalar(k.name)}`)
     lines.push(`${indent}    assert: ${assertion}`)
+    if (k.severity !== undefined) lines.push(`${indent}    severity: ${k.severity}`)
     if (k.message !== undefined) lines.push(`${indent}    message: ${JSON.stringify(k.message)}`)
   }
   return lines

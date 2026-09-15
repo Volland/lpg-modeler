@@ -1,7 +1,9 @@
 import { parseDocument, Document, isMap, isSeq, isScalar, YAMLMap, Node } from 'yaml'
-import type { Assertion, Cardinality, Diagnostic, Loc, ScalarType, ValueType } from './ir'
+import type {
+  Assertion, Cardinality, ConstraintSeverity, Diagnostic, Loc, ScalarType, ValueType,
+} from './ir'
 import {
-  ASSERTION_KINDS, CARDINALITY_NAMES, COMPARISON_KINDS, COMPOSITE_TYPE_NAMES,
+  ASSERTION_KINDS, CARDINALITY_NAMES, COMPARISON_KINDS, COMPOSITE_TYPE_NAMES, CONSTRAINT_SEVERITIES,
   DEFAULT_CARDINALITY, SCALAR_TYPES, canonicalCardinality, parseBound,
   parsePropertyType, err,
 } from './ir'
@@ -33,6 +35,7 @@ export interface RawConstraint {
   name: string
   assert: Assertion
   message?: string
+  severity?: ConstraintSeverity
   loc?: Loc
 }
 
@@ -351,9 +354,18 @@ function parseConstraints(
     }
     const assertion = parseAssertion(file, assertBody, ownerName, name, diags)
     if (!assertion) continue
+    // An unknown severity is reported but does not cost the assertion, which is still
+    // well-formed: the rule is kept at the default rather than dropped.
+    const severity = str(item, 'severity')
+    const known = (CONSTRAINT_SEVERITIES as readonly string[]).includes(severity ?? '')
+    if (severity !== undefined && !known) {
+      diags.push(err('unknown-severity',
+        `Constraint '${ownerName}.${name}' has severity '${severity}'. Known severities: ${CONSTRAINT_SEVERITIES.join(', ')}.`, loc))
+    }
     out.push({
       id: str(item, 'id'), name, assert: assertion,
       ...(str(item, 'message') !== undefined ? { message: str(item, 'message')! } : {}),
+      ...(known ? { severity: severity as ConstraintSeverity } : {}),
       ...(loc ? { loc } : {}),
     })
   }

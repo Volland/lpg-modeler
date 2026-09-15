@@ -102,6 +102,23 @@ describe('constraints carried by SHACL', () => {
     // Every type in the fixture has a shape, so none should be guessed open.
     expect(model.nodes.every((n) => typeof n.open === 'boolean')).toBe(true)
   })
+
+  it('recovers a named constraint\'s severity and message from whichever shape reports it', () => {
+    const { model: original } = resolveModel('/m.lpg.yaml', () =>
+      'namespace: { prefix: p, iri: "https://e.org/p#" }\n'
+      + 'nodes:\n  A:\n    key: [id]\n'
+      + '    props:\n      id: { type: string }\n      a: { type: int }\n      b: { type: int }\n'
+      + '    constraints:\n'
+      + '      - name: ordered\n        assert: { lessThan: [a, b] }\n'
+      + '        severity: warning\n        message: a before b\n'
+      + '      - name: some\n        assert: { atLeastOne: [a, b] }\n        severity: info\n'
+      + '      - name: plain\n        assert: { equals: [a, b] }\n')
+    const { model } = reimport(original, ['shacl', 'owl'])
+    const byName = new Map(node(model, 'A')!.constraints.map((k) => [k.name, k]))
+    expect(byName.get('ordered')).toMatchObject({ severity: 'warning', message: 'a before b' })
+    expect(byName.get('some')?.severity).toBe('info')
+    expect(byName.get('plain')?.severity).toBeUndefined()
+  })
 })
 
 // @lat: [[importers#Reading LadybugDB DDL]]

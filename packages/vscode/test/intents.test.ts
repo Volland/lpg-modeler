@@ -194,6 +194,21 @@ describe('constraint intents', () => {
     })
   })
 
+  it('writes a severity only when it is not the default', () => {
+    const graded = apply(SRC(), {
+      kind: 'addConstraint', owner: 'Person', name: 'soft',
+      assertion: '{ lessThan: [born, createdAt] }', severity: 'warning',
+    } as Intent)
+    expect(reload(graded).nodes.find((n) => n.name === 'Person')!.constraints[0]!.severity)
+      .toBe('warning')
+
+    const plain = apply(SRC(), {
+      kind: 'addConstraint', owner: 'Person', name: 'hard',
+      assertion: '{ lessThan: [born, createdAt] }', severity: 'violation',
+    } as Intent)
+    expect(plain).not.toContain('severity')
+  })
+
   it('appends a second constraint to the existing block, then deletes one', () => {
     let text = apply(SRC(), {
       kind: 'addConstraint', owner: 'Person', name: 'first',

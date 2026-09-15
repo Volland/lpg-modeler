@@ -501,6 +501,14 @@
         "assert": {
           "$ref": "#/$defs/assertion"
         },
+        "severity": {
+          "enum": [
+            "violation",
+            "warning",
+            "info"
+          ],
+          "description": "How a failure is reported. Defaults to violation; becomes sh:severity in SHACL."
+        },
         "message": {
           "type": "string",
           "description": "Shown instead of the generated wording when it fails."

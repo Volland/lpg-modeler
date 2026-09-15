@@ -422,7 +422,7 @@ export function setPropertyFacet(
 /** Append a named constraint, creating the block when the type has none yet. */
 export function addConstraint(
   text: string, typeName: string, name: string, assertion: string,
-  message?: string, id?: string,
+  message?: string, id?: string, severity?: string,
 ): TextEdit[] {
   const c = ctx(text)
   const body = typeBody(c, 'nodes', typeName)
@@ -434,6 +434,8 @@ export function addConstraint(
   const entry = [
     `${indent}  - ${id ? `id: ${id}\n${indent}    name: ${name}` : `name: ${name}`}`,
     `${indent}    assert: ${assertion}`,
+    // The default goes unwritten, so a file only says severity when it means something.
+    ...(severity && severity !== 'violation' ? [`${indent}    severity: ${severity}`] : []),
     ...(message ? [`${indent}    message: ${JSON.stringify(message)}`] : []),
   ].join('\n')
 

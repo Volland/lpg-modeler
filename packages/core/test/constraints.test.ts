@@ -5,6 +5,8 @@ import { parse } from 'yaml'
 import { emit, capabilitiesOf } from '../src/emit/index'
 import { resolveModel } from '../src/resolve'
 import { validateModel } from '../src/validate'
+import { serializeModel } from '../src/serialize'
+import { CONSTRAINT_SEVERITIES } from '../src/ir'
 
 const EXAMPLES = resolvePath(__dirname, '..', '..', '..', 'docs', 'examples')
 const read = (p: string): string | undefined => {
@@ -142,6 +144,63 @@ describe('named constraints', () => {
     const qualified = ttl.slice(ttl.indexOf('bk:Booking_oneLeadGuestShape'))
     expect(qualified).toContain('sh:qualifiedValueShape [ sh:class bk:Guest ] ;')
     expect(qualified).toContain('sh:qualifiedMinCount 1 ;')
+  })
+})
+
+// @lat: [[metamodel#Named Constraints#Severity]]
+describe('constraint severity', () => {
+  const graded = (severity: string) => inline(
+    'nodes:\n  A:\n    key: [id]\n'
+    + '    props:\n      id: { type: string }\n      a: { type: int }\n      b: { type: int }\n'
+    + '    constraints:\n'
+    + `      - name: ordered\n        assert: { lessThan: [a, b] }\n        severity: ${severity}\n`
+    + '        message: a before b\n'
+    + `      - name: some\n        assert: { atLeastOne: [a, b] }\n        severity: ${severity}\n`
+    + '      - name: plain\n        assert: { equals: [a, b] }\n')
+  const shape = (ttl: string, name: string) => {
+    const at = ttl.indexOf(`p:A_${name}Shape`)
+    return ttl.slice(at, ttl.indexOf(' .\n', at))
+  }
+
+  it('resolves onto the constraint, and stays absent when unwritten', () => {
+    const [ordered, some, plain] = graded('warning').model.nodes[0]!.constraints
+    expect(ordered!.severity).toBe('warning')
+    expect(some!.severity).toBe('warning')
+    expect(plain!.severity).toBeUndefined()
+  })
+
+  it('refuses a severity that is not one of the three, but keeps the rule', () => {
+    const { model, diagnostics } = graded('fatal')
+    expect(codes(diagnostics)).toContain('unknown-severity')
+    expect(model.nodes[0]!.constraints.map((k) => k.name)).toEqual(['ordered', 'some', 'plain'])
+    expect(model.nodes[0]!.constraints[0]!.severity).toBeUndefined()
+  })
+
+  it('writes sh:severity on the shape that reports the result', () => {
+    const ttl = emit(graded('warning').model, 'shacl').content
+    // A comparison reports from its property shape, so the severity sits inside it.
+    expect(shape(ttl, 'ordered')).toMatch(/sh:property \[[^\]]*sh:severity sh:Warning ;/)
+    // A choice reports from the node shape itself.
+    expect(shape(ttl, 'some')).toMatch(/sh:targetClass p:A ;\n {2}sh:severity sh:Warning ;/)
+    expect(shape(ttl, 'plain')).not.toContain('sh:severity')
+  })
+
+  it('writes nothing for an explicit violation, which is what SHACL assumes', () => {
+    const ttl = emit(graded('violation').model, 'shacl').content
+    expect(ttl).not.toContain('sh:severity')
+  })
+
+  it('survives serialization', () => {
+    const text = serializeModel(graded('info').model)
+    expect(text).toContain('severity: info')
+    const again = resolveModel('/m.lpg.yaml', () => text).model
+    expect(again.nodes[0]!.constraints.map((k) => k.severity)).toEqual(['info', 'info', undefined])
+  })
+
+  it('is offered by the JSON Schema exactly as the parser accepts it', () => {
+    const schema = JSON.parse(readFileSync(
+      join(__dirname, '..', 'schemas', 'lpg.schema.json'), 'utf8'))
+    expect(schema.$defs.constraint.properties.severity.enum).toEqual([...CONSTRAINT_SEVERITIES])
   })
 })
 

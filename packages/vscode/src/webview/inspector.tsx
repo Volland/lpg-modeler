@@ -112,6 +112,7 @@ function AddConstraint(
   const [left, setLeft] = React.useState(propNames[0] ?? '')
   const [right, setRight] = React.useState(propNames[1] ?? propNames[0] ?? '')
   const [message, setMessage] = React.useState('')
+  const [severity, setSeverity] = React.useState<'violation' | 'warning' | 'info'>('violation')
 
   const comparison = ['lessThan', 'lessThanOrEquals', 'equals', 'disjoint'].includes(kind)
   const choice = kind === 'atLeastOne' || kind === 'exactlyOne'
@@ -123,6 +124,7 @@ function AddConstraint(
     emit({
       kind: 'addConstraint', owner: node.name, name: name.trim(), assertion,
       ...(message.trim() ? { message: message.trim() } : {}),
+      ...(severity !== 'violation' ? { severity } : {}),
     })
     done()
   }
@@ -149,6 +151,12 @@ function AddConstraint(
       </div>
       <input placeholder="message (optional)" value={message}
         onChange={(e) => setMessage(e.target.value)} />
+      <select value={severity} title="How a failure is reported"
+        onChange={(e) => setSeverity(e.target.value as typeof severity)}>
+        <option value="violation">violation</option>
+        <option value="warning">warning</option>
+        <option value="info">info</option>
+      </select>
       <div className="insp-actions">
         <button disabled={!valid} onClick={submit}>add</button>
         <button onClick={done}>cancel</button>
@@ -516,6 +524,7 @@ export function Inspector(
         <div key={k.id} className="insp-constraint">
           <div className="insp-c-head">
             <span className="insp-c-name">{k.name}</span>
+            {k.severity && <span className="insp-dim">{k.severity}</span>}
             <button className="erd-x" title="Delete constraint"
               onClick={() => emit({ kind: 'deleteConstraint', owner: node.name, name: k.name })}>
               ×

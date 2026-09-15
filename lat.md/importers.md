@@ -72,6 +72,8 @@ An `sh:in` list has values but no name, because the emitter writes the members i
 
 A named constraint is recognised by the `<Type>_<name>Shape` naming the emitter uses, and read back into the closed set of [[metamodel#Named Constraints|assertions]] the metamodel allows. A shape that matches none of them is left alone and reported, rather than being forced into the nearest kind.
 
+A constraint's `sh:message` and `sh:severity` are read from the node shape or from its property shape, whichever carries them, because that is where the emitter puts them. A comparison's message used to be lost on import for exactly this reason: it sits inside the property shape, and only the node shape was read.
+
 Uniqueness is not recoverable. Core SHACL cannot express it, so the emitter writes a comment saying so, and a comment is prose for a reader rather than a record.
 
 ## Reading LadybugDB DDL

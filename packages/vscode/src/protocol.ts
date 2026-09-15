@@ -39,6 +39,8 @@ export interface WireConstraint {
   /** Human-readable form, e.g. `startDate < endDate`. */
   summary: string
   message?: string
+  /** Absent for a plain violation. */
+  severity?: 'warning' | 'info'
 }
 
 export interface WireNode {
@@ -178,7 +180,10 @@ export type Intent =
   | { kind: 'deleteMixin'; name: string }
   /** The whole set a type applies, which is what a list of checkboxes says. */
   | { kind: 'setMixins'; name: string; mixins: string[] }
-  | { kind: 'addConstraint'; owner: string; name: string; assertion: string; message?: string }
+  | {
+      kind: 'addConstraint'; owner: string; name: string; assertion: string; message?: string
+      severity?: 'violation' | 'warning' | 'info'
+    }
   | { kind: 'deleteConstraint'; owner: string; name: string }
 
 export type ViewMessage =

@@ -261,12 +261,19 @@ phone: { type: string, minLength: 7, maxLength: 20 }</code></pre>
         message: a booking must end after it starts
       - name: reachable
         assert: { atLeastOne: [email, phone] }
+        severity: warning
       - name: oneLeadGuest
         assert: { count: { edge: BOOKED_BY, of: Guest, min: 1, max: 1 } }</code></pre>
   <p>
     Seven kinds, and no more: <code>lessThan</code>, <code>lessThanOrEquals</code>,
     <code>equals</code>, <code>disjoint</code>, <code>atLeastOne</code>,
     <code>exactlyOne</code>, and <code>count</code>. Constraints are not inherited.
+  </p>
+  <p>
+    A constraint may also say how a failure is reported: <code>severity</code> is
+    <code>violation</code> by default, or <code>warning</code> or <code>info</code> for a
+    rule that should be flagged rather than reject the data. It becomes
+    <code>sh:severity</code> in SHACL.
   </p>
   <div class="note">
     <p><strong>Why the vocabulary is closed.</strong> It is the load-bearing decision. A

@@ -283,6 +283,7 @@ export function resolveModel(entry: string, readFile: ReadFile): ResolveResult {
         name: k.name,
         assert: k.assert,
         ...(k.message ? { message: k.message } : {}),
+        ...(k.severity ? { severity: k.severity } : {}),
         ...(k.loc ? { loc: k.loc } : {}),
       })),
       ...(decl.raw.rawShacl ? { rawShacl: decl.raw.rawShacl } : {}),

@@ -553,12 +553,21 @@ export const ASSERTION_KINDS = [
 export const COMPARISON_KINDS: readonly string[] =
   ['lessThan', 'lessThanOrEquals', 'equals', 'disjoint']
 
+/**
+ * How seriously a failed constraint is reported. Absent means `violation`, which is also
+ * what SHACL assumes. See lat.md/metamodel#Named Constraints#Severity.
+ */
+export const CONSTRAINT_SEVERITIES = ['violation', 'warning', 'info'] as const
+export type ConstraintSeverity = typeof CONSTRAINT_SEVERITIES[number]
+
 export interface ConstraintIR {
   id: string
   name: string
   assert: Assertion
   /** Shown instead of the generated wording when the constraint fails. */
   message?: string
+  /** Absent when the constraint is a plain violation. */
+  severity?: ConstraintSeverity
   loc?: Loc
 }
 
