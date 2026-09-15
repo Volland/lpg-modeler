@@ -1,0 +1,244 @@
+# Agentic commerce: a shopping agent buys on a customer's behalf, under a mandate.
+#
+# The model is the whole validation layer. Every rule below is declared, not coded:
+# LPG Modeler compiles it to SHACL, and shacl2cypher compiles that SHACL to read-only
+# Cypher queries that check a FalkorDB graph and name every broken rule.
+#
+#   npx lpg-modeler-cli check article/agent-commerce.lpg.yaml
+#   npx lpg-modeler-cli emit  article/agent-commerce.lpg.yaml \
+#       --target falkordb --target shacl --out ./schema
+#   shacl2cypher validate schema/agent-commerce.shacl.ttl \
+#       --falkordb redis://localhost:6379 --graph commerce --node-key id \
+#       --neo4j-labels inherited
+#
+# Two conventions keep the graph and the shapes aligned without annotations:
+#   - every type is keyed by `id`, so one --node-key identifies any failing node;
+#   - no edge carries properties, so every relation stays a relationship on both sides.
+lpg: "1.0"
+namespace:
+  prefix: shop
+  iri: https://example.org/vocab/agent-commerce#
+
+enums:
+  # How far an agent may go without asking. The mandate says how much; this says how.
+  Autonomy:
+    id: x_autonomy
+    values: [suggest, confirm, autonomous]
+
+  MandateStatus:
+    id: x_mstatus
+    values: [active, suspended, revoked, expired]
+
+  OrderStatus:
+    id: x_ostatus
+    values: [draft, placed, paid, shipped, delivered, cancelled, refunded]
+
+  PaymentRail:
+    id: x_rail
+    values: [card, wallet, bank_transfer]
+
+mixins:
+  # When the record was written. Not a subtype: twenty types being timestamped does
+  # not make twenty kinds of Timestamped thing.
+  Timestamped:
+    id: m_ts
+    props:
+      createdAt: { id: p_created, type: datetime, required: true }
+
+nodes:
+  # ---------------------------------------------------------------------------
+  # Who acts. A customer, an agent and a merchant are all actors, so a relation
+  # that any of them may take part in — approval — is declared once, on Actor.
+  # ---------------------------------------------------------------------------
+  Actor:
+    id: n_actor
+    abstract: true
+    key: [id]
+    props:
+      id:          { id: p_actor_id, type: string, required: true, pattern: "^[a-z]+_[A-Za-z0-9]{6,}$" }
+      displayName: { id: p_actor_name, type: string, required: true, minLength: 1, maxLength: 120 }
+
+  Customer:
+    id: n_customer
+    extends: Actor
+    props:
+      email: { id: p_cust_email, type: string, unique: true, pattern: "^[^@\\s]+@[^@\\s]+\\.[a-z]{2,}$" }
+      phone: { id: p_cust_phone, type: string, pattern: "^\\+[1-9][0-9]{6,14}$" }
+    constraints:
+      - id: c_reachable
+        name: reachable
+        assert: { atLeastOne: [email, phone] }
+        severity: warning
+        message: a customer the agent cannot reach cannot confirm a purchase
+
+  ShoppingAgent:
+    id: n_agent
+    extends: Actor
+    props:
+      model:    { id: p_agent_model, type: string, required: true }
+      version:  { id: p_agent_ver, type: string, required: true, pattern: "^[0-9]+\\.[0-9]+\\.[0-9]+$" }
+      autonomy: { id: p_agent_auto, type: string, required: true, enum: Autonomy }
+
+  Merchant:
+    id: n_merchant
+    extends: Actor
+    props:
+      vatId: { id: p_merch_vat, type: string, required: true, pattern: "^[A-Z]{2}[A-Z0-9]{2,12}$" }
+
+  # ---------------------------------------------------------------------------
+  # What the agent is allowed to do. A mandate is issued by a customer to one
+  # agent, caps the spend, and has a validity window.
+  # ---------------------------------------------------------------------------
+  Mandate:
+    id: n_mandate
+    key: [id]
+    mixins: [Timestamped]
+    props:
+      id:            { id: p_mand_id, type: string, required: true }
+      maxTotalCents: { id: p_mand_cap, type: int, required: true, min: 1, max: 500000 }
+      currency:      { id: p_mand_cur, type: string, required: true, pattern: "^[A-Z]{3}$" }
+      validFrom:     { id: p_mand_from, type: datetime, required: true }
+      validUntil:    { id: p_mand_until, type: datetime, required: true }
+      status:        { id: p_mand_status, type: string, required: true, enum: MandateStatus }
+    constraints:
+      - id: c_window
+        name: window
+        assert: { lessThan: [validFrom, validUntil] }
+        message: a mandate must end after it starts
+
+  # ---------------------------------------------------------------------------
+  # What is bought.
+  # ---------------------------------------------------------------------------
+  Product:
+    id: n_product
+    key: [id]
+    props:
+      id:         { id: p_prod_id, type: string, required: true }
+      sku:        { id: p_prod_sku, type: string, required: true, unique: true, pattern: "^[A-Z0-9-]{6,20}$" }
+      title:      { id: p_prod_title, type: string, required: true, minLength: 3, maxLength: 200 }
+      priceCents: { id: p_prod_price, type: int, required: true, min: 0 }
+      currency:   { id: p_prod_cur, type: string, required: true, pattern: "^[A-Z]{3}$" }
+
+  Order:
+    id: n_order
+    key: [id]
+    props:
+      id:         { id: p_order_id, type: string, required: true }
+      status:     { id: p_order_status, type: string, required: true, enum: OrderStatus }
+      totalCents: { id: p_order_total, type: int, required: true, min: 0 }
+      currency:   { id: p_order_cur, type: string, required: true, pattern: "^[A-Z]{3}$" }
+      placedAt:   { id: p_order_placed, type: datetime, required: true }
+      updatedAt:  { id: p_order_updated, type: datetime }
+    constraints:
+      - id: c_chrono
+        name: chronology
+        assert: { lessThanOrEquals: [placedAt, updatedAt] }
+        message: an order cannot be updated before it was placed
+      # The business rule the whole model exists for: an agent may place an order,
+      # but a human customer has to have approved it.
+      - id: c_human
+        name: humanApproval
+        assert: { count: { edge: APPROVED_BY, of: Customer, min: 1 } }
+        message: an agent-placed order needs a customer's approval
+      - id: c_bulk
+        name: bulkReview
+        assert: { count: { edge: HAS_LINE, max: 20 } }
+        severity: warning
+        message: orders with more than 20 lines are reviewed by hand
+
+  OrderLine:
+    id: n_line
+    key: [id]
+    props:
+      id:             { id: p_line_id, type: string, required: true }
+      quantity:       { id: p_line_qty, type: int, required: true, min: 1, max: 99 }
+      unitPriceCents: { id: p_line_price, type: int, required: true, min: 0 }
+
+  Payment:
+    id: n_payment
+    key: [id]
+    mixins: [Timestamped]
+    props:
+      id:            { id: p_pay_id, type: string, required: true }
+      amountCents:   { id: p_pay_amount, type: int, required: true, min: 1 }
+      currency:      { id: p_pay_cur, type: string, required: true, pattern: "^[A-Z]{3}$" }
+      rail:          { id: p_pay_rail, type: string, required: true, enum: PaymentRail }
+      cardToken:     { id: p_pay_card, type: string, pattern: "^tok_[A-Za-z0-9]{12,}$" }
+      walletAddress: { id: p_pay_wallet, type: string, minLength: 26, maxLength: 64 }
+    constraints:
+      - id: c_instrument
+        name: oneInstrument
+        assert: { exactlyOne: [cardToken, walletAddress] }
+        message: a payment is charged to exactly one instrument
+
+edges:
+  # An agent works for exactly one customer.
+  ACTS_FOR:
+    id: e_acts_for
+    from: ShoppingAgent
+    to: Customer
+    cardinality: { to: "1" }
+
+  ISSUED_BY:
+    id: e_issued_by
+    from: Mandate
+    to: Customer
+    cardinality: { to: "1" }
+
+  # A mandate names one agent; an agent may hold several.
+  GRANTED_TO:
+    id: e_granted_to
+    from: Mandate
+    to: ShoppingAgent
+    cardinality: { to: "1" }
+
+  PLACED_BY:
+    id: e_placed_by
+    from: Order
+    to: ShoppingAgent
+    cardinality: { to: "1" }
+
+  # No order without the mandate that authorised it.
+  AUTHORIZED_BY:
+    id: e_authorized_by
+    from: Order
+    to: Mandate
+    cardinality: { to: "1" }
+
+  # Any actor may approve; humanApproval on Order says which approval counts.
+  APPROVED_BY:
+    id: e_approved_by
+    from: Order
+    to: Actor
+
+  SOLD_BY:
+    id: e_sold_by
+    from: Order
+    to: Merchant
+    cardinality: { to: "1" }
+
+  # An order has at least one line, and a line belongs to exactly one order.
+  HAS_LINE:
+    id: e_has_line
+    from: Order
+    to: OrderLine
+    cardinality: { from: "1", to: "1..*" }
+
+  FOR_PRODUCT:
+    id: e_for_product
+    from: OrderLine
+    to: Product
+    cardinality: { to: "1" }
+
+  OFFERED_BY:
+    id: e_offered_by
+    from: Product
+    to: Merchant
+    cardinality: { to: "1" }
+
+  # A payment settles exactly one order; an order may be paid in instalments.
+  SETTLES:
+    id: e_settles
+    from: Payment
+    to: Order
+    cardinality: { to: "1" }

@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1040 440" width="1040" height="440" font-family="ui-sans-serif, -apple-system, Segoe UI, Inter, Helvetica, Arial, sans-serif" role="img" aria-label="Which layer holds which rule: FalkorDB enforces required properties and uniqueness at write time and rejected two bad writes in the run; shacl2cypher checks datatypes, patterns, ranges, enums, cardinality, closed types and named constraints after the write and found all fourteen planted problems as fifteen failed rules.">
+  <rect width="1040" height="440" rx="14" fill="#fcfbf9"/>
+
+  <text x="40" y="46" font-size="19" font-weight="700" fill="#101318">Which layer holds which rule</text>
+  <text x="40" y="70" font-size="13.5" fill="#5b6472">Both come from the same model. Together they cover every rule it declares, and the run below shows each layer doing its part.</text>
+
+  <!-- left: database -->
+  <rect x="40" y="96" width="470" height="236" rx="12" fill="#ffffff" stroke="#c9d6f5"/>
+  <rect x="40" y="96" width="470" height="44" rx="12" fill="#eef2fb"/>
+  <rect x="40" y="128" width="470" height="12" fill="#eef2fb"/>
+  <text x="60" y="124" font-size="14" font-weight="700" fill="#2f5fe0">FalkorDB — at write time</text>
+  <text x="490" y="124" font-size="11.5" fill="#5b6472" text-anchor="end">45 constraints · 10 indexes</text>
+
+  <g font-size="12.5" fill="#101318">
+    <circle cx="66" cy="168" r="3" fill="#2f5fe0"/>
+    <text x="78" y="172"><tspan font-weight="600">required</tspan> property → <tspan font-family="ui-monospace, Menlo, monospace" font-size="11.5">MANDATORY</tspan> <tspan fill="#5b6472">(35)</tspan></text>
+    <circle cx="66" cy="196" r="3" fill="#2f5fe0"/>
+    <text x="78" y="200"><tspan font-weight="600">key</tspan> and <tspan font-weight="600">unique</tspan> → <tspan font-family="ui-monospace, Menlo, monospace" font-size="11.5">UNIQUE</tspan> + index <tspan fill="#5b6472">(10)</tspan></text>
+    <text x="78" y="224" font-size="11.5" fill="#5b6472">Uniqueness lives here alone: core SHACL cannot express it.</text>
+  </g>
+
+  <rect x="60" y="250" width="430" height="64" rx="9" fill="#f7f9fe" stroke="#dfe2e7"/>
+  <text x="76" y="272" font-size="11" font-weight="700" fill="#5b6472" letter-spacing="0.6">IN THE RUN — REFUSED</text>
+  <text x="76" y="292" font-family="ui-monospace, Menlo, monospace" font-size="11" fill="#101318">missing property status</text>
+  <text x="76" y="307" font-family="ui-monospace, Menlo, monospace" font-size="11" fill="#101318">unique constraint violation · Product</text>
+
+  <!-- right: validation -->
+  <rect x="530" y="96" width="470" height="236" rx="12" fill="#ffffff" stroke="#dccdf6"/>
+  <rect x="530" y="96" width="470" height="44" rx="12" fill="#f4effc"/>
+  <rect x="530" y="128" width="470" height="12" fill="#f4effc"/>
+  <text x="550" y="124" font-size="14" font-weight="700" fill="#7a4de0">shacl2cypher — after write</text>
+  <text x="980" y="124" font-size="11.5" fill="#5b6472" text-anchor="end">196 rules · read-only</text>
+
+  <g font-size="12.5" fill="#101318">
+    <circle cx="556" cy="168" r="3" fill="#7a4de0"/>
+    <text x="568" y="172"><tspan font-weight="600">values</tspan> — datatype, pattern, range, length, enum</text>
+    <circle cx="556" cy="196" r="3" fill="#7a4de0"/>
+    <text x="568" y="200"><tspan font-weight="600">structure</tspan> — edge cardinality, closed types</text>
+    <circle cx="556" cy="224" r="3" fill="#7a4de0"/>
+    <text x="568" y="228"><tspan font-weight="600">business rules</tspan> — comparisons, choices, qualified counts</text>
+  </g>
+
+  <rect x="550" y="250" width="430" height="64" rx="9" fill="#faf7fe" stroke="#dfe2e7"/>
+  <text x="566" y="272" font-size="11" font-weight="700" fill="#5b6472" letter-spacing="0.6">IN THE RUN — REPORTED</text>
+  <text x="566" y="292" font-size="12" fill="#101318"><tspan font-weight="700">14</tspan> planted problems → <tspan font-weight="700">15</tspan> failed rules</text>
+  <text x="566" y="307" font-size="11" fill="#5b6472">2 of them warnings · no false positives with the schema snapshot</text>
+
+  <!-- bottom -->
+  <rect x="40" y="352" width="960" height="62" rx="9" fill="#fdf6ec" stroke="#eccfa4"/>
+  <text x="60" y="376" font-size="12.5" font-weight="700" fill="#8a5a13">Detection is not prevention</text>
+  <text x="60" y="396" font-size="11.5" fill="#7a6547">Only presence and uniqueness are refused at the door. Run validation before an agent acts on what it wrote, or as a gate in CI.</text>
+</svg>

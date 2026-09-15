@@ -1,0 +1,347 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>An agent will write anything your graph accepts. Make the rules the schema. — LPG Modeler</title>
+<meta name="description" content="A shopping agent buys on a customer's behalf. One model file gives FalkorDB a strict schema that rejects bad writes at the door, and — through SHACL and shacl2cypher — 196 read-only Cypher checks for the business rules no database constraint can hold. Nothing is written by hand except the model.">
+<meta property="og:title" content="An agent will write anything your graph accepts. Make the rules the schema.">
+<meta property="og:description" content="A shopping agent buys on a customer's behalf. One model file gives FalkorDB a strict schema that rejects bad writes at the door, and — through SHACL and shacl2cypher — 196 read-only Cypher checks for the business rules no database constraint can hold. Nothing is written by hand except the model.">
+<meta property="og:type" content="article">
+<meta property="og:image" content="https://www.lpg-modeler.com/assets/diagrams/two-layers.png">
+<link rel="icon" href="../assets/icon.png">
+<link rel="stylesheet" href="../assets/fonts.css">
+<link rel="stylesheet" href="../assets/site.css">
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="../index.html"><img src="../assets/icon.png" alt=""> LPG Modeler</a>
+    <nav class="links">
+      <a href="../index.html">Overview</a>
+      <a href="../getting-started.html">Getting started</a>
+      <a href="../examples.html">Examples</a>
+      <a href="../model-format.html">Model format</a>
+      <a href="../targets.html">Targets</a>
+      <a href="../cli.html">CLI</a>
+      <a href="../architecture.html">Architecture</a>
+      <a href="../blog/index.html" aria-current="page">Blog</a>
+      <a href="https://github.com/Volland/lpg-modeler">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+
+<div class="wrap post-head">
+  <a class="back" href="index.html">← Blog</a>
+  <h1>An agent will write anything your graph accepts. Make the rules the schema.</h1>
+  <p class="lede">A shopping agent buys on a customer's behalf. One model file gives FalkorDB a strict schema that rejects bad writes at the door, and — through SHACL and shacl2cypher — 196 read-only Cypher checks for the business rules no database constraint can hold. Nothing is written by hand except the model.</p>
+  <p class="post-meta"><time datetime="2026-09-15">15 September 2026</time> · 20 min read</p>
+</div>
+
+<hr class="rule">
+
+<div class="wrap">
+  <article class="post">
+<p>An AI agent that places orders is a new kind of writer for your database. It is fast, tireless, and confidently wrong in ways a form with dropdowns never was. It will set <code>autonomy: &quot;yolo&quot;</code> because nothing said it could not. It will store a price as the string <code>&quot;4500&quot;</code>. It will approve its own purchase.</p>
+<p>A schema-optional graph database accepts all of it. FalkorDB is schema-optional by design, and so is every other property graph that lets you start without a migration. That is the right default for exploring a domain. It is the wrong default for a system where software is spending a customer's money.</p>
+<p>The usual fix is validation code: a service layer that checks every write, a nightly job that looks for orphaned orders, a test suite that encodes the business rules for the third time. That code drifts from the data model the day after it is written, and nobody can read it as a statement of what the business actually requires.</p>
+<p><strong>This article takes the other route.</strong> The rules are declared once, in a model file. Two tools compile that file into two validation layers for FalkorDB. You write no validation code — no Cypher, no service-layer checks, no SHACL by hand.</p>
+<p><em>(Everything below was run against FalkorDB 4.20.4 with LPG Modeler 0.11.0 and shacl2cypher 0.3.0, and every output block is pasted from that run.)</em></p>
+<hr>
+<h2 id="two-layers-one-source">Two layers, one source<a class="anchor" href="#two-layers-one-source" aria-label="Link to this section">#</a></h2>
+<p>A database constraint and a business rule are different things, and they belong in different places.</p>
+<p><strong>A database constraint is enforced at write time.</strong> A write that breaks it is refused, so bad data never lands. The price is that a database can enforce only what its engine knows how to check. FalkorDB can require a property to exist (<code>MANDATORY</code>) and a value to be unique (<code>UNIQUE</code>), and that is all.</p>
+<p><strong>A business rule is checked after the fact.</strong> &quot;An order an agent placed needs a customer's approval&quot; is not something any property graph engine enforces. What you can do is find every order that breaks it, name the rule, and fail a pipeline.</p>
+<p>One model file produces both:</p>
+<figure><img src="../assets/diagrams/two-layers.png" alt=""><figcaption>One model, two validation layers. lpg emit writes a FalkorDB constraint script, which makes the database refuse a bad write, and SHACL shapes, which shacl2cypher compiles into read-only queries that run against the same graph and report every broken rule.</figcaption></figure>
+<p><a href="https://github.com/Volland/lpg-modeler" rel="noopener">LPG Modeler</a> turns the model into the database's own constraint script and into W3C SHACL shapes. <a href="https://github.com/Volland/shacl2cypher" rel="noopener">shacl2cypher</a> compiles those shapes into named Cypher queries, runs them against FalkorDB through read-only <code>GRAPH.RO_QUERY</code>, and reports every violation with the rule that failed and the node that failed it.</p>
+<p>The split is not arbitrary, and neither tool decides it silently. When LPG Modeler generates the FalkorDB script, it reports every rule FalkorDB cannot hold and points at the SHACL artifact that does. Nothing the model says is dropped without a line in the output saying where it went.</p>
+<hr>
+<h2 id="the-domain-agentic-commerce">The domain: agentic commerce<a class="anchor" href="#the-domain-agentic-commerce" aria-label="Link to this section">#</a></h2>
+<p>The model is <a href="models/agent-commerce.lpg.yaml"><code>agent-commerce.lpg.yaml</code></a> — download it and follow along. It is 244 lines: 9 node types, 11 edge types, 1 mixin, 4 enums and 6 named constraints.</p>
+<p><strong>Actors.</strong> <code>Customer</code>, <code>ShoppingAgent</code> and <code>Merchant</code> all extend an abstract <code>Actor</code>, which carries the <code>id</code> key and a display name. Approval is declared once, as an edge to <code>Actor</code>, because in principle anyone may approve. A rule further down says whose approval actually counts.</p>
+<p><strong>Authority.</strong> A <code>Mandate</code> is issued by one customer to one agent. It caps the spend in cents, names a currency, and has a validity window. An agent without a mandate has no business placing an order.</p>
+<p><strong>Commerce.</strong> An <code>Order</code> is placed by an agent, authorised by a mandate, sold by a merchant, and has one or more <code>OrderLine</code>s, each for a <code>Product</code>. A <code>Payment</code> settles an order.</p>
+<figure><img src="../assets/diagrams/agent-commerce.png" alt=""><figcaption>The agentic-commerce model. The dashed frame is the abstract Actor; edges carry their cardinality at the target end. Purple marks a named constraint, which only SHACL can hold, and amber a rule reported at warning severity.</figcaption></figure>
+<p>Two conventions keep the graph and the shapes lined up without any mapping annotations. <strong>Every type is keyed by <code>id</code></strong>, so shacl2cypher can identify any failing node with a single <code>--node-key id</code>. <strong>No edge carries properties</strong>, so every relation stays a plain relationship on both sides. An edge with properties becomes a class of its own in SHACL, and that shape would then no longer match the relationship in FalkorDB.</p>
+<p>Here is <code>Order</code>, with its rules:</p>
+<pre><code>  Order:
+    id: n_order
+    key: [id]
+    props:
+      id:         { id: p_order_id, type: string, required: true }
+      status:     { id: p_order_status, type: string, required: true, enum: OrderStatus }
+      totalCents: { id: p_order_total, type: int, required: true, min: 0 }
+      currency:   { id: p_order_cur, type: string, required: true, pattern: &quot;^[A-Z]{3}$&quot; }
+      placedAt:   { id: p_order_placed, type: datetime, required: true }
+      updatedAt:  { id: p_order_updated, type: datetime }
+    constraints:
+      - id: c_chrono
+        name: chronology
+        assert: { lessThanOrEquals: [placedAt, updatedAt] }
+        message: an order cannot be updated before it was placed
+<span class="c-com">      # The business rule the whole model exists for: an agent may place an order,</span>
+<span class="c-com">      # but a human customer has to have approved it.</span>
+      - id: c_human
+        name: humanApproval
+        assert: { count: { edge: APPROVED_BY, of: Customer, min: 1 } }
+        message: an agent-placed order needs a customer's approval
+      - id: c_bulk
+        name: bulkReview
+        assert: { count: { edge: HAS_LINE, max: 20 } }
+        severity: warning
+        message: orders with more than 20 lines are reviewed by hand</code></pre>
+<hr>
+<h2 id="what-the-model-declares">What the model declares<a class="anchor" href="#what-the-model-declares" aria-label="Link to this section">#</a></h2>
+<p>The rules fall into four groups. Each group maps onto the two layers differently, and that mapping is the argument of this article.</p>
+<p><strong>Identity and presence.</strong> <code>key: [id]</code>, <code>required: true</code>, <code>unique: true</code>. FalkorDB enforces these at write time. SHACL states them again as <code>sh:minCount 1</code>, so the validation report covers them as well. Uniqueness is the one rule that goes to the database alone, because core SHACL cannot express uniqueness across instances.</p>
+<p><strong>Values.</strong> <code>pattern</code> for a currency code, a SKU, a VAT number and a semantic version; <code>min</code> and <code>max</code> for quantities and amounts; <code>minLength</code> and <code>maxLength</code> for titles; <code>enum</code> for order status, mandate status, payment rail and agent autonomy; and a datatype on every property, so <code>&quot;4500&quot;</code> is not an integer. FalkorDB has no constraint for any of these, so they go to SHACL.</p>
+<p><strong>Structure.</strong> Edge cardinality — an order has exactly one mandate and at least one line, and a line belongs to exactly one order. Closed types — an order carries the properties it declares and no others. FalkorDB has no multiplicity constraint and cannot close a label, so these go to SHACL too. shacl2cypher's <code>sh:closed</code> goes further than an RDF engine would and also rejects outgoing relationship types the shape does not declare.</p>
+<p><strong>Business rules.</strong> Six named constraints, drawn from a closed vocabulary rather than an expression language:</p>
+<ul>
+<li><strong><code>chronology</code></strong> — on an order, <code>placedAt ≤ updatedAt</code>.</li>
+<li><strong><code>window</code></strong> — on a mandate, <code>validFrom &lt; validUntil</code>.</li>
+<li><strong><code>humanApproval</code></strong> — at least one <code>APPROVED_BY</code> edge to a <code>Customer</code>, not merely to any <code>Actor</code>.</li>
+<li><strong><code>oneInstrument</code></strong> — a payment has exactly one of <code>cardToken</code> and <code>walletAddress</code>.</li>
+<li><strong><code>reachable</code></strong> — a customer has at least one of <code>email</code> and <code>phone</code>. This one is <code>severity: warning</code>.</li>
+<li><strong><code>bulkReview</code></strong> — at most 20 lines per order, also a warning: a large order is not wrong, but somebody should look at it.</li>
+</ul>
+<p>Severity is part of the model. SHACL carries it as <code>sh:severity</code>, and shacl2cypher reports warnings separately from violations, so a pipeline can fail on the second and only log the first.</p>
+<hr>
+<h2 id="install-the-tools">Install the tools<a class="anchor" href="#install-the-tools" aria-label="Link to this section">#</a></h2>
+<p>You need four things: LPG Modeler to write the model and generate from it, FalkorDB, a <code>redis-cli</code> to talk to FalkorDB, and shacl2cypher. Only the last one has anything to compile.</p>
+<p><strong>LPG Modeler, the editor.</strong> The VS Code extension gives you completion and validation as you type, and a canvas that draws the model beside the file:</p>
+<pre><code>code --install-extension pavlyshyn.lpg-modeler</code></pre>
+<p>Open <code>agent-commerce.lpg.yaml</code> and run <strong>LPG: Open Canvas</strong> from the command palette. The inspector beside the canvas lists each type's constraints, and its constraint form includes the severity picker.</p>
+<p><strong>LPG Modeler, the CLI.</strong> The same parser and generators, for scripts and CI. It needs Node.js 18 or later. <code>npx</code> runs it without a global install, and a global install gives you the <code>lpg</code> command. Use 0.11.0 or later, because <code>severity</code> is new in 0.11:</p>
+<pre><code>npx lpg-modeler-cli@latest check agent-commerce.lpg.yaml   # or: npm install -g lpg-modeler-cli &amp;&amp; lpg check …</code></pre>
+<p><strong>FalkorDB.</strong> Run it in a container, pinned to the version this article was tested against. The container ships <code>redis-cli</code>, so there is nothing else to install:</p>
+<pre><code>docker run -d --name falkordb -p 6379:6379 falkordb/falkordb:v4.20.4
+docker exec falkordb redis-cli PING     # PONG</code></pre>
+<p>Podman works the same way — the run for this article used <code>podman run</code> and <code>podman exec</code> with identical arguments.</p>
+<p><strong>shacl2cypher.</strong> Each GitHub release has prebuilt binaries for Linux x86_64, Linux arm64 and macOS arm64, and all three database backends are compiled in. On an Apple Silicon Mac:</p>
+<pre><code>V=v0.3.0; T=shacl2cypher-$V-aarch64-apple-darwin
+curl -LO https://github.com/Volland/shacl2cypher/releases/download/$V/$T.tar.gz
+curl -LO https://github.com/Volland/shacl2cypher/releases/download/$V/$T.tar.gz.sha256
+shasum -a 256 -c $T.tar.gz.sha256
+tar xzf $T.tar.gz &amp;&amp; sudo mv $T/shacl2cypher /usr/local/bin/
+shacl2cypher --version    # shacl2cypher 0.3.0</code></pre>
+<p>With a Rust toolchain (1.87 or later) you can build it instead. The FalkorDB backend is an opt-in cargo feature:</p>
+<pre><code>cargo install --locked shacl2cypher --features falkordb</code></pre>
+<p>The <code>shacl2cypher</code> packages on npm and PyPI can compile for FalkorDB, but they cannot open a FalkorDB connection yet. For this walkthrough, use the binary.</p>
+<hr>
+<h2 id="step-1-check-the-model-and-generate-both-artifacts">Step 1 — check the model and generate both artifacts<a class="anchor" href="#step-1-check-the-model-and-generate-both-artifacts" aria-label="Link to this section">#</a></h2>
+<pre><code>npx lpg-modeler-cli check agent-commerce.lpg.yaml
+npx lpg-modeler-cli emit  agent-commerce.lpg.yaml --target falkordb --target shacl --out schema</code></pre>
+<p>The check is clean:</p>
+<pre><code>0 error(s), 0 warning(s)</code></pre>
+<p><code>emit</code> writes <code>schema/agent-commerce.falkordb.sh</code> and <code>schema/agent-commerce.shacl.ttl</code>. It also prints 44 downgrade diagnostics, and they are worth reading rather than skipping. Ten are warnings: FalkorDB cannot hold an edge's cardinality. Thirty-two are notes: FalkorDB cannot hold a value bound or a named constraint. Two of them, with the absolute path trimmed from the front of each line:</p>
+<pre><code>agent-commerce.lpg.yaml:202:3 warning [falkordb] downgrade-cardinality: Edge type 'AUTHORIZED_BY' declares *-to-1 cardinality, which FalkorDB has no constraint for: multiplicity is not part of its schema facility.
+agent-commerce.lpg.yaml:139:9 info [falkordb] downgrade-named-constraint: Constraint 'Order.humanApproval' asserts 'count', which falkordb cannot express. The SHACL artifact carries it.</code></pre>
+<p>The last two warnings come from the SHACL side: the two <code>unique</code> properties, <code>email</code> and <code>sku</code>, which core SHACL cannot check. The FalkorDB script enforces both. Between them, the two artifacts cover every rule in the model.</p>
+<p>Here is <code>humanApproval</code> in the generated SHACL. The rule is a qualified count: of all the <code>approvedBy</code> values, at least one must be a <code>Customer</code>.</p>
+<pre><code>shop:Order_humanApprovalShape a sh:NodeShape ;
+  sh:targetClass shop:Order ;
+  sh:property [
+    sh:path shop:approvedBy ;
+    sh:qualifiedValueShape [ sh:class shop:Customer ] ;
+    sh:qualifiedMinCount 1 ;
+    sh:message &quot;an agent-placed order needs a customer's approval&quot; ;
+  ] .
+
+shop:Order_bulkReviewShape a sh:NodeShape ;
+  sh:targetClass shop:Order ;
+  sh:property [
+    sh:path shop:hasLine ;
+    sh:maxCount 20 ;
+    sh:severity sh:Warning ;
+    sh:message &quot;orders with more than 20 lines are reviewed by hand&quot; ;
+  ] .</code></pre>
+<hr>
+<h2 id="step-2-apply-the-strict-schema">Step 2 — apply the strict schema<a class="anchor" href="#step-2-apply-the-strict-schema" aria-label="Link to this section">#</a></h2>
+<p>The FalkorDB artifact is a shell script, not a <code>.cypher</code> file. FalkorDB creates an index through a Cypher query and a constraint through a separate Redis command, <code>GRAPH.CONSTRAINT CREATE</code>, and no single client sends both. Here is the <code>Order</code> section:</p>
+<pre><code><span class="c-com"># Order</span>
+$REDIS_CLI GRAPH.QUERY &quot;$GRAPH_KEY&quot; &quot;CREATE INDEX FOR (n:Order) ON (n.id)&quot;
+$REDIS_CLI GRAPH.CONSTRAINT CREATE &quot;$GRAPH_KEY&quot; UNIQUE NODE Order PROPERTIES 1 id
+$REDIS_CLI GRAPH.CONSTRAINT CREATE &quot;$GRAPH_KEY&quot; MANDATORY NODE Order PROPERTIES 1 id
+$REDIS_CLI GRAPH.CONSTRAINT CREATE &quot;$GRAPH_KEY&quot; MANDATORY NODE Order PROPERTIES 1 status
+$REDIS_CLI GRAPH.CONSTRAINT CREATE &quot;$GRAPH_KEY&quot; MANDATORY NODE Order PROPERTIES 1 totalCents
+$REDIS_CLI GRAPH.CONSTRAINT CREATE &quot;$GRAPH_KEY&quot; MANDATORY NODE Order PROPERTIES 1 currency
+$REDIS_CLI GRAPH.CONSTRAINT CREATE &quot;$GRAPH_KEY&quot; MANDATORY NODE Order PROPERTIES 1 placedAt</code></pre>
+<p>Anything FalkorDB cannot hold is written into the script as a comment, so an operator reading it sees the same gaps the modeller saw:</p>
+<pre><code><span class="c-com"># (:Order)-[:AUTHORIZED_BY]-&gt;(:Mandate)</span>
+<span class="c-warn"># UNENFORCED: *-to-1 in the model; FalkorDB has no multiplicity constraint.</span></code></pre>
+<p>Point the script at the container and a graph named <code>commerce</code>:</p>
+<pre><code>REDIS_CLI=&quot;docker exec -i falkordb redis-cli&quot; GRAPH_KEY=commerce sh schema/agent-commerce.falkordb.sh</code></pre>
+<p>It creates 10 indexes and 45 constraints: 10 <code>UNIQUE</code> and 35 <code>MANDATORY</code>. Each constraint comes back <code>PENDING</code>, because FalkorDB applies constraints asynchronously. Check that they all took, rather than assuming it:</p>
+<pre><code>docker exec falkordb redis-cli GRAPH.QUERY commerce \
+  &quot;CALL db.constraints() YIELD status RETURN status, count(*)&quot;</code></pre>
+<pre><code>status
+count(*)
+OPERATIONAL
+45
+Cached execution: 0
+Query internal execution time: 0.307462 milliseconds</code></pre>
+<p>Now the database refuses bad writes. Here is an order with no status:</p>
+<pre><code>docker exec falkordb redis-cli GRAPH.QUERY commerce \
+  &quot;CREATE (:Order {id: 'ord_bad', currency: 'EUR', totalCents: 100, placedAt: localdatetime('2026-09-14T09:00:00')})&quot;</code></pre>
+<pre><code>mandatory constraint violation: node with label Order missing property status</code></pre>
+<p>And two products with the same SKU:</p>
+<pre><code>unique constraint violation on node of type Product</code></pre>
+<p>This layer costs nothing at runtime and has no gaps within its scope. But its scope is small. It stops an agent from forgetting a field. It does not stop an agent from filling that field with nonsense.</p>
+<hr>
+<h2 id="step-3-load-a-graph-an-agent-got-wrong">Step 3 — load a graph an agent got wrong<a class="anchor" href="#step-3-load-a-graph-an-agent-got-wrong" aria-label="Link to this section">#</a></h2>
+<p><a href="https://github.com/Volland/lpg-modeler/blob/main/article/agent-commerce.seed.cypher" rel="noopener"><code>agent-commerce.seed.cypher</code></a> builds a small shop: two customers, two agents, a merchant, two mandates, two products, three orders with their lines, and two payments. One order is correct from end to end. Everything else has a problem planted in it, and every write passes the strict schema, because every required property is present and every key is unique:</p>
+<pre><code>docker exec -i falkordb redis-cli GRAPH.QUERY commerce &quot;$(cat agent-commerce.seed.cypher)&quot;</code></pre>
+<pre><code>Labels added: 22
+Nodes created: 17
+Properties set: 82
+Relationships created: 26
+Cached execution: 0
+Query internal execution time: 1.502726 milliseconds</code></pre>
+<p>Fourteen problems were planted:</p>
+<ul>
+<li>A customer with neither email nor phone.</li>
+<li>A rogue agent whose version is <code>&quot;latest&quot;</code>, whose autonomy is <code>&quot;yolo&quot;</code>, and which acts for no one.</li>
+<li>A mandate that expires before it starts.</li>
+<li>A product whose SKU is <code>&quot;camp stove&quot;</code>.</li>
+<li>An order with status <code>&quot;shipped_maybe&quot;</code>, a line with quantity <code>0</code>, and approval from the agent that placed it.</li>
+<li>An order with a total of <code>&quot;4500&quot;</code> as a string, an <code>updatedAt</code> earlier than its <code>placedAt</code>, an undeclared <code>discountOverride</code> property, and no mandate at all.</li>
+<li>A payment charged to a card <em>and</em> a wallet.</li>
+</ul>
+<p>FalkorDB accepted every one of them.</p>
+<hr>
+<h2 id="step-4-compile-the-shapes-to-cypher">Step 4 — compile the shapes to Cypher<a class="anchor" href="#step-4-compile-the-shapes-to-cypher" aria-label="Link to this section">#</a></h2>
+<p>shacl2cypher resolves SHACL onto a property graph by convention first, then by evidence from a schema snapshot. Labels come from class names, properties from predicate names, and relationship types from the predicate in upper snake case (<code>shop:placedBy</code> becomes <code>PLACED_BY</code>). LPG Modeler's generated SHACL follows the same conventions, so no mapping file sits between the two tools.</p>
+<p>The conventions have one blind spot, and it matters here. A path counts as a relationship when its shape says so, for example with <code>sh:class</code>, or when a schema snapshot declares the relationship type. The type shapes LPG Modeler emits carry <code>sh:class</code> on every relation. The two count constraints do not: <code>humanApproval</code> and <code>bulkReview</code> have only a path and a count. Without a snapshot, shacl2cypher reads <code>approvedBy</code> as a <em>property</em> of the order, finds none, and flags every order, including the correct one. So take a snapshot of the live graph first. It is one command:</p>
+<pre><code>shacl2cypher schema dump --falkordb redis://localhost:6379 --graph commerce -o schema.json</code></pre>
+<p>Compiling on its own is useful too, because it shows exactly what will run:</p>
+<pre><code>shacl2cypher compile schema/agent-commerce.shacl.ttl --dialect falkordb \
+  --schema schema.json --node-key id --neo4j-labels inherited -o out</code></pre>
+<pre><code>compiled 196 rules (196 with queries, 1 static diagnostics) for falkordb into out
+warning: schema/agent-commerce.shacl.ttl:25: s2c:SchemaMismatch: property `phone` is not declared on label `Customer`</code></pre>
+<p>196 rules: 194 at <code>Violation</code> severity and 2 at <code>Warning</code>, the ones the model marked. They are written as 392 named queries — a detail query and a summary query per rule — in 3,743 lines of Cypher that nobody wrote. The one static diagnostic is explained under step 5.</p>
+<p>With the snapshot, <code>humanApproval</code> compiles to a real traversal. It follows <code>APPROVED_BY</code> and counts only the targets that carry the <code>:Customer</code> label:</p>
+<pre><code><span class="c-com">// name: Order_humanApprovalShape.approvedBy.qualifiedMinCount</span>
+<span class="c-com">// ruleId: shop:Order_humanApprovalShape/shop:approvedBy/sh:qualifiedMinCount</span>
+MATCH (v0:`Order`)
+CALL { WITH v0 OPTIONAL MATCH (v0)-[x2:`APPROVED_BY`]-&gt;(x1) WHERE id(x2) &gt;= 0 RETURN count(DISTINCT CASE WHEN x1 IS NOT NULL AND (x1:`Customer`) THEN x1 END) &gt;= 1 AS c3 }
+WITH v0, c3
+WHERE NOT (c3)
+``` `--neo4j-labels inherited` tells the queries that a node carries its supertype's label, as LPG Modeler's FalkorDB script arranges: a `Customer` node is also an `:Actor`. Here is the generated query for &quot;an order has at least one line&quot;:
+
+```cypher
+<span class="c-com">// name: OrderShape.hasLine.minCount</span>
+<span class="c-com">// ruleId: shop:OrderShape/shop:hasLine/sh:minCount</span>
+MATCH (v0:`Order`)
+CALL { WITH v0 OPTIONAL MATCH (v0)-[x2:`HAS_LINE`]-&gt;(x1) WHERE id(x2) &gt;= 0 RETURN count(DISTINCT x1) &gt;= 1 AS c3 }
+WITH v0, c3
+WHERE NOT (c3)
+RETURN 'OrderShape.hasLine.minCount' AS ruleId, 'shop:OrderShape' AS shape, 'shop:hasLine' AS path, 'sh:minCount' AS `constraint`, 'Violation' AS severity,
+       {label: head([l IN labels(v0) WHERE l IN ['Order']] + labels(v0)), key: 'id', keyValue: v0.`id`, elementId: toString(id(v0))} AS focus, null AS value, 'shop:OrderShape violates sh:minCount on shop:hasLine' AS message, [] AS details
+LIMIT $limit;</code></pre>
+<p>Every relationship traversal is a correlated <code>CALL</code> subquery, because FalkorDB 4.20 evaluates some simpler forms wrongly. Knowing that is shacl2cypher's job, not yours.</p>
+<p><code>manifest.json</code>, written beside the queries, records the compiler version, the SHA-256 of every input, and one entry per rule with its severity and the line in the shapes file it came from.</p>
+<hr>
+<h2 id="step-5-validate">Step 5 — validate<a class="anchor" href="#step-5-validate" aria-label="Link to this section">#</a></h2>
+<pre><code>shacl2cypher validate schema/agent-commerce.shacl.ttl \
+  --falkordb redis://localhost:6379 --graph commerce \
+  --node-key id --neo4j-labels inherited --schema schema.json</code></pre>
+<p>Here is the report, as printed. Rules that passed are left out:</p>
+<pre><code>warning: schema/agent-commerce.shacl.ttl:25: s2c:SchemaMismatch: property `phone` is not declared on label `Customer`
+STATUS      SEVERITY   VIOLATIONS  TIME(ms)  RULE
+failed      Warning             1        18  Customer_reachableShape.or
+            - Customer id=cust_bob7730: a customer the agent cannot reach cannot confirm a purchase (value: {&quot;elementId&quot;:&quot;1&quot;,&quot;keyValue&quot;:&quot;cust_bob7730&quot;,&quot;label&quot;:&quot;Customer&quot;})
+failed      Violation           1       184  Mandate_windowShape.validFrom.lessThan
+            - Mandate id=mand_002: a mandate must end after it starts
+failed      Violation           1         2  OrderLineShape.quantity.minInclusive
+            - OrderLine id=line_1002_1: shop:OrderLineShape violates sh:minInclusive on shop:quantity (value: 0)
+failed      Violation           1         3  OrderShape.closed
+            - Order id=ord_1003: shop:OrderShape violates sh:closed
+failed      Violation           1         2  OrderShape.authorizedBy.minCount
+            - Order id=ord_1003: shop:OrderShape violates sh:minCount on shop:authorizedBy
+failed      Violation           1         2  OrderShape.status.in
+            - Order id=ord_1002: shop:OrderShape violates sh:in on shop:status (value: &quot;shipped_maybe&quot;)
+failed      Violation           1         2  OrderShape.totalCents.datatype
+            - Order id=ord_1003: shop:OrderShape violates sh:datatype on shop:totalCents (value: &quot;4500&quot;)
+failed      Violation           1         1  OrderShape.totalCents.minInclusive
+            - Order id=ord_1003: shop:OrderShape violates sh:minInclusive on shop:totalCents (value: &quot;4500&quot;)
+failed      Violation           1       180  Order_chronologyShape.placedAt.lessThanOrEquals
+            - Order id=ord_1003: an order cannot be updated before it was placed
+failed      Violation           1         2  Order_humanApprovalShape.approvedBy.qualifiedMinCount
+            - Order id=ord_1002: an agent-placed order needs a customer's approval
+failed      Violation           1        26  Payment_oneInstrumentShape.xone
+            - Payment id=pay_2: a payment is charged to exactly one instrument (value: {&quot;elementId&quot;:&quot;16&quot;,&quot;keyValue&quot;:&quot;pay_2&quot;,&quot;label&quot;:&quot;Payment&quot;})
+failed      Violation           1         2  ProductShape.sku.pattern
+            - Product id=prod_stove: shop:ProductShape violates sh:pattern on shop:sku (value: &quot;camp stove&quot;)
+failed      Violation           1         2  ShoppingAgentShape.actsFor.minCount
+            - ShoppingAgent id=agent_rogue001: shop:ShoppingAgentShape violates sh:minCount on shop:actsFor
+failed      Violation           1         2  ShoppingAgentShape.autonomy.in
+            - ShoppingAgent id=agent_rogue001: shop:ShoppingAgentShape violates sh:in on shop:autonomy (value: &quot;yolo&quot;)
+failed      Violation           1         2  ShoppingAgentShape.version.pattern
+            - ShoppingAgent id=agent_rogue001: shop:ShoppingAgentShape violates sh:pattern on shop:version (value: &quot;latest&quot;)
+
+196 rules: 181 passed, 15 failed, 0 timed out, 0 errors, 0 skipped, 0 guaranteed by schema; 15 violations in 612 ms</code></pre>
+<p>All fourteen planted problems were found, and nothing else was flagged. They fail fifteen rules because the string <code>&quot;4500&quot;</code> breaks two: it is not an integer, and it is not a number at least 0. Every line names the rule, the node by its key, and — where the model wrote one — the human-readable message. The run exits with status 1 because violations were found.</p>
+<p><code>humanApproval</code> is the rule worth looking at. The correct order and the one without a mandate were both approved by Ana, a <code>Customer</code>, and both pass. <code>ord_1002</code> has an approval too, but from the agent that placed it, and the qualified count sees that the approving node is not a <code>Customer</code>. Without the snapshot, the same run reported this rule against all three orders.</p>
+<p>The single <code>SchemaMismatch</code> warning is also accurate. No customer in this graph has a phone number, so the snapshot has never seen <code>phone</code> on the <code>Customer</code> label. The rules that use <code>phone</code> still ran.</p>
+<hr>
+<h2 id="what-each-layer-caught">What each layer caught<a class="anchor" href="#what-each-layer-caught" aria-label="Link to this section">#</a></h2>
+<figure><img src="../assets/diagrams/rule-coverage.png" alt=""><figcaption>Which layer holds which rule. FalkorDB enforces required properties and uniqueness, and refused two bad writes in the run. shacl2cypher checks values, structure and business rules after the write, and reported all fourteen planted problems as fifteen failed rules.</figcaption></figure>
+<p><strong>At the door, FalkorDB refused</strong> the order with no status and the duplicate SKU. Those writes never happened, and nothing downstream has to deal with them.</p>
+<p><strong>In the graph, shacl2cypher found</strong> everything else: a value of the wrong type, a value outside its range, a value outside its enum, a malformed identifier, a missing relationship, an undeclared property, a date range that ends before it starts, an approval from the wrong kind of actor, and a payment with two instruments. None of these can be a FalkorDB constraint. All of them are in the model.</p>
+<p>Together, the two layers cover every rule the model declares. The emit output says which layer holds which rule, so the coverage can be checked rather than taken on trust.</p>
+<hr>
+<h2 id="put-it-in-ci">Put it in CI<a class="anchor" href="#put-it-in-ci" aria-label="Link to this section">#</a></h2>
+<p>Validation is read-only, so it is safe to run against production on a schedule, after every batch of agent writes, or in a pipeline before a release. Compile once and run the manifest:</p>
+<pre><code>shacl2cypher compile schema/agent-commerce.shacl.ttl --dialect falkordb \
+  --schema schema.json --node-key id --neo4j-labels inherited -o out
+
+shacl2cypher validate --manifest out/manifest.json \
+  --falkordb redis://localhost:6379 --graph commerce \
+  --format junit -o junit.xml --fail-on violation</code></pre>
+<p><code>--format sarif</code> points each violation at the line of the shapes file that declared the rule. <code>--fail-on warning</code> promotes <code>reachable</code> and <code>bulkReview</code> to failures. The exit code separates the cases a pipeline has to treat differently: <code>0</code> clean, <code>1</code> violations at or above the threshold, <code>2</code> a setup problem such as an unreachable database, <code>3</code> an incomplete run because a query timed out.</p>
+<hr>
+<h2 id="what-code-free-does-and-doesn-t-mean">What &quot;code-free&quot; does and doesn't mean<a class="anchor" href="#what-code-free-does-and-doesn-t-mean" aria-label="Link to this section">#</a></h2>
+<p>What was written: one 244-line YAML file.</p>
+<p>What was generated from it: 10 indexes and 45 constraints for FalkorDB, and 196 validation rules as 392 queries. Change the model, regenerate both artifacts, and both layers move together. There is no second place where a rule has to be edited.</p>
+<p>Three limits are worth stating plainly.</p>
+<p><strong>Validation is detection, not prevention.</strong> Only presence and uniqueness are refused at write time. Everything else is found after the write. For an agent that acts on the data it has just written, run validation before acting, or treat the report as a gate on the next step.</p>
+<p><strong>The vocabulary is closed on purpose, and some rules are outside it.</strong> &quot;An order's total does not exceed its mandate's cap&quot; and &quot;the mandate was active when the order was placed&quot; compare values across two nodes. No named-constraint kind expresses that today. shacl2cypher rejects SHACL-SPARQL, so raw SPARQL is not a way around it either. Those rules still need code, or a future vocabulary kind.</p>
+<p><strong>The snapshot is part of the setup.</strong> A count over an edge needs the schema snapshot to read its path as a relationship. It costs one command, but it has to be run against a graph that already contains the relationship types.</p>
+<hr>
+<h2 id="try-it">Try it<a class="anchor" href="#try-it" aria-label="Link to this section">#</a></h2>
+<p>Download <a href="models/agent-commerce.lpg.yaml"><code>agent-commerce.lpg.yaml</code></a> and <a href="https://github.com/Volland/lpg-modeler/blob/main/article/agent-commerce.seed.cypher" rel="noopener"><code>agent-commerce.seed.cypher</code></a>. Open the model in VS Code with the canvas beside it, then run the five steps above against a local FalkorDB. Then break something the seed does not break — add a line with a negative price, or revoke a mandate — and watch the report name it.</p>
+<p>LPG Modeler is at <a href="https://github.com/Volland/lpg-modeler" rel="noopener">github.com/Volland/lpg-modeler</a>, and shacl2cypher is at <a href="https://github.com/Volland/shacl2cypher" rel="noopener">github.com/Volland/shacl2cypher</a>. Both are MIT licensed.</p>
+<p>For why the model is shaped the way it is — frames and slots, facets, and why a mixin is not a supertype — <a href="frames-and-slots.html"><code>frames-and-slots.md</code></a> works through a trust ontology for the same agentic-commerce world.</p>
+  </article>
+
+  <p class="post-source">
+    This post is <a href="https://github.com/Volland/lpg-modeler/blob/main/article/rules-without-code.md" rel="noopener"><code>article/rules-without-code.md</code></a>
+    in the repository, so a correction to the tool and a correction to the post travel together.
+  </p>
+
+  <div class="next">
+    <a href="index.html"><div class="k">All posts</div><div class="v">Everything written about the tool, longest first.</div></a>
+    <a href="../getting-started.html"><div class="k">Getting started</div><div class="v">Install, write your first model, open the canvas, generate.</div></a>
+  </div>
+</div>
+
+</main>
+
+<footer class="site">
+  <div class="wrap">
+    <span>LPG Modeler — MIT licensed</span>
+    <span class="spacer"><a href="../impressum.html">Impressum</a></span>
+    <span><a href="../datenschutz.html">Datenschutz</a></span>
+    <span><a href="../agb.html">AGB</a></span>
+    <span><a href="https://github.com/Volland/lpg-modeler">Source</a></span>
+    <span><a href="https://github.com/Volland/lpg-modeler/issues">Issues</a></span>
+  </div>
+</footer>
+
+</body>
+</html>

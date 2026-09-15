@@ -11,6 +11,9 @@ published post and the tool it describes move together.
 | [`agent-trust.lpg.yaml`](agent-trust.lpg.yaml) | The model `frames-and-slots.md` is built around. Not one of the five checked-in examples — it lives here because the article is the only thing that reads it. |
 | [`concept-graphs.md`](concept-graphs.md) | Long-read on Sowa's conceptual graphs: the bipartite rule read as a decision procedure rather than a storage format, the type lattice against the data-level poset, and gradual reification — worked through catalog identity and substitution. |
 | [`assortment.lpg.yaml`](assortment.lpg.yaml) | The model `concept-graphs.md` is built around, on the same footing as `agent-trust.lpg.yaml`. |
+| [`rules-without-code.md`](rules-without-code.md) | Hands-on long-read: one model compiled into FalkorDB's own constraints (rejected at write) and, through SHACL and shacl2cypher, into read-only Cypher rules for the business constraints no database holds — worked through agentic commerce, with install and setup for all four tools. |
+| [`agent-commerce.lpg.yaml`](agent-commerce.lpg.yaml) | The model `rules-without-code.md` is built around, on the same footing as `agent-trust.lpg.yaml`. |
+| [`agent-commerce.seed.cypher`](agent-commerce.seed.cypher) | A graph for that model with fourteen planted problems, loaded in the article's step 3. Linked by absolute GitHub URL, because the blog generator copies only `.lpg.yaml` files to the site. |
 | [`posts.json`](posts.json) | Publication manifest for the site's blog: which files are published, under which slug, and on which date. A file reaches the site only by being named here. |
 
 A short-form companion compresses the long read rather than restating it loosely: every claim in it
@@ -51,10 +54,18 @@ do not resolve relative paths — substitute the absolute forms below, or upload
 | `../docs/assets/screenshots/mixin.png` | `https://raw.githubusercontent.com/Volland/lpg-modeler/main/docs/assets/screenshots/mixin.png` |
 | `../docs/assets/diagrams/capabilities.png` | `https://raw.githubusercontent.com/Volland/lpg-modeler/main/docs/assets/diagrams/capabilities.png` |
 | `../docs/assets/diagrams/reification.png` | `https://raw.githubusercontent.com/Volland/lpg-modeler/main/docs/assets/diagrams/reification.png` |
+| `../docs/assets/diagrams/two-layers.png` | `https://raw.githubusercontent.com/Volland/lpg-modeler/main/docs/assets/diagrams/two-layers.png` |
+| `../docs/assets/diagrams/agent-commerce.png` | `https://raw.githubusercontent.com/Volland/lpg-modeler/main/docs/assets/diagrams/agent-commerce.png` |
+| `../docs/assets/diagrams/rule-coverage.png` | `https://raw.githubusercontent.com/Volland/lpg-modeler/main/docs/assets/diagrams/rule-coverage.png` |
 
 `frames-and-slots.md` reuses `pipeline.png` and `inspector.png` from the same set and adds no
 images of its own, so it needs no upload folder. `concept-graphs.md` reuses `pipeline.png`,
 `canvas.png` and `reification.png` on the same terms.
+
+`rules-without-code.md` adds three diagrams of its own — `two-layers`, `agent-commerce` and
+`rule-coverage` — drawn in the same palette as the rest, SVG source beside a 1.5× PNG export, and
+has an upload set: `rules-without-code-images/01-two-layers.png`, `02-agent-commerce.png` and
+`03-rule-coverage.png`, in the order the post uses them.
 
 Images are referenced rather than copied, so there is one copy of each and an article cannot
 show a screenshot the site has already replaced. Every screenshot is a capture of the real

@@ -1,0 +1,100 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1040 600" width="1040" height="600" font-family="ui-sans-serif, -apple-system, Segoe UI, Inter, Helvetica, Arial, sans-serif" role="img" aria-label="The agentic-commerce model: Customer, ShoppingAgent and Merchant extend an abstract Actor; a Mandate is issued by a customer to an agent; an Order is placed by an agent, authorised by a mandate, sold by a merchant, approved by an actor, and has order lines for products; a Payment settles an order. Named constraints are marked on the types that declare them.">
+  <rect width="1040" height="600" rx="14" fill="#fcfbf9"/>
+  <defs>
+    <marker id="ae" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#c2761b"/>
+    </marker>
+  </defs>
+
+  <text x="40" y="46" font-size="19" font-weight="700" fill="#101318">The agentic-commerce model</text>
+  <text x="40" y="70" font-size="13.5" fill="#5b6472">9 node types, 11 edge types, 6 named constraints. Every type is keyed by id, and no edge carries properties.</text>
+
+  <!-- abstract Actor -->
+  <rect x="40" y="100" width="960" height="126" rx="12" fill="none" stroke="#2f5fe0" stroke-width="1.3" stroke-dasharray="6 5"/>
+  <rect x="54" y="90" width="262" height="20" fill="#fcfbf9"/>
+  <text x="60" y="105" font-size="12" font-weight="700" fill="#2f5fe0">Actor <tspan font-weight="400" fill="#5b6472">— abstract · key id · displayName</tspan></text>
+
+  <!-- edges (drawn first so boxes sit on top) -->
+  <g stroke="#c2761b" stroke-width="1.4" fill="none" marker-end="url(#ae)">
+    <path d="M430 150 H254"/>
+    <path d="M100 284 V210"/>
+    <path d="M250 296 L470 210"/>
+    <path d="M520 284 V210"/>
+    <path d="M600 284 V230"/>
+    <path d="M395 330 H254"/>
+    <path d="M645 340 H900 V210"/>
+    <path d="M960 446 V210"/>
+    <path d="M520 372 V442"/>
+    <path d="M610 490 H786"/>
+    <path d="M250 470 L470 376"/>
+  </g>
+  <g font-family="ui-monospace, Menlo, monospace" font-size="10.5" fill="#8a5a13">
+    <text x="342" y="142" text-anchor="middle">ACTS_FOR · 1</text>
+    <text x="108" y="256">ISSUED_BY · 1</text>
+    <text x="262" y="244">GRANTED_TO · 1</text>
+    <text x="512" y="256" text-anchor="end">PLACED_BY · 1</text>
+    <text x="608" y="256">APPROVED_BY → any Actor</text>
+    <text x="325" y="322" text-anchor="middle">AUTHORIZED_BY · 1</text>
+    <text x="780" y="332" text-anchor="middle">SOLD_BY · 1</text>
+    <text x="952" y="400" text-anchor="end">OFFERED_BY · 1</text>
+    <text x="528" y="412">HAS_LINE · 1..*</text>
+    <text x="698" y="482" text-anchor="middle">FOR_PRODUCT · 1</text>
+    <text x="300" y="472">SETTLES · 1</text>
+  </g>
+
+  <!-- node types -->
+  <g>
+    <!-- row 1 -->
+    <rect x="70" y="118" width="180" height="88" rx="9" fill="#ffffff" stroke="#2f5fe0" stroke-width="1.4"/>
+    <text x="84" y="140" font-size="13.5" font-weight="700" fill="#2f5fe0">Customer</text>
+    <text x="84" y="158" font-size="11" fill="#5b6472">email unique · patterns</text>
+    <text x="84" y="175" font-size="11" fill="#c2761b">reachable — warning</text>
+
+    <rect x="430" y="118" width="180" height="88" rx="9" fill="#ffffff" stroke="#2f5fe0" stroke-width="1.4"/>
+    <text x="444" y="140" font-size="13.5" font-weight="700" fill="#2f5fe0">ShoppingAgent</text>
+    <text x="444" y="158" font-size="11" fill="#5b6472">version pattern</text>
+    <text x="444" y="175" font-size="11" fill="#5b6472">autonomy enum</text>
+
+    <rect x="790" y="118" width="180" height="88" rx="9" fill="#ffffff" stroke="#2f5fe0" stroke-width="1.4"/>
+    <text x="804" y="140" font-size="13.5" font-weight="700" fill="#2f5fe0">Merchant</text>
+    <text x="804" y="158" font-size="11" fill="#5b6472">vatId required · pattern</text>
+
+    <!-- row 2 -->
+    <rect x="70" y="284" width="180" height="88" rx="9" fill="#ffffff" stroke="#2f5fe0" stroke-width="1.4"/>
+    <text x="84" y="306" font-size="13.5" font-weight="700" fill="#2f5fe0">Mandate</text>
+    <text x="84" y="324" font-size="11" fill="#5b6472">cap 1–500000 · status enum</text>
+    <text x="84" y="341" font-size="11" fill="#7a4de0">window: from &lt; until</text>
+
+    <rect x="395" y="284" width="250" height="88" rx="9" fill="#ffffff" stroke="#2f5fe0" stroke-width="1.8"/>
+    <text x="409" y="306" font-size="13.5" font-weight="700" fill="#2f5fe0">Order</text>
+    <text x="409" y="324" font-size="11" fill="#5b6472">status enum · total ≥ 0 · closed</text>
+    <text x="409" y="341" font-size="11" fill="#7a4de0">humanApproval · chronology</text>
+    <text x="409" y="358" font-size="11" fill="#c2761b">bulkReview — warning</text>
+
+    <!-- row 3 -->
+    <rect x="70" y="446" width="180" height="88" rx="9" fill="#ffffff" stroke="#2f5fe0" stroke-width="1.4"/>
+    <text x="84" y="468" font-size="13.5" font-weight="700" fill="#2f5fe0">Payment</text>
+    <text x="84" y="486" font-size="11" fill="#5b6472">rail enum · amount ≥ 1</text>
+    <text x="84" y="503" font-size="11" fill="#7a4de0">oneInstrument (xone)</text>
+
+    <rect x="430" y="446" width="180" height="88" rx="9" fill="#ffffff" stroke="#2f5fe0" stroke-width="1.4"/>
+    <text x="444" y="468" font-size="13.5" font-weight="700" fill="#2f5fe0">OrderLine</text>
+    <text x="444" y="486" font-size="11" fill="#5b6472">quantity 1–99</text>
+    <text x="444" y="503" font-size="11" fill="#5b6472">unit price ≥ 0</text>
+
+    <rect x="790" y="446" width="180" height="88" rx="9" fill="#ffffff" stroke="#2f5fe0" stroke-width="1.4"/>
+    <text x="804" y="468" font-size="13.5" font-weight="700" fill="#2f5fe0">Product</text>
+    <text x="804" y="486" font-size="11" fill="#5b6472">sku unique · pattern</text>
+    <text x="804" y="503" font-size="11" fill="#5b6472">title 3–200 chars</text>
+  </g>
+
+  <!-- legend -->
+  <g font-size="11.5">
+    <rect x="40" y="562" width="10" height="10" rx="2" fill="#7a4de0"/>
+    <text x="58" y="571" fill="#5b6472">named constraint — SHACL only</text>
+    <rect x="270" y="562" width="10" height="10" rx="2" fill="#c2761b"/>
+    <text x="288" y="571" fill="#5b6472">severity: warning</text>
+    <text x="440" y="571" font-family="ui-monospace, Menlo, monospace" font-size="10.5" fill="#8a5a13">· 1</text>
+    <text x="466" y="571" fill="#5b6472">cardinality at the target end</text>
+  </g>
+</svg>

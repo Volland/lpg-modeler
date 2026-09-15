@@ -1,0 +1,76 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1040 430" width="1040" height="430" font-family="ui-sans-serif, -apple-system, Segoe UI, Inter, Helvetica, Arial, sans-serif" role="img" aria-label="One model, two validation layers: the model generates a FalkorDB constraint script that rejects bad writes, and SHACL shapes that shacl2cypher compiles into read-only Cypher rules reporting every broken business rule.">
+  <rect width="1040" height="430" rx="14" fill="#fcfbf9"/>
+  <defs>
+    <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#8a94a6"/>
+    </marker>
+    <marker id="arp" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#7a4de0"/>
+    </marker>
+  </defs>
+
+  <text x="40" y="46" font-size="19" font-weight="700" fill="#101318">One model, two validation layers</text>
+  <text x="40" y="70" font-size="13.5" fill="#5b6472">FalkorDB refuses what it can check at write time. shacl2cypher finds everything else, without changing the data.</text>
+
+  <!-- source -->
+  <rect x="40" y="168" width="196" height="104" rx="10" fill="#ffffff" stroke="#2f5fe0" stroke-width="1.6"/>
+  <text x="138" y="198" font-family="ui-monospace, Menlo, monospace" font-size="11.5" font-weight="700" fill="#2f5fe0" text-anchor="middle">agent-commerce.lpg.yaml</text>
+  <text x="138" y="222" font-size="12" fill="#5b6472" text-anchor="middle">244 lines of YAML</text>
+  <text x="138" y="241" font-size="12" fill="#5b6472" text-anchor="middle">every rule declared once</text>
+  <text x="138" y="260" font-size="11" fill="#8a94a6" text-anchor="middle">the only file you edit</text>
+
+  <!-- branch -->
+  <g stroke="#8a94a6" stroke-width="1.5" fill="none">
+    <path d="M236 220 H262"/>
+    <path d="M262 220 V150 H286" marker-end="url(#ar)"/>
+    <path d="M262 220 V290 H286" marker-end="url(#ar)"/>
+  </g>
+  <text x="270" y="212" font-family="ui-monospace, Menlo, monospace" font-size="10.5" fill="#8a94a6">lpg emit</text>
+
+  <!-- row A: database -->
+  <text x="290" y="106" font-size="11.5" font-weight="700" fill="#2f5fe0" letter-spacing="0.6">AT WRITE TIME</text>
+  <rect x="290" y="118" width="230" height="64" rx="9" fill="#eef2fb" stroke="#c9d6f5"/>
+  <text x="405" y="145" font-family="ui-monospace, Menlo, monospace" font-size="11.5" font-weight="700" fill="#101318" text-anchor="middle">agent-commerce.falkordb.sh</text>
+  <text x="405" y="166" font-size="11.5" fill="#5b6472" text-anchor="middle">10 indexes · 45 constraints</text>
+
+  <rect x="575" y="118" width="170" height="64" rx="9" fill="#ffffff" stroke="#2f5fe0" stroke-width="1.4"/>
+  <text x="660" y="145" font-size="13.5" font-weight="700" fill="#2f5fe0" text-anchor="middle">FalkorDB</text>
+  <text x="660" y="166" font-size="11.5" fill="#5b6472" text-anchor="middle">MANDATORY · UNIQUE</text>
+
+  <rect x="800" y="118" width="200" height="64" rx="9" fill="#ffffff" stroke="#dfe2e7"/>
+  <text x="818" y="143" font-size="12.5" font-weight="700" fill="#101318">Bad write rejected</text>
+  <text x="818" y="162" font-size="11" fill="#5b6472">missing status · duplicate SKU</text>
+  <text x="818" y="176" font-size="11" fill="#8a94a6">never lands in the graph</text>
+
+  <!-- row B: validation -->
+  <text x="290" y="246" font-size="11.5" font-weight="700" fill="#7a4de0" letter-spacing="0.6">AFTER WRITE</text>
+  <rect x="290" y="258" width="230" height="64" rx="9" fill="#f4effc" stroke="#dccdf6"/>
+  <text x="405" y="285" font-family="ui-monospace, Menlo, monospace" font-size="11.5" font-weight="700" fill="#101318" text-anchor="middle">agent-commerce.shacl.ttl</text>
+  <text x="405" y="306" font-size="11.5" fill="#5b6472" text-anchor="middle">W3C SHACL shapes</text>
+
+  <rect x="575" y="258" width="170" height="64" rx="9" fill="#ffffff" stroke="#7a4de0" stroke-width="1.4"/>
+  <text x="660" y="285" font-size="13.5" font-weight="700" fill="#7a4de0" text-anchor="middle">shacl2cypher</text>
+  <text x="660" y="306" font-size="11.5" fill="#5b6472" text-anchor="middle">196 rules · 392 queries</text>
+
+  <rect x="800" y="258" width="200" height="64" rx="9" fill="#ffffff" stroke="#dfe2e7"/>
+  <text x="818" y="283" font-size="12.5" font-weight="700" fill="#101318">Broken rules reported</text>
+  <text x="818" y="302" font-size="11" fill="#5b6472">15 failed rules, each named</text>
+  <text x="818" y="316" font-size="11" fill="#8a94a6">table · JSON · JUnit · SARIF</text>
+
+  <g stroke="#8a94a6" stroke-width="1.5" fill="none" marker-end="url(#ar)">
+    <path d="M520 150 H571"/>
+    <path d="M745 150 H796"/>
+    <path d="M520 290 H571"/>
+    <path d="M745 290 H796"/>
+  </g>
+
+  <!-- validation runs against the database -->
+  <path d="M660 258 V186" stroke="#7a4de0" stroke-width="1.5" fill="none" stroke-dasharray="5 4" marker-end="url(#arp)"/>
+  <text x="668" y="218" font-family="ui-monospace, Menlo, monospace" font-size="10.5" fill="#7a4de0">GRAPH.RO_QUERY</text>
+  <text x="668" y="232" font-size="10.5" fill="#7a4de0">read-only</text>
+
+  <!-- diagnostics -->
+  <rect x="290" y="350" width="710" height="54" rx="9" fill="#fdf6ec" stroke="#eccfa4"/>
+  <text x="310" y="373" font-size="12.5" font-weight="700" fill="#8a5a13">Nothing is dropped silently</text>
+  <text x="310" y="392" font-size="11.5" fill="#7a6547">lpg emit prints a diagnostic for everything a target cannot hold — 44 in this model — naming the artifact that carries it.</text>
+</svg>
