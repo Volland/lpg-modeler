@@ -1,7 +1,0 @@
-{
-  "tool_name": "Bash",
-  "tool_input_preview": "{\"command\":\"ls node_modules | grep -iE '^(marked|markdown-it|remark|unified|micromark|commonmark|showdown)' ; echo \\\"--- pkg ---\\\"; cat package.json; echo \\\"--- scripts dir ---\\\"; ls -F packages/ ; ls...",
-  "error": "Exit code 1\nmarkdown-it\n--- pkg ---\n{\n  \"name\": \"lpg-modeler-workspace\",\n  \"private\": true,\n  \"version\": \"0.10.1\",\n  \"scripts\": {\n    \"build\": \"npm run build -w packages/core && npm run build -w packages/cli && npm run build -w packages/vscode\",\n    \"test\": \"vitest run\",\n    \"lint\": \"eslint packages --ext .ts,.tsx\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^22.7.5\",\n    \"typescript\": \"^5.6.3\",\n    \"vitest\": \"^2.1.3\",\n    \"@ladybugdb/core\": \"0.19.1\"\n  },\n  \"workspaces\": [\n    \"packages/*\"\n ...",
-  "timestamp": "2026-09-12T16:22:08.149Z",
-  "retry_count": 1
-}
