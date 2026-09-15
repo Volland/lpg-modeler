@@ -43,7 +43,7 @@ function turtleString(value: string): string {
  * per constraint is what lets each carry its own `sh:message`; folded into the type's
  * shape, a message would appear to explain every constraint on it.
  */
-function constraintShape(node: NodeTypeIR, k: ConstraintIR): string[] {
+function constraintShape(model: ModelIR, node: NodeTypeIR, k: ConstraintIR): string[] {
   const shape = `${node.prefix}:${node.name}_${k.name}Shape`
   // A message and a severity describe the result, and a result is reported by the shape
   // that produced it. For a comparison or a count that is the property shape, so both
@@ -79,7 +79,10 @@ function constraintShape(node: NodeTypeIR, k: ConstraintIR): string[] {
   const path = `${node.prefix}:${lowerCamel(a.edge)}`
   const lines = [...head, '  sh:property [', `    sh:path ${path} ;`]
   if (a.of) {
-    lines.push(`    sh:qualifiedValueShape [ sh:class ${node.prefix}:${a.of} ] ;`)
+    // Looked up like an edge endpoint, so a qualifying type from an imported model keeps
+    // its own namespace rather than borrowing the constrained type's.
+    const qualifier = classTerm(model, a.of) ?? `${node.prefix}:${a.of}`
+    lines.push(`    sh:qualifiedValueShape [ sh:class ${qualifier} ] ;`)
     if (a.min !== undefined) lines.push(`    sh:qualifiedMinCount ${a.min} ;`)
     if (a.max !== undefined) lines.push(`    sh:qualifiedMaxCount ${a.max} ;`)
   } else {
@@ -270,7 +273,7 @@ export function emitShacl(model: ModelIR, _options: EmitOptions = {}): EmitResul
   }
 
   for (const node of concreteNodes(model)) {
-    for (const k of node.constraints) parts.push(...constraintShape(node, k))
+    for (const k of node.constraints) parts.push(...constraintShape(model, node, k))
   }
 
   // An edge carrying properties is reified into a class, so its properties get a shape.

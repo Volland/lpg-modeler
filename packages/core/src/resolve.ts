@@ -281,7 +281,13 @@ export function resolveModel(entry: string, readFile: ReadFile): ResolveResult {
       constraints: decl.raw.constraints.map((k) => ({
         id: k.id ?? deriveId('constraint', k.name, name),
         name: k.name,
-        assert: k.assert,
+        // A count names types the way an endpoint does, so it may write an import alias.
+        assert: k.assert.kind === 'count'
+          ? {
+              ...k.assert, edge: stripAlias(k.assert.edge),
+              ...(k.assert.of ? { of: stripAlias(k.assert.of) } : {}),
+            }
+          : k.assert,
         ...(k.message ? { message: k.message } : {}),
         ...(k.severity ? { severity: k.severity } : {}),
         ...(k.loc ? { loc: k.loc } : {}),

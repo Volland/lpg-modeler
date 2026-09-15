@@ -191,9 +191,24 @@ export function validateModel(model: ModelIR, views?: ViewDef[]): Diagnostic[] {
           `Constraint '${node.name}.${k.name}' counts edge '${edge.name}', which leaves '${edge.from}' rather than '${node.name}'.`,
           k.loc))
       }
-      if (a.of && !model.nodes.some((n) => n.name === a.of)) {
+      if (!a.of) continue
+      const qualifier = model.nodes.find((n) => n.name === a.of)
+      if (!qualifier) {
         out.push(err('unresolved-operand',
           `Constraint '${node.name}.${k.name}' qualifies on type '${a.of}', which is not a known node type.`,
+          k.loc))
+        continue
+      }
+      // The qualifier must be able to sit at the edge's far end: the target itself, a
+      // subtype of it, or a supertype. A type unrelated to the target can never match,
+      // so a minimum would be unsatisfiable and a maximum would constrain nothing.
+      const target = model.nodes.find((n) => n.name === edge.to)
+      const related = qualifier.name === edge.to
+        || qualifier.ancestors.includes(edge.to)
+        || (target?.ancestors.includes(qualifier.name) ?? false)
+      if (!related) {
+        out.push(err('incompatible-qualifier',
+          `Constraint '${node.name}.${k.name}' counts '${edge.name}' edges ending at '${a.of}', but '${edge.name}' ends at '${edge.to}', which '${a.of}' neither extends nor is extended by. No edge can ever match.`,
           k.loc))
       }
     }

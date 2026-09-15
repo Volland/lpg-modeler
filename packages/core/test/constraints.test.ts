@@ -131,6 +131,40 @@ describe('named constraints', () => {
     expect(codes(validateModel(elsewhere.model))).toContain('unreachable-edge')
   })
 
+  it('refuses a qualifier that can never sit at the edge\'s far end', () => {
+    const counted = (of: string) => validateModel(inline(
+      'nodes:\n'
+      + '  Party: { abstract: true, key: [id], props: { id: { type: string } } }\n'
+      + '  Person: { extends: Party }\n'
+      + '  Robot: { key: [serial], props: { serial: { type: string } } }\n'
+      + '  Booking:\n    key: [ref]\n    props: { ref: { type: string } }\n'
+      + `    constraints:\n      - name: k\n        assert: { count: { edge: BY, of: ${of}, min: 1 } }\n`
+      + 'edges:\n  BY: { from: Booking, to: Party }\n').model)
+    expect(codes(counted('Robot'))).toContain('incompatible-qualifier')
+    // The target itself, a subtype of it, and a supertype of it can all match.
+    expect(codes(counted('Party'))).not.toContain('incompatible-qualifier')
+    expect(codes(counted('Person'))).not.toContain('incompatible-qualifier')
+  })
+
+  it('qualifies on an imported type in that type\'s own namespace', () => {
+    const files: Record<string, string> = {
+      '/party.lpg.yaml': 'namespace: { prefix: party, iri: "https://e.org/party#" }\n'
+        + 'nodes:\n  Party: { abstract: true, key: [id], props: { id: { type: string } } }\n'
+        + '  Person: { extends: Party }\n',
+      '/app.lpg.yaml': 'namespace: { prefix: app, iri: "https://e.org/app#" }\n'
+        + 'imports:\n  - { path: ./party.lpg.yaml, as: common }\n'
+        + 'nodes:\n  Booking:\n    key: [ref]\n    props: { ref: { type: string } }\n'
+        + '    constraints:\n'
+        + '      - name: lead\n        assert: { count: { edge: BY, of: common:Person, min: 1 } }\n'
+        + 'edges:\n  BY: { from: Booking, to: common:Party }\n',
+    }
+    const { model, diagnostics } = resolveModel('/app.lpg.yaml', (p) => files[p])
+    expect([...diagnostics, ...validateModel(model)].filter((d) => d.severity === 'error')).toEqual([])
+    const ttl = emit(model, 'shacl').content
+    expect(ttl).toContain('sh:qualifiedValueShape [ sh:class party:Person ] ;')
+    expect(ttl).not.toContain('app:Person')
+  })
+
   it('gives each constraint its own shape so each carries its own message', () => {
     const ttl = emit(example('booking.lpg.yaml'), 'shacl').content
     const cmp = ttl.slice(ttl.indexOf('bk:Booking_endAfterStartShape'))

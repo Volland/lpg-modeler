@@ -148,6 +148,8 @@ A node type may declare constraints that span more than one property: a comparis
 
 The assertion vocabulary is closed — seven kinds, no expression language. That is the load-bearing decision. A closed vocabulary can be translated per target or honestly downgraded, where a raw expression could only ever be passed through to one; and it lets the canvas offer a form per kind with operands drawn from the type itself, rather than shipping a parser. See [[architecture#Editing Surface#Inspector]].
 
+A count's qualifying type must be able to sit at the edge's far end: the target itself, a subtype of it, or a supertype. An unrelated type is an error rather than a rule that quietly never matches, which with a minimum would reject every node and with only a maximum would constrain nothing. The edge and the qualifier may name an imported type through its alias, exactly as an endpoint does.
+
 Constraints are not inherited. One written against a subtype's property would be meaningless on the parent, and a subtype that silently widened its parent's contract would give the reader of the parent no way to see it — the same reasoning as [[metamodel#Open and Closed Types]].
 
 ### Severity
