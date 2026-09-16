@@ -19,3 +19,33 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: npm test
+
+  # The Memgraph suites need a running instance, which the default job has none of: they
+  # skip there. A service container cannot be given command-line flags, and the importer
+  # needs --schema-info-enabled, so the instance is started in a step instead.
+  # See lat.md/emitters#Verification.
+  memgraph:
+    runs-on: ubuntu-latest
+    env:
+      LPG_MEMGRAPH_URI: bolt://localhost:7687
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Start Memgraph 3.13.1
+        run: |
+          docker run -d --name memgraph -p 7687:7687 memgraph/memgraph:3.13.1 --schema-info-enabled=true
+          for i in $(seq 1 30); do
+            if echo 'RETURN 1;' | docker exec -i memgraph mgconsole >/dev/null 2>&1; then exit 0; fi
+            sleep 2
+          done
+          docker logs memgraph
+          exit 1
+
+      - run: npm ci
+      - run: npm run build
+      - run: npx vitest run packages/core/test/memgraph.live.test.ts packages/core/test/memgraph.migrate.live.test.ts packages/cli/test/cli.test.ts

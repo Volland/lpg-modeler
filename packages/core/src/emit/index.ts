@@ -4,9 +4,11 @@ import type { Migrator } from '../migrate/types'
 import { emitLadybug, LADYBUG_CAPABILITIES } from './ladybug'
 import { emitNeo4j, NEO4J_CAPABILITIES } from './neo4j'
 import { emitFalkorDb, FALKORDB_CAPABILITIES } from './falkordb'
+import { emitMemgraph, MEMGRAPH_CAPABILITIES } from './memgraph'
 import { migrateLadybug } from './ladybug.migrate'
 import { migrateNeo4j } from './neo4j.migrate'
 import { migrateFalkorDb } from './falkordb.migrate'
+import { migrateMemgraph } from './memgraph.migrate'
 import { emitShacl, SHACL_CAPABILITIES } from './shacl'
 import { emitOwl, OWL_CAPABILITIES } from './owl'
 import { emitGql, GQL_CAPABILITIES } from './gql'
@@ -34,6 +36,7 @@ const REGISTRY = new Map<string, Registration>([
   ['ladybug', { capabilities: LADYBUG_CAPABILITIES, emit: emitLadybug, migrate: migrateLadybug }],
   ['neo4j', { capabilities: NEO4J_CAPABILITIES, emit: emitNeo4j, migrate: migrateNeo4j }],
   ['falkordb', { capabilities: FALKORDB_CAPABILITIES, emit: emitFalkorDb, migrate: migrateFalkorDb }],
+  ['memgraph', { capabilities: MEMGRAPH_CAPABILITIES, emit: emitMemgraph, migrate: migrateMemgraph }],
   ['shacl', { capabilities: SHACL_CAPABILITIES, emit: emitShacl }],
   ['owl', { capabilities: OWL_CAPABILITIES, emit: emitOwl }],
   ['gql', { capabilities: GQL_CAPABILITIES, emit: emitGql }],

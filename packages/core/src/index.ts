@@ -17,11 +17,17 @@ export { OWL_CAPABILITIES } from './emit/owl'
 export { GQL_CAPABILITIES } from './emit/gql'
 export { PGSCHEMA_CAPABILITIES } from './emit/pgschema'
 export { LINKML_CAPABILITIES } from './emit/linkml'
+export { MEMGRAPH_CAPABILITIES } from './emit/memgraph'
 export * from './emit/reify'
 export {
   importModel, importerNames, registerImporter, detectFormat, resolveFormat,
   type ImportInput, type ImportResult, type Importer, type TextImportInput, type CatalogImportInput,
+  type MemgraphImportInput,
 } from './import/index'
+export {
+  readMemgraphSchema, memgraphCatalogToModel, importMemgraph,
+  type MemgraphCatalog, type MemgraphSession,
+} from './import/memgraph'
 export { importRdf } from './import/rdf'
 export {
   importLadybug, parseLadybugDdl, readLadybugCatalog, catalogToModel,

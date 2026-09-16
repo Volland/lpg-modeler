@@ -164,8 +164,8 @@
   </p>
   <p>
     Real execution is affordable here because the database is embedded — no container is
-    required. Neo4j and Memgraph have no embedded mode, so they keep golden coverage with
-    containerised tests gated behind an opt-in flag. A golden file alone only proves that output
+    required. Neo4j and Memgraph have no embedded mode, so they keep golden coverage, and
+    Memgraph adds tests against a running container gated behind an opt-in variable. A golden file alone only proves that output
     has not changed, not that it is valid: the <code>//</code> versus <code>--</code> comment
     syntax bug in the Ladybug output was caught by execution and would have been invisible to a
     golden test.
@@ -174,8 +174,7 @@
   <h2>What is deliberately out of scope</h2>
   <ul class="plain">
     <li><strong>Nested edges.</strong> Edges that are themselves endpoints of other edges — the metagraph case — sit outside the core metamodel. Neo4j cannot represent them natively, so admitting them would force every generator to grow a silent reification path.</li>
-    <li><strong>Migrations and the lockfile diff.</strong> The intended design is a canonical, stable-ordered snapshot committed beside the model, diffed to produce an ordered migration script with renames detected through stable ids rather than guessed from structural similarity. Not in this release — but nothing in the implementation assumes a lockfile is absent, and the serializer already orders keys stably.</li>
-    <li><strong>The Memgraph target and user-supplied template targets.</strong> Both wait on the plugin seam described above.</li>
+    <li><strong>User-supplied template targets.</strong> They wait on the plugin seam described above. Migrations and the Memgraph target, once deferred alongside them, have shipped — see <a href="migrations.html">migrations</a> and <a href="targets.html">targets</a>.</li>
     <li><strong>A generic Cypher target.</strong> Rejected outright rather than deferred: there is no reference implementation to test it against.</li>
   </ul>
 

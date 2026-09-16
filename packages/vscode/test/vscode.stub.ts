@@ -75,6 +75,8 @@ export const harness = {
   channels: new Map<string, string[]>(),
   /** Answers to successive quick picks, in order: a flow can ask more than once. */
   quickPicks: [] as (string | undefined)[],
+  /** The items each quick pick offered, in order, so a test can see the choices. */
+  quickPickItems: [] as unknown[][],
   /** What `findFiles` returns, i.e. the model files the workspace holds. */
   foundFiles: [] as Uri[],
   errors: [] as string[],
@@ -90,6 +92,7 @@ export const harness = {
     this.openDialog = undefined
     this.channels.clear()
     this.quickPicks = []
+    this.quickPickItems = []
     this.foundFiles = []
     this.errors = []
     this.warnings = []
@@ -163,7 +166,10 @@ export const window = {
     harness.channels.set(name, lines)
     return { appendLine: (l: string) => lines.push(l), show: (_p?: boolean) => undefined }
   },
-  showQuickPick: (_items: unknown, _opts?: unknown) => Promise.resolve(harness.quickPicks.shift()),
+  showQuickPick: (items: unknown, _opts?: unknown) => {
+    harness.quickPickItems.push(Array.isArray(items) ? items : [])
+    return Promise.resolve(harness.quickPicks.shift())
+  },
   showErrorMessage: (m: string) => { harness.errors.push(m); return Promise.resolve(undefined) },
   showWarningMessage: (m: string) => { harness.warnings.push(m); return Promise.resolve(undefined) },
   showInformationMessage: (m: string) => { harness.infos.push(m); return Promise.resolve(undefined) },

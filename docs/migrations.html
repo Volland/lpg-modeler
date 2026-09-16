@@ -80,16 +80,19 @@ breaking    property Person.mail: renamed from 'email'
 /work/model/migrations/domain.0002.ladybug.cypher
 /work/model/migrations/domain.0002.neo4j.cypher
 /work/model/migrations/domain.0002.falkordb.sh
+/work/model/migrations/domain.0002.memgraph.cypher
 /work/model/domain.lpg.lock.json (revision 2: 1 breaking, 1 additive)</code></pre>
   <p>
     Review the scripts and commit them with the lockfile. Each one lists the changes it realizes
-    at the top. The tool never connects to a database, so running them is up to you:
+    at the top. <code>migrate</code> never connects to a database, so running them is up to you — or, for Memgraph, to <code>lpg apply</code>:
   </p>
 <pre><code><span class="c-com"># LadybugDB: statements run in order with no enclosing transaction; back up first.</span>
 <span class="c-com"># Neo4j: data steps use CALL { ... } IN TRANSACTIONS, so run in auto-commit mode.</span>
 cypher-shell -f model/migrations/domain.0002.neo4j.cypher
 <span class="c-com"># FalkorDB: not idempotent; run once against a graph at the previous revision.</span>
-GRAPH_KEY=domain sh model/migrations/domain.0002.falkordb.sh</code></pre>
+GRAPH_KEY=domain sh model/migrations/domain.0002.falkordb.sh
+<span class="c-com"># Memgraph: one command, stopping at the first refused statement.</span>
+lpg apply model/migrations/domain.0002.memgraph.cypher --target memgraph --uri bolt://localhost:7687</code></pre>
 
   <h2>Destructive changes</h2>
   <p>
@@ -110,7 +113,7 @@ Nothing was written. Pass --allow-destructive to generate it anyway.</span></cod
   <h2>What is migrated</h2>
   <p>
     Only the database targets hold a schema to carry forward: <code>ladybug</code>,
-    <code>neo4j</code> and <code>falkordb</code>. SHACL, OWL, GQL, PG-Schema and LinkML are
+    <code>neo4j</code>, <code>falkordb</code> and <code>memgraph</code>. SHACL, OWL, GQL, PG-Schema and LinkML are
     regenerated with <code>emit</code>. The lockfile is per model, so migrate every deployed
     target in the same run; naming only some of them is allowed, with a warning. A change no
     target stores, such as a value pattern, still advances the revision, and each script says it

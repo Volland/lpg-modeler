@@ -2,7 +2,7 @@ import type { ModelIR, NodeTypeIR } from '../ir'
 
 /**
  * The data a labelled-graph target has to rewrite for a migration, worked out once for
- * Neo4j and FalkorDB alike. Both carry a hierarchy as labels, so a node of a subtype
+ * Neo4j, FalkorDB and Memgraph alike. All three carry a hierarchy as labels, so a node of a subtype
  * also carries every ancestor's label, and one statement over a label reaches every
  * type that inherits it. See lat.md/emitters#Migrations#Target Planners.
  *
@@ -114,11 +114,18 @@ export function dataSteps(before: ModelIR, after: ModelIR): DataStep[] {
   return steps
 }
 
-/** One Cypher statement for a step, batched where the target supports it. */
-export function stepCypher(step: DataStep, batched: boolean): string {
-  const tx = (match: string, body: string, bound: string) => (batched
+/**
+ * One Cypher statement for a step, batched where the target supports it: `true` for
+ * `CALL { ... } IN TRANSACTIONS`, `{ periodicCommit }` for the `USING PERIODIC COMMIT`
+ * directive, `false` for a single statement. Memgraph needs the directive: it refuses
+ * `DELETE` inside `CALL ... IN TRANSACTIONS` (measured against 3.13.1).
+ */
+export function stepCypher(step: DataStep, batched: boolean | { periodicCommit: number }): string {
+  const tx = (match: string, body: string, bound: string) => (batched === true
     ? `${match} CALL { WITH ${bound} ${body} } IN TRANSACTIONS`
-    : `${match} ${body}`)
+    : batched
+      ? `USING PERIODIC COMMIT ${batched.periodicCommit} ${match} ${body}`
+      : `${match} ${body}`)
   switch (step.kind) {
     case 'delete-nodes': {
       const where = step.except.length > 0 ? ` WHERE ${step.except.map((l) => `NOT n:${l}`).join(' AND ')}` : ''

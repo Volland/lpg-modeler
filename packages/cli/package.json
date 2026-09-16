@@ -9,7 +9,7 @@
     "build": "tsc -p tsconfig.json && node scripts/bundle.mjs",
     "prepublishOnly": "npm run build"
   },
-  "description": "Design a property graph once. Generate every schema from it: LadybugDB, Neo4j, GQL, PG-Schema, SHACL, OWL and LinkML.",
+  "description": "Design a property graph once. Generate every schema from it: LadybugDB, Neo4j, FalkorDB, Memgraph, GQL, PG-Schema, SHACL, OWL and LinkML.",
   "license": "MIT",
   "homepage": "https://volland.github.io/lpg-modeler/",
   "repository": {
@@ -27,6 +27,7 @@
     "lpg",
     "schema",
     "neo4j",
+    "memgraph",
     "cypher",
     "ladybugdb",
     "kuzu",
@@ -49,10 +50,14 @@
     "LICENSE"
   ],
   "peerDependencies": {
-    "@ladybugdb/core": "0.19.1"
+    "@ladybugdb/core": "0.19.1",
+    "neo4j-driver": "^6.2.0"
   },
   "peerDependenciesMeta": {
     "@ladybugdb/core": {
+      "optional": true
+    },
+    "neo4j-driver": {
       "optional": true
     }
   },

@@ -4,6 +4,36 @@ All notable changes to LPG Modeler are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **Memgraph target.** `lpg emit --target memgraph` writes the schema Memgraph Community can
+  enforce: a key as uniqueness plus existence (and an index, so the key can be read back),
+  existence for required properties, `IS TYPED` value-type constraints, and native enums. What
+  Memgraph cannot hold — any edge constraint, cardinality, value bounds, integer widths, `uuid`,
+  `json`, `blob`, and which specific enum a property holds — is reported with a comment at the
+  site. Enums are real Memgraph enums, so applications write `Status::active`, not a string.
+  Memgraph also appears in the canvas and command-palette generate choices.
+
+- **Memgraph migrations.** `lpg migrate` now writes a fourth script,
+  `<stem>.<rev>.memgraph.cypher`, by default. Data steps run in `USING PERIODIC COMMIT` batches.
+  Memgraph cannot drop an enum or remove a value, so a migration that does either reports it
+  instead of pretending.
+
+- **Import from a running Memgraph.** `lpg import bolt://host:7687 --out model.lpg.yaml` reads
+  constraints, indexes and enums, and — when the server runs with `--schema-info-enabled` --
+  labels, properties, edge types and a hierarchy inferred from labels that always occur
+  together, reporting every inference.
+
+- **`lpg apply`.** Runs a generated schema or migration script against a running Memgraph, one
+  statement per transaction, stopping at the first refused statement and saying what had been
+  applied. It refuses a script for another target, a file it did not generate, and destructive
+  statements without `--allow-destructive`. The password comes from `MEMGRAPH_PASSWORD`.
+
+  Memgraph import and `apply` need `neo4j-driver`, an optional peer dependency of the CLI:
+  `npm install neo4j-driver@6.2.0`. Everything else runs without it.
+
 ## [0.13.0] — 2026-09-16
 
 ### Added

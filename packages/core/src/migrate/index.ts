@@ -10,7 +10,7 @@ import type { Change, ChangeClass, MigrationScript } from './types'
  * The targets a migration is generated for when none are named: the three that hold a
  * schema. Everything else is regenerated from the model rather than migrated.
  */
-export const DATABASE_TARGETS: readonly string[] = ['ladybug', 'neo4j', 'falkordb']
+export const DATABASE_TARGETS: readonly string[] = ['ladybug', 'neo4j', 'falkordb', 'memgraph']
 
 export interface MigrationRequest {
   /** The snapshot the database was last built or migrated to. */
@@ -41,6 +41,10 @@ export function migrationFileName(
 ): string {
   return `${stem}.${String(revision).padStart(4, '0')}.${target}.${extension}`
 }
+
+/** `a`, `a and b`, `a, b and c`. */
+const listed = (xs: string[]): string =>
+  (xs.length <= 1 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`)
 
 export const describeChange = (c: Change): string =>
   `${c.class.padEnd(11)} ${c.label}: ${c.detail}`
@@ -96,7 +100,7 @@ export function planMigration(request: MigrationRequest): MigrationPlan {
   const skipped = DATABASE_TARGETS.filter((t) => !targets.includes(t))
   if (skipped.length > 0) {
     diagnostics.push(warn('partial-migration',
-      `The lockfile is per model, not per target, so advancing it here leaves ${skipped.join(' and ')} without a migration for revision ${toRevision}. Generate every target from one run unless those are not deployed.`))
+      `The lockfile is per model, not per target, so advancing it here leaves ${listed(skipped)} without a migration for revision ${toRevision}. Generate every target from one run unless those are not deployed.`))
   }
 
   const scripts = targets.map((target) => migratorOf(target)!(lockfile.model, model, changes, {

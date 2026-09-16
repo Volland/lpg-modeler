@@ -3,7 +3,7 @@ import * as fs from 'node:fs'
 import * as os from 'node:os'
 import * as path from 'node:path'
 import * as vscode from 'vscode'
-import { newModelSource, parseViews, sidecarPaths } from '@lpg/core'
+import { emit, newModelSource, parseViews, resolveModel, sidecarPaths } from '@lpg/core'
 import { harness } from './vscode.stub'
 import { activate } from '../src/extension'
 import type { Intent, Projection } from '../src/protocol'
@@ -291,5 +291,19 @@ describe('the canvas asks its questions in the document', () => {
       const text = fs.readFileSync(path.join(dir, file), 'utf8')
       expect(text, file).not.toMatch(/\bwindow\.(prompt|confirm|alert)\s*\(/)
     }
+  })
+})
+
+// @lat: [[emitters#Memgraph Target]]
+describe('generating Memgraph from the canvas', () => {
+  it('offers memgraph among the targets and writes exactly what the command line emits', async () => {
+    const c = await canvas()
+    expect(c.latest().targets).toContain('memgraph')
+
+    await c.send({ type: 'generate', target: 'memgraph' })
+
+    const written = fs.readFileSync(path.join(root, 'social.memgraph.cypher'), 'utf8')
+    expect(written).toBe(emit(resolveModel(model, (p) => fs.readFileSync(p, 'utf8')).model, 'memgraph').content)
+    expect(harness.errors).toEqual([])
   })
 })

@@ -1,14 +1,15 @@
-import { info, type Diagnostic, type ModelIR, type NodeTypeIR } from '../ir'
+import { err, info, type Diagnostic, type ModelIR, type NodeTypeIR } from '../ir'
 import { importRdf, type ImportResult, type TextImportInput } from './rdf'
 import { importLadybug, type CatalogImportInput } from './ladybug'
+import { importMemgraph, type MemgraphImportInput } from './memgraph'
 
 /**
  * A file read as text, or a LadybugDB database whose catalog the caller has already
  * read -- `core` never opens a database itself. See lat.md/importers#Reading a LadybugDB Database.
  */
-export type ImportInput = TextImportInput | CatalogImportInput
+export type ImportInput = TextImportInput | CatalogImportInput | MemgraphImportInput
 
-export type { ImportResult, TextImportInput, CatalogImportInput }
+export type { ImportResult, TextImportInput, CatalogImportInput, MemgraphImportInput }
 
 const texts = (inputs: ImportInput[]): TextImportInput[] =>
   inputs.filter((i): i is TextImportInput => 'text' in i)
@@ -28,7 +29,9 @@ interface Registration {
 
 const REGISTRY = new Map<string, Registration>([
   ['rdf', { importer: (i) => importRdf(texts(i)), extensions: ['.ttl', '.owl', '.shacl', '.n3'] }],
-  ['ladybug', { importer: (i) => importLadybug(i), extensions: ['.cypher', '.ddl'] }],
+  ['ladybug', { importer: (i) => importLadybug(i.filter((x): x is TextImportInput | CatalogImportInput => !('memgraphCatalog' in x))), extensions: ['.cypher', '.ddl'] }],
+  // A running instance, read by the caller: it has no file extension to answer to.
+  ['memgraph', { importer: (i) => importMemgraph(i.filter((x): x is MemgraphImportInput => 'memgraphCatalog' in x)), extensions: [] }],
 ])
 
 export function registerImporter(name: string, reg: Registration): void {
@@ -60,6 +63,7 @@ export function resolveFormat(name: string): string | undefined {
  */
 export function detectFormat(input: ImportInput): string | undefined {
   if ('ladybugCatalog' in input) return 'ladybug'
+  if ('memgraphCatalog' in input) return 'memgraph'
   const lower = input.path.toLowerCase()
   for (const [name, reg] of REGISTRY) {
     if (reg.extensions.some((e) => lower.endsWith(e))) return name
@@ -82,7 +86,8 @@ export function importModel(inputs: ImportInput[], format?: string): ImportResul
   for (const input of inputs) {
     // A catalog was already read from a database, so no format named for files applies to it.
     const kind = 'ladybugCatalog' in input ? 'ladybug'
-      : format ? resolveFormat(format) : detectFormat(input)
+      : 'memgraphCatalog' in input ? 'memgraph'
+        : format ? resolveFormat(format) : detectFormat(input)
     if (!kind) {
       diagnostics.push(info('import-unknown-format',
         `Could not tell what '${input.path}' is from its name or its first lines. Name the format explicitly to read it.`))
@@ -95,13 +100,24 @@ export function importModel(inputs: ImportInput[], format?: string): ImportResul
 
   const rdfInputs = groups.get('rdf') ?? []
   const ddlInputs = groups.get('ladybug') ?? []
+  const memgraphInputs = (groups.get('memgraph') ?? []) as MemgraphImportInput[]
+
+  // A running Memgraph is a whole schema on its own; nothing merges it with files yet.
+  if (memgraphInputs.length > 0) {
+    if (rdfInputs.length > 0 || ddlInputs.length > 0) {
+      diagnostics.push(err('import-mixed-sources',
+        'A Memgraph instance is imported on its own. Import it separately from RDF or LadybugDB sources.'))
+    }
+    const out = importMemgraph(memgraphInputs)
+    return { model: out.model, diagnostics: [...diagnostics, ...out.diagnostics] }
+  }
 
   if (rdfInputs.length > 0 && ddlInputs.length === 0) {
     const out = importRdf(texts(rdfInputs))
     return { model: out.model, diagnostics: [...diagnostics, ...out.diagnostics] }
   }
   if (ddlInputs.length > 0 && rdfInputs.length === 0) {
-    const out = importLadybug(ddlInputs)
+    const out = importLadybug(ddlInputs as Array<TextImportInput | CatalogImportInput>)
     return { model: out.model, diagnostics: [...diagnostics, ...out.diagnostics] }
   }
   if (rdfInputs.length === 0 && ddlInputs.length === 0) {
@@ -120,7 +136,7 @@ export function importModel(inputs: ImportInput[], format?: string): ImportResul
   const rdf = importRdf(texts(rdfInputs))
   const parents = new Map<string, string>()
   for (const n of rdf.model.nodes) if (n.extends) parents.set(n.name, n.extends)
-  const ddl = importLadybug(ddlInputs, { parents })
+  const ddl = importLadybug(ddlInputs as Array<TextImportInput | CatalogImportInput>, { parents })
   return {
     model: merge(rdf.model, ddl.model, diagnostics),
     diagnostics: [...diagnostics, ...rdf.diagnostics, ...ddl.diagnostics],

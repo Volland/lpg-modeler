@@ -1,8 +1,13 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, beforeEach } from 'vitest'
 import { spawnSync } from 'node:child_process'
 import { copyFileSync, existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
+
+import {
+  MEMGRAPH_URI, reset, run as runHarness, schemaState, useMemgraph,
+} from '../../core/test/memgraph-harness'
+import { pair } from '../../core/test/migrate-pairs'
 
 const CLI = resolve(__dirname, '..', 'dist', 'cli.js')
 const FIXTURES = resolve(__dirname, '..', '..', 'core', 'test', 'fixtures')
@@ -19,7 +24,7 @@ describe('lpg cli', () => {
     const r = run(['targets'])
     expect(r.status).toBe(0)
     expect(r.stdout.trim().split('\n').sort()).toEqual(
-      ['falkordb', 'gql', 'ladybug', 'linkml', 'neo4j', 'owl', 'pgschema', 'shacl'])
+      ['falkordb', 'gql', 'ladybug', 'linkml', 'memgraph', 'neo4j', 'owl', 'pgschema', 'shacl'])
   })
 
   it('checks a valid model and exits zero', () => {
@@ -310,7 +315,7 @@ describe('lpg lock, diff and migrate', () => {
       '      id: { id: p_pid, type: string, required: true }\n      phone: { id: p_phone, type: string }\n')
     const r = run(['migrate', model, '--out', join(dir, 'out')])
     expect(r.status).toBe(0)
-    for (const f of ['shop.0002.ladybug.cypher', 'shop.0002.neo4j.cypher', 'shop.0002.falkordb.sh']) {
+    for (const f of ['shop.0002.ladybug.cypher', 'shop.0002.neo4j.cypher', 'shop.0002.falkordb.sh', 'shop.0002.memgraph.cypher']) {
       expect(existsSync(join(dir, 'out', f)), f).toBe(true)
     }
     expect(JSON.parse(readFileSync(lock, 'utf8')).revision).toBe(2)
@@ -342,5 +347,115 @@ describe('lpg lock, diff and migrate', () => {
   it('names lock, diff and migrate among the verbs it offers', () => {
     const help = run(['--help']).stderr
     for (const verb of ['lpg lock', 'lpg diff', 'lpg migrate']) expect(help).toContain(verb)
+  })
+})
+
+// @lat: [[architecture#Distribution]]
+describe('lpg apply, without a server', () => {
+  const dir = () => mkdtempSync(join(tmpdir(), 'lpg-apply-'))
+  const emitted = (d: string, target: string) => {
+    expect(run(['emit', join(FIXTURES, 'social.lpg.yaml'), '--target', target, '--out', d]).status).toBe(0)
+    return join(d, `social.${target}.${target === 'falkordb' ? 'sh' : 'cypher'}`)
+  }
+
+  it('prints the statements of a generated script in order on a dry run, without connecting', () => {
+    const script = emitted(dir(), 'memgraph')
+    const r = run(['apply', script, '--target', 'memgraph', '--dry-run'])
+    expect(r.status).toBe(0)
+    const lines = r.stdout.trim().split('\n')
+    expect(lines[0]).toMatch(/^\[1\/\d+\] CREATE CONSTRAINT ON \(n:Car\) ASSERT n\.vin IS UNIQUE;$/)
+    expect(lines.every((l) => /^\[\d+\/\d+\] /.test(l))).toBe(true)
+    expect(r.stdout).not.toContain('//')
+  })
+
+  it('refuses a script generated for another target, and a file it did not generate', () => {
+    const d = dir()
+    const neo4j = run(['apply', emitted(d, 'neo4j'), '--target', 'memgraph', '--dry-run'])
+    expect(neo4j.status).toBe(1)
+    expect(neo4j.stderr).toContain('apply-target-mismatch')
+    const hand = join(d, 'hand.cypher')
+    writeFileSync(hand, 'CREATE INDEX ON :Car(vin);\n')
+    const r = run(['apply', hand, '--target', 'memgraph', '--dry-run'])
+    expect(r.status).toBe(1)
+    expect(r.stderr).toContain('apply-not-generated')
+  })
+
+  it('names memgraph as the only target it can apply to', () => {
+    const r = run(['apply', emitted(dir(), 'ladybug'), '--target', 'ladybug', '--dry-run'])
+    expect(r.status).toBe(1)
+    expect(r.stderr).toMatch(/apply-unsupported: .*memgraph/)
+  })
+
+  it('refuses a script with destructive statements unless permitted', () => {
+    const d = dir()
+    const model = join(d, 'shop.lpg.yaml')
+    writeFileSync(model, readFileSync(join(FIXTURES, 'migrate', 'base.lpg.yaml'), 'utf8'))
+    expect(run(['lock', model]).status).toBe(0)
+    // Removing a node type deletes its nodes, which is what apply refuses without the flag.
+    writeFileSync(model, pair('remove-node-type').edit(readFileSync(model, 'utf8')))
+    expect(run(['migrate', model, '--target', 'memgraph', '--allow-destructive']).status).toBe(0)
+    const script = join(d, 'migrations', 'shop.0002.memgraph.cypher')
+    const refused = run(['apply', script, '--target', 'memgraph', '--dry-run'])
+    expect(refused.status).toBe(1)
+    expect(refused.stderr).toContain('destructive-change')
+    expect(run(['apply', script, '--target', 'memgraph', '--dry-run', '--allow-destructive']).status).toBe(0)
+  })
+
+  it('reports an instance it cannot reach, naming the URI', () => {
+    const r = run(['apply', emitted(dir(), 'memgraph'), '--target', 'memgraph', '--uri', 'bolt://127.0.0.1:1'])
+    expect(r.status).toBe(1)
+    expect(r.stderr).toContain('cannot connect to Memgraph at bolt://127.0.0.1:1')
+  })
+
+  it('tells the user how to install the driver when it is missing', () => {
+    const d = mkdtempSync(join(tmpdir(), 'lpg-nodriver-'))
+    const cli = join(d, 'cli.js')
+    copyFileSync(CLI, cli)
+    for (const args of [['import', 'bolt://127.0.0.1:1'], ['apply', emitted(dir(), 'memgraph'), '--target', 'memgraph', '--uri', 'bolt://127.0.0.1:1']]) {
+      const r = run(args, cli, d)
+      expect(r.status, args[0]).toBe(1)
+      expect(r.stderr, args[0]).toContain('npm install neo4j-driver@6.2.0')
+    }
+  })
+})
+
+// @lat: [[importers#Reading a Memgraph Instance]]
+describe.runIf(MEMGRAPH_URI).sequential('lpg apply and import against a running memgraph', () => {
+  useMemgraph()
+  beforeEach(reset)
+
+  it('applies a generated schema to a fresh instance', async () => {
+    const d = mkdtempSync(join(tmpdir(), 'lpg-apply-'))
+    expect(run(['emit', join(FIXTURES, 'social.lpg.yaml'), '--target', 'memgraph', '--out', d]).status).toBe(0)
+    const r = run(['apply', join(d, 'social.memgraph.cypher'), '--target', 'memgraph', '--uri', MEMGRAPH_URI!])
+    expect(r.status).toBe(0)
+    expect(r.stdout).toMatch(/applied \d+ statement\(s\)/)
+    expect((await schemaState()).constraints).toContain('unique Person id')
+  })
+
+  it('stops at the first statement the instance refuses, saying what had been applied', async () => {
+    const d = mkdtempSync(join(tmpdir(), 'lpg-apply-'))
+    expect(run(['emit', join(FIXTURES, 'social.lpg.yaml'), '--target', 'memgraph', '--out', d]).status).toBe(0)
+    // Two cars sharing a vin: the first statement, Car's key, is refused.
+    await runHarness("CREATE (:Car {vin: 'v'}), (:Car {vin: 'v'})")
+    const r = run(['apply', join(d, 'social.memgraph.cypher'), '--target', 'memgraph', '--uri', MEMGRAPH_URI!])
+    expect(r.status).toBe(1)
+    expect(r.stderr).toMatch(/statement 1 of \d+ failed: .*existing node violates it/)
+    expect(r.stderr).toContain('0 statement(s) had been applied')
+    expect((await schemaState()).constraints).toEqual([])
+  })
+
+  it('imports the instance to a model file that checks clean', async () => {
+    const d = mkdtempSync(join(tmpdir(), 'lpg-apply-'))
+    expect(run(['emit', join(FIXTURES, 'social.lpg.yaml'), '--target', 'memgraph', '--out', d]).status).toBe(0)
+    expect(run(['apply', join(d, 'social.memgraph.cypher'), '--target', 'memgraph', '--uri', MEMGRAPH_URI!]).status).toBe(0)
+    // A Company as well as a Person: Party occurring with more than one label is what reads as a parent.
+    await runHarness("CREATE (:Person:Party {id: 'p', email: 'e', createdAt: localDateTime('2020-01-01T00:00:00')})-[:OWNS {since: date('2020-01-01')}]->(:Car {vin: 'v', seats: 4}), (:Company:Party {id: 'c'})")
+    const out = join(d, 'imported.lpg.yaml')
+    const r = run(['import', MEMGRAPH_URI!, '--out', out])
+    expect(r.status).toBe(0)
+    const written = readFileSync(out, 'utf8')
+    expect(written).toContain('extends: Party')
+    expect(run(['check', out]).stdout).toContain('0 error(s)')
   })
 })

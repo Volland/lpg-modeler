@@ -47,8 +47,11 @@ Usage:
   lpg ids   &lt;model.lpg.yaml&gt;        assign any missing stable element ids
   lpg lock    &lt;model.lpg.yaml&gt; [--check]
   lpg diff    &lt;model.lpg.yaml&gt; [--fail-on &lt;additive|breaking|destructive&gt;] [--json]
-  lpg migrate &lt;model.lpg.yaml&gt; [--target &lt;ladybug|neo4j|falkordb&gt;] [--out &lt;dir&gt;]
+  lpg migrate &lt;model.lpg.yaml&gt; [--target &lt;ladybug|neo4j|falkordb|memgraph&gt;] [--out &lt;dir&gt;]
                                [--allow-destructive] [--edition ...] [--graph-key ...]
+  lpg import  bolt://host:7687 [--user &lt;name&gt;] [--out &lt;model.lpg.yaml&gt;]
+  lpg apply   &lt;script&gt; --target memgraph --uri bolt://host:7687 [--user &lt;name&gt;]
+              [--allow-destructive] [--dry-run]
   lpg targets
 
 Options:
@@ -128,8 +131,8 @@ breaking    property Person.mail: renamed from 'email'
 
   <h2>migrate</h2>
   <p>
-    Writes one script per database target — <code>ladybug</code>, <code>neo4j</code> and
-    <code>falkordb</code> unless <code>--target</code> narrows it — named for the revision it
+    Writes one script per database target — <code>ladybug</code>, <code>neo4j</code>,
+    <code>falkordb</code> and <code>memgraph</code> unless <code>--target</code> narrows it — named for the revision it
     produces, then advances the lockfile. A change that would discard stored data is refused
     unless <code>--allow-destructive</code> is given, and a refusal writes nothing.
     <a href="migrations.html">Migrating a deployed model</a> walks through it.
@@ -138,7 +141,31 @@ breaking    property Person.mail: renamed from 'email'
 /work/migrations/shop.0002.ladybug.cypher
 /work/migrations/shop.0002.neo4j.cypher
 /work/migrations/shop.0002.falkordb.sh
+/work/migrations/shop.0002.memgraph.cypher
 /work/shop.lpg.lock.json (revision 2: 1 breaking)</code></pre>
+
+  <h2>apply</h2>
+  <p>
+    Runs a generated script — a full schema or a migration — against a running Memgraph, one
+    statement per transaction, printing each as it succeeds and stopping at the first one the
+    instance refuses, with what had already been applied. It takes a script, never a model, so
+    what runs is what was reviewed. It refuses a script generated for another target, a file it
+    did not generate, and a script with statements marked destructive unless
+    <code>--allow-destructive</code> is given. The password is read from
+    <code>MEMGRAPH_PASSWORD</code>, never from a flag. <code>--dry-run</code> prints the
+    statements without connecting.
+  </p>
+<pre><code>$ lpg apply migrations/shop.0002.memgraph.cypher --target memgraph --uri bolt://localhost:7687
+[1/5] DROP CONSTRAINT ON (n:Person) ASSERT n.email IS UNIQUE;
+[2/5] DROP CONSTRAINT ON (n:Person) ASSERT n.email IS TYPED STRING;
+[3/5] USING PERIODIC COMMIT 1000 MATCH (n:Person) WHERE n.email IS NOT NULL SET n.mail = n.email REMOVE n.email;
+[4/5] CREATE CONSTRAINT ON (n:Person) ASSERT n.mail IS UNIQUE;
+[5/5] CREATE CONSTRAINT ON (n:Person) ASSERT n.mail IS TYPED STRING;
+applied 5 statement(s) to bolt://localhost:7687</code></pre>
+  <p>
+    Reading a Memgraph with <code>import</code>, and <code>apply</code>, need the Bolt driver:
+    <code>npm install neo4j-driver@6.2.0</code>. Nothing else does, so it is not a dependency.
+  </p>
 
   <h2>targets</h2>
   <p>Prints the registered target names, one per line.</p>
@@ -166,7 +193,13 @@ shacl</code></pre>
     <dt>--json</dt>
     <dd><code>diff</code>: print the change set as JSON.</dd>
     <dt>--allow-destructive</dt>
-    <dd><code>migrate</code>: generate changes that discard stored data, each marked in the script.</dd>
+    <dd><code>migrate</code>: generate changes that discard stored data, each marked in the script. <code>apply</code>: run a script containing them.</dd>
+    <dt>--uri &lt;bolt-uri&gt;</dt>
+    <dd><code>apply</code>: the Memgraph instance to run against.</dd>
+    <dt>--user &lt;name&gt;</dt>
+    <dd><code>import</code>, <code>apply</code>: the Memgraph user. The password comes from the <code>MEMGRAPH_PASSWORD</code> environment variable.</dd>
+    <dt>--dry-run</dt>
+    <dd><code>apply</code>: print the statements in order without connecting.</dd>
   </dl>
 
   <h2>Exit codes</h2>

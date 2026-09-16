@@ -158,7 +158,9 @@ The original plan deferred interactive editing to v2 and shipped a read-only can
 
 ### Still deferred
 
-The Memgraph target and user-supplied template targets remain out of scope.
+User-supplied template targets remain out of scope.
+
+The Memgraph target was deferred with them, because nothing could check its output. Measuring Memgraph Community in a container removed that reason, so it ships as code — see [[emitters#Memgraph Target]].
 
 Migrations and the lockfile diff were deferred from v1 and have since landed — see [[emitters#Migrations]]. They were pulled forward once their prerequisites existed: stable element ids, a stable serializer, and three database targets to migrate. A lockfile is still optional: nothing but `lock`, `diff` and `migrate` reads one, and `emit` never does.
 
@@ -177,6 +179,8 @@ A published `.vsix` carries no `node_modules`, so a bare `require('@lpg/core')` 
 The CLI ships to npm the same way, as a single self-contained package, so `core` is never published at all and is marked private to keep it that way. Bundling also settles a naming problem rather than working around it: the `@lpg` scope is not ours, and a published package carrying a bare workspace dependency would not install. The published names differ by necessity — the extension owns `lpg-modeler` as its Marketplace id, so the CLI is `lpg-modeler-cli` — and `npx lpg` is deliberately not advertised, because an unrelated package already holds that name on npm.
 
 One dependency is deliberately left out of that bundle. Importing a LadybugDB database needs `@ladybugdb/core`, which carries a native binding per platform that a bundle cannot inline. It is an optional peer dependency rather than a dependency, because the runtime and its platform binary come to roughly 38 MB, and every CI run that only checks and emits would otherwise download them. The command line loads it only when a database is imported, looking beside itself and then in the working directory, and says how to install it when it finds neither — see [[importers#Reading a LadybugDB Database]].
+
+The Bolt driver, `neo4j-driver`, is kept out the same way, for size rather than a native binding: only reading a Memgraph instance and `lpg apply` use it. `apply` is the one command that writes to a database. It takes a generated script rather than a model, so what runs is exactly what was reviewed; it refuses a script for another target or one marked destructive, runs each statement in its own transaction, and stops at the first failure saying what had already been applied. `emit` and `migrate` still never connect. Only Memgraph is wired to it.
 
 ### Documentation site
 

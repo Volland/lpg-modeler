@@ -81,7 +81,7 @@ context: |
        targets; CLI `check`, `emit`, `ids`, `targets`; canvas as the authoring
        surface with ELK auto-layout; named views and the layout sidecar; keys,
        element ids, imports, namespaces.
-  OUT: memgraph, template targets.
+  OUT: template targets.
 
   Migrations and the lockfile diff moved from OUT to IN with change
   `add-migrations-and-lockfile`: CLI `lock`, `diff`, `migrate` for the ladybug,
@@ -89,6 +89,11 @@ context: |
   stable serializer, three database targets), and a deployed schema with no path
   forward was the first wall a real user hit. A lockfile is still optional:
   nothing but those three commands reads one.
+
+  Memgraph moved from OUT to IN with change `add-memgraph-target`: target, migrations,
+  import from a running instance, and `lpg apply` (the one command that connects). It
+  was deferred only because nothing could check its output; Memgraph Community runs in
+  a container, and its suites run when LPG_MEMGRAPH_URI is set.
 
   Visual authoring, the layout sidecar, editable views, and the RDF targets moved
   from OUT to IN: shipping a compiler first would have left the tool unusable for
@@ -147,6 +152,25 @@ context: |
   - Indexes are per property: a composite CREATE makes one per property, a composite
     DROP removes only one, and a composite CREATE fails if any property is indexed.
   - `GRAPH.CONSTRAINT LIST` is rejected; use `CALL db.constraints()`.
+
+  Verified against Memgraph 3.13.1 Community (Podman) for the Memgraph target:
+
+  - Node constraints `ASSERT n.p IS UNIQUE` (composite too), `ASSERT EXISTS (n.p)`,
+    `ASSERT n.p IS TYPED <T>` are enforced on write, and refused at once when existing
+    data violates them. No NODE KEY, no relationship constraints, no IF NOT EXISTS.
+  - `IS TYPED` cannot name a specific enum, only ENUM. `DROP ENUM` and `ALTER ENUM ...
+    REMOVE VALUE` are not implemented; an enum survives DROP GRAPH and a restart.
+  - Repeating a unique/exists constraint, an index or any drop is silent; repeating a
+    type constraint or CREATE ENUM errors.
+  - SHOW CONSTRAINT INFO reports BOOL, LOCAL DATE TIME, LOCAL TIME, ZONED DATE TIME;
+    create and drop need BOOLEAN, LOCALDATETIME, LOCALTIME, ZONEDDATETIME.
+  - DELETE inside CALL ... IN TRANSACTIONS is refused; USING PERIODIC COMMIT n works
+    for every data step.
+  - SHOW SCHEMA INFO needs --schema-info-enabled (a GitHub Actions service container
+    cannot pass it; the MEMGRAPH env var does not set it). Observed enum values name
+    their enum as `Enum::<Name>`.
+  - Constraints carry no name: a key is not distinguishable from another unique,
+    present property unless something else (the emitted key index) says so.
 
   ## Editing the model file
 

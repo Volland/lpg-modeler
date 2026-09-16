@@ -151,6 +151,43 @@ $REDIS_CLI GRAPH.CONSTRAINT CREATE "$GRAPH_KEY" MANDATORY NODE Person PROPERTIES
 
   <hr class="rule">
 
+  <h2>memgraph</h2>
+  <p>
+    Memgraph is schema-optional and multi-label like Neo4j, but its Community edition enforces
+    more: existence, uniqueness and value-type constraints, and native enums, all checked on
+    write. A constraint that data already in the graph violates is refused immediately rather
+    than failing later. Output extension: <code>.cypher</code>. Measured against Memgraph 3.13.1.
+  </p>
+<pre><code><span class="c-com">// Person carries labels :Person :Party.</span>
+CREATE CONSTRAINT ON (n:Person) ASSERT n.id IS UNIQUE;
+CREATE CONSTRAINT ON (n:Person) ASSERT EXISTS (n.id);
+CREATE INDEX ON :Person(id);
+CREATE CONSTRAINT ON (n:Person) ASSERT n.email IS UNIQUE;
+CREATE CONSTRAINT ON (n:Person) ASSERT n.createdAt IS TYPED LOCALDATETIME;</code></pre>
+  <p>
+    A key is uniqueness over its properties plus existence on each part, and it is indexed:
+    Memgraph constraints carry no name, so the index is what lets a later import tell the key
+    apart from another unique, required property.
+  </p>
+  <h3>Enums are real here</h3>
+  <p>
+    Each enum becomes <code>CREATE ENUM</code>, and a property limited to one is constrained to
+    hold an enum value. That changes how applications write it — <code>Status::active</code>,
+    not <code>'active'</code>, which is rejected. Memgraph can require <em>an</em> enum but not a
+    particular one, and that gap is reported. An enum cannot be dropped or lose a value, so a
+    migration that removes one says so instead of pretending.
+  </p>
+  <h3>What it will not enforce</h3>
+  <p>
+    There is no relationship constraint of any kind, so a required or unique edge property is
+    reported. So are cardinality, value bounds and patterns, integer widths (every integer is
+    64-bit), and <code>uuid</code>, <code>json</code> and <code>blob</code>, which have no
+    Memgraph type. A generated script is for a fresh instance: carry an existing one forward
+    with <code>lpg migrate</code>, and run either with <a href="cli.html">lpg apply</a>.
+  </p>
+
+  <hr class="rule">
+
   <h2>shacl</h2>
   <p>
     SHACL is the primary constraint artifact for RDF, because it is closed-world validation and
@@ -313,9 +350,9 @@ $REDIS_CLI GRAPH.CONSTRAINT CREATE "$GRAPH_KEY" MANDATORY NODE Person PROPERTIES
   <p>
     Cypher compatibility is a marketing category rather than a dialect: Ladybug, Neo4j, FalkorDB,
     Memgraph and Apache AGE disagree on nearly everything schema-related, so a generic Cypher
-    generator would have no reference implementation to test against. Each of the three that
-    ship is a generator for one named engine, held to that engine's published commands — which
-    is why FalkorDB is a target and &ldquo;Cypher&rdquo; is not.
+    generator would have no reference implementation to test against. Each of the four that
+    ship is a generator for one named engine, held to that engine's own commands — which is why
+    FalkorDB and Memgraph are targets and &ldquo;Cypher&rdquo; is not.
   </p>
   <p>
     The rule is about reference implementations rather than running engines, which is why the
@@ -326,8 +363,7 @@ $REDIS_CLI GRAPH.CONSTRAINT CREATE "$GRAPH_KEY" MANDATORY NODE Person PROPERTIES
   <p>
     For a dialect that cannot be tested here, the intended path is a template fed by the
     resolved model rather than a hand-written generator — so an additional target is a piece of
-    configuration rather than a feature request. That, along with migrations and the lockfile
-    diff, is not in this release.
+    configuration rather than a feature request. That is not in this release.
   </p>
 
   <h2>Adding a target</h2>
@@ -361,7 +397,7 @@ $REDIS_CLI GRAPH.CONSTRAINT CREATE "$GRAPH_KEY" MANDATORY NODE Person PROPERTIES
   </p>
   <p>
     Constraint downgrades are reported at <code>info</code> rather than <code>warning</code>.
-    Six of the eight targets carry no value or named constraint at all, so a warning apiece
+    Seven of the nine targets carry no value or named constraint at all, so a warning apiece
     would bury the downgrades that are genuinely surprising — a <code>required</code> property
     that silently vanishes is a different class of problem from SHACL being the only place a
     regular expression can live.

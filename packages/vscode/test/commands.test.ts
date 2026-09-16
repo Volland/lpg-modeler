@@ -47,6 +47,20 @@ describe('LPG: Generate Schema', () => {
     expect(harness.errors).toEqual([])
   })
 
+  // @lat: [[emitters#Memgraph Target]]
+  it('offers memgraph in the command palette pick list', async () => {
+    activate(context())
+    const file = writeModel('shop')
+    harness.foundFiles = [Uri.file(file)]
+    harness.quickPicks = ['memgraph']
+
+    await commands.executeCommand('lpg.generate')
+
+    expect(harness.quickPickItems[0]).toContain('memgraph')
+    expect(fs.existsSync(path.join(root, 'shop.memgraph.cypher'))).toBe(true)
+    expect(harness.errors).toEqual([])
+  })
+
   it('generates from the focused canvas when no text editor is active', async () => {
     activate(context())
 

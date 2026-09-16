@@ -75,6 +75,8 @@ export const PAIRS: Pair[] = [
     '    mixins: [Timestamped]\n', ''),
     '    abstract: true\n    key: [id]\n', '    abstract: true\n    key: [id]\n    mixins: [Timestamped]\n') },
   { name: 'remove-enum-value', edit: (t) => swap(t, 'values: [active, retired]', 'values: [active]') },
+  { name: 'add-enum-value', edit: (t) => swap(t, 'values: [active, retired]', 'values: [active, retired, sold]') },
+  { name: 'add-enum', edit: (t) => swap(t, 'enums:\n', 'enums:\n  Fuel:\n    id: x_fuel\n    values: [petrol, electric]\n\n') },
 ]
 
 export const pair = (name: string): Pair => {

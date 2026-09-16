@@ -5,7 +5,7 @@ import { join, resolve as resolvePath, basename, dirname } from 'node:path'
 import {
   applyEdits, atLeast, backfillIdEdits, CHANGE_CLASSES, describeChange, detectFormat, diffModels,
   emit, idsNotWritten, importModel, importerNames, lockfilePath, migrationFileName, parseViews,
-  planMigration, readLadybugCatalog, readLockfile, resolveModel, serializeModel, sidecarPaths,
+  planMigration, readLadybugCatalog, readLockfile, readMemgraphSchema, resolveModel, serializeModel, sidecarPaths,
   summarizeChanges, targetNames, validateModel, writeLockfile,
   type ChangeClass, type Diagnostic, type EmitOptions, type ImportInput, type LadybugConnection,
   type Lockfile, type ModelIR,
@@ -62,14 +62,17 @@ Usage:
   lpg ids    <model.lpg.yaml>       assign any missing stable element ids
   lpg lock    <model.lpg.yaml> [--check]
   lpg diff    <model.lpg.yaml> [--fail-on <${CHANGE_CLASSES.join('|')}>] [--json]
-  lpg migrate <model.lpg.yaml> [--target <ladybug|neo4j|falkordb>] [--out <dir>]
+  lpg migrate <model.lpg.yaml> [--target <ladybug|neo4j|falkordb|memgraph>] [--out <dir>]
                                [--allow-destructive] [--edition ...] [--graph-key ...]
   lpg import <file...> [--from <${[...importerNames(), 'ladybug-db'].sort().join('|')}>] [--out <model.lpg.yaml>]
+  lpg import bolt://host:7687 [--user <name>] [--out <model.lpg.yaml>]
+  lpg apply  <script> --target memgraph --uri bolt://host:7687 [--user <name>]
+             [--allow-destructive] [--dry-run]
   lpg targets
 
 Options:
   --target <name>       generation or migration target (repeatable); migrate defaults
-                        to ladybug, neo4j and falkordb
+                        to ladybug, neo4j, falkordb and memgraph
   --out <path>          emit: a directory to write artifacts into
                         migrate: where scripts go (default: migrations/ beside the model)
                         import: the model file to write, instead of stdout
@@ -82,6 +85,11 @@ Options:
   --fail-on <class>     diff: fail on a change of this class or a more severe one
   --json                diff: print the change set as JSON
   --allow-destructive   migrate: generate changes that discard stored data
+                        apply: run a script whose statements are marked destructive
+  --uri <bolt-uri>      apply: the Memgraph instance to run the script against
+  --user <name>         import, apply: the Memgraph user; the password is read from
+                        the MEMGRAPH_PASSWORD environment variable, never a flag
+  --dry-run             apply: print the statements without connecting
 
 The lockfile (<stem>.lpg.lock.json) is committed beside the model. It records what was
 last deployed, so diff and migrate compare the model against it by element id.
@@ -92,6 +100,9 @@ exact column widths neither of them keeps.
 
 A LadybugDB database is read from its catalog, opened read-only. A directory or a
 .lbdb, .lbug or .kuzu file is taken to be one; that needs @ladybugdb/core installed.
+
+A bolt:// URI is a running Memgraph, whose schema is read without writing to it.
+Reading one, and apply, need neo4j-driver installed.
 `)
   return 2
 }
@@ -110,6 +121,9 @@ function parseArgs(argv: string[]) {
   let check = false
   let json = false
   let allowDestructive = false
+  let uri: string | undefined
+  let user: string | undefined
+  let dryRun = false
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]
     if (a === '--target') targets.push(argv[++i] ?? '')
@@ -127,10 +141,13 @@ function parseArgs(argv: string[]) {
     } else if (a === '--check') check = true
     else if (a === '--json') json = true
     else if (a === '--allow-destructive') allowDestructive = true
+    else if (a === '--uri') uri = argv[++i]
+    else if (a === '--user') user = argv[++i]
+    else if (a === '--dry-run') dryRun = true
     else if (a?.startsWith('--')) throw new UsageError()
     else if (a) positional.push(a)
   }
-  return { positional, targets, out, from, graphKey, edition, failOn, check, json, allowDestructive }
+  return { positional, targets, out, from, graphKey, edition, failOn, check, json, allowDestructive, uri, user, dryRun }
 }
 
 /** Where a database import pauses for a message rather than a stack trace. */
@@ -199,16 +216,85 @@ async function readDatabase(path: string): Promise<ImportInput> {
   }
 }
 
+const NEO4J_DRIVER_VERSION = '6.2.0'
+
+/**
+ * The Bolt driver is an optional peer for the same reason the LadybugDB runtime is: only
+ * a Memgraph import and `apply` use it, and everything else should not download it.
+ * See lat.md/architecture#Distribution.
+ */
+function loadDriver(): typeof import('neo4j-driver').default {
+  for (const base of [__filename, join(process.cwd(), 'noop.js')]) {
+    try {
+      const mod = createRequire(base)('neo4j-driver')
+      return mod.default ?? mod
+    } catch { /* try the next place */ }
+  }
+  throw new ImportFailure(
+    `connecting to Memgraph needs neo4j-driver: npm install neo4j-driver@${NEO4J_DRIVER_VERSION} ` +
+    `(or npx -p lpg-modeler-cli -p neo4j-driver@${NEO4J_DRIVER_VERSION} lpg …)`)
+}
+
+const isBoltUri = (s: string) => /^bolt(\+s|\+ssc)?:\/\//i.test(s)
+
+/** A driver to a Memgraph instance, verified before anything is asked of it. */
+async function connectMemgraph(uri: string, user: string | undefined) {
+  const neo4j = loadDriver()
+  const driver = neo4j.driver(uri, neo4j.auth.basic(user ?? '', process.env.MEMGRAPH_PASSWORD ?? ''))
+  try {
+    await driver.verifyConnectivity()
+  } catch (e) {
+    await driver.close().catch(() => undefined)
+    throw new ImportFailure(`cannot connect to Memgraph at ${uri}: ${(e as Error).message}`)
+  }
+  /** The driver's 64-bit integers, as numbers: a schema count never needs more. */
+  const plain = (v: unknown): unknown => (neo4j.isInt(v) ? (v as { toNumber(): number }).toNumber()
+    : Array.isArray(v) ? v.map(plain)
+      : v !== null && typeof v === 'object' && v.constructor === Object
+        ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, plain(x)])) : v)
+  const run = async (statement: string, mode: 'READ' | 'WRITE') => {
+    const session = driver.session({ defaultAccessMode: mode === 'READ' ? neo4j.session.READ : neo4j.session.WRITE })
+    try {
+      const result = await session.run(statement)
+      return result.records.map((r) => plain(r.toObject()) as Record<string, unknown>)
+    } finally {
+      await session.close()
+    }
+  }
+  return { driver, run }
+}
+
+/**
+ * Read a running Memgraph's schema. Every query runs in a read session, so an import
+ * cannot change the instance. See lat.md/importers#Reading a Memgraph Instance.
+ */
+async function readMemgraph(uri: string, user: string | undefined): Promise<ImportInput> {
+  const { driver, run } = await connectMemgraph(uri, user)
+  try {
+    const { catalog, diagnostics } = await readMemgraphSchema({ run: (q) => run(q, 'READ') })
+    report(diagnostics)
+    if (diagnostics.some((d) => d.severity === 'error')) {
+      throw new ImportFailure(`cannot read the schema of Memgraph at ${uri}`)
+    }
+    return { path: uri, memgraphCatalog: catalog }
+  } finally {
+    await driver.close()
+  }
+}
+
 /**
  * Read one or more foreign schemas into a model. The result is written through the
  * normal pipeline rather than trusted: it is serialized, then resolved and validated
  * from that text, so what the user is told is true of the file they now have.
  * See lat.md/importers#Importers.
  */
-async function runImport(files: string[], from: string | undefined, out: string | undefined): Promise<number> {
+async function runImport(
+  files: string[], from: string | undefined, out: string | undefined, user: string | undefined,
+): Promise<number> {
   const inputs: ImportInput[] = []
   try {
     for (const file of files) {
+      if (isBoltUri(file) || from?.toLowerCase() === 'memgraph') { inputs.push(await readMemgraph(file, user)); continue }
       const abs = resolvePath(file)
       if (isDatabasePath(abs, from)) { inputs.push(await readDatabase(abs)); continue }
       const text = read(abs)
@@ -222,16 +308,21 @@ async function runImport(files: string[], from: string | undefined, out: string 
   }
 
   const { model, diagnostics } = importModel(inputs, from)
-  const rdf = inputs.some((i) => (from ? from !== 'ladybug' && from !== 'ladybug-db' : detectFormat(i) === 'rdf'))
+  const kinds = new Set(inputs.map((i) => ('memgraphCatalog' in i ? 'memgraph'
+    : from && 'text' in i ? (from === 'ladybug' || from === 'ladybug-db' ? 'ladybug' : 'rdf') : detectFormat(i))))
+  const caveat = kinds.has('rdf')
+    ? ['Check anything the import reported: RDF cannot express an abstract type, a',
+      'mixin or a uniqueness constraint, and several scalars share one XSD datatype.']
+    : kinds.has('memgraph')
+      ? ['Check anything the import reported: Memgraph holds no edge constraint, cardinality,',
+        'value bound or mixin, and a hierarchy is read from labels that occur together.']
+      : ['Check anything the import reported: LadybugDB keeps one table per concrete',
+        'type, so an abstract type, a mixin, an enum and a value constraint are not in it.']
   const source = serializeModel(model, {
     header: [
-      `Imported by lpg-modeler from ${files.map((f) => basename(f)).join(', ')}.`,
+      `Imported by lpg-modeler from ${files.map((f) => (isBoltUri(f) ? f : basename(f))).join(', ')}.`,
       '',
-      ...(rdf
-        ? ['Check anything the import reported: RDF cannot express an abstract type, a',
-          'mixin or a uniqueness constraint, and several scalars share one XSD datatype.']
-        : ['Check anything the import reported: LadybugDB keeps one table per concrete',
-          'type, so an abstract type, a mixin, an enum and a value constraint are not in it.']),
+      ...caveat,
     ],
   })
 
@@ -363,6 +454,72 @@ function runMigrate(
   return errors > 0 ? 1 : 0
 }
 
+/**
+ * `lpg apply`: run a reviewed script against a running Memgraph, one statement per
+ * auto-commit transaction, stopping at the first failure. It takes a script, never a
+ * model, so what runs is exactly what was reviewed. Everything that can be checked
+ * without a connection is checked first. See lat.md/architecture#Distribution.
+ */
+async function runApply(
+  scriptPath: string, targets: string[], uri: string | undefined, user: string | undefined,
+  allowDestructive: boolean, dryRun: boolean,
+): Promise<number> {
+  const target = targets[0]
+  if (!target || targets.length > 1) return usage()
+  const fail = (code: string, message: string) => { report([{ severity: 'error', code, message }]); return 1 }
+  if (target !== 'memgraph') return fail('apply-unsupported', `apply runs scripts against memgraph only; '${target}' is not supported.`)
+
+  const abs = resolvePath(scriptPath)
+  const text = read(abs)
+  if (text === undefined) { process.stderr.write(`cannot read ${abs}\n`); return 1 }
+  const header = text.split('\n').slice(0, 3)
+    .map((l) => /^(?:\/\/|#) Generated by lpg-modeler\. Target: (\S+?)(?: migration)?\.$/.exec(l)?.[1])
+    .find(Boolean)
+  if (!header) return fail('apply-not-generated', `${abs} is not a script generated by lpg-modeler, so it is not run.`)
+  if (header !== target) return fail('apply-target-mismatch', `${abs} was generated for ${header}, not ${target}.`)
+
+  const destructive = text.split('\n').filter((l) => l.startsWith('// DESTRUCTIVE: '))
+  if (destructive.length > 0 && !allowDestructive) {
+    return fail('destructive-change',
+      `${abs} contains ${destructive.length} statement(s) marked destructive (${destructive.map((l) => l.slice('// DESTRUCTIVE: '.length).split(':')[0]).join(', ')}). Pass --allow-destructive to run it.`)
+  }
+
+  // The generator writes one statement per `;`-terminated group of lines and never puts
+  // a `;` inside a string, so this split is exact for the scripts apply accepts.
+  const statements = text.split('\n').filter((l) => !l.trim().startsWith('//')).join('\n')
+    .split(/;[ \t]*(?:\n|$)/).map((x) => x.trim()).filter(Boolean)
+  if (dryRun) {
+    statements.forEach((st, i) => process.stdout.write(`[${i + 1}/${statements.length}] ${st};\n`))
+    return 0
+  }
+  if (!uri) return usage()
+
+  let connection: Awaited<ReturnType<typeof connectMemgraph>>
+  try {
+    connection = await connectMemgraph(uri, user)
+  } catch (e) {
+    if (!(e instanceof ImportFailure)) throw e
+    process.stderr.write(`${e.message}\n`)
+    return 1
+  }
+  try {
+    for (const [i, st] of statements.entries()) {
+      try {
+        await connection.run(st, 'WRITE')
+      } catch (e) {
+        process.stderr.write(`statement ${i + 1} of ${statements.length} failed: ${(e as Error).message}\n  ${st};\n`)
+        process.stderr.write(`${i} statement(s) had been applied; the rest did not run.\n`)
+        return 1
+      }
+      process.stdout.write(`[${i + 1}/${statements.length}] ${st.split('\n')[0]}\n`)
+    }
+    process.stdout.write(`applied ${statements.length} statement(s) to ${uri}\n`)
+    return 0
+  } finally {
+    await connection.driver.close()
+  }
+}
+
 async function main(argv: string[]): Promise<number> {
   const [command, ...rest] = argv
   if (!command || command === '--help' || command === '-h') return usage()
@@ -372,7 +529,7 @@ async function main(argv: string[]): Promise<number> {
   }
 
   const {
-    positional, targets, out, from, graphKey, edition, failOn, check, json, allowDestructive,
+    positional, targets, out, from, graphKey, edition, failOn, check, json, allowDestructive, uri, user, dryRun,
   } = parseArgs(rest)
   const modelPath = positional[0]
   if (!modelPath) return usage()
@@ -382,7 +539,8 @@ async function main(argv: string[]): Promise<number> {
     ...(graphKey ? { falkorGraphKey: graphKey } : {}),
   }
 
-  if (command === 'import') return runImport(positional, from, out)
+  if (command === 'import') return runImport(positional, from, out, user)
+  if (command === 'apply') return runApply(modelPath, targets, uri, user, allowDestructive, dryRun)
   if (command === 'lock') return runLock(modelPath, check)
   if (command === 'diff') return runDiff(modelPath, failOn, json)
   if (command === 'migrate') return runMigrate(modelPath, targets, out, allowDestructive, options)

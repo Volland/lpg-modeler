@@ -24,14 +24,14 @@ describe('migration orchestration', () => {
     expect(codes(plan.diagnostics)).toContain('model-unchanged')
   })
 
-  it('generates the three database targets by default and advances the lockfile', () => {
+  it('generates the four database targets by default and advances the lockfile', () => {
     const plan = planMigration(request('add-optional-property'))
-    expect(plan.scripts.map((s) => s.target)).toEqual(['ladybug', 'neo4j', 'falkordb'])
+    expect(plan.scripts.map((s) => s.target)).toEqual(['ladybug', 'neo4j', 'falkordb', 'memgraph'])
     expect(plan.revision).toBe(4)
     expect(readLockfile(plan.lockfileText!).lockfile?.revision).toBe(4)
     expect(plan.lockfileText).toBe(writeLockfile(pairModels('add-optional-property').after, 4))
     expect(plan.scripts.map((s) => migrationFileName('shop', plan.revision, s.target, s.extension)))
-      .toEqual(['shop.0004.ladybug.cypher', 'shop.0004.neo4j.cypher', 'shop.0004.falkordb.sh'])
+      .toEqual(['shop.0004.ladybug.cypher', 'shop.0004.neo4j.cypher', 'shop.0004.falkordb.sh', 'shop.0004.memgraph.cypher'])
   })
 
   it('refuses a destructive change without permission, leaving the revision where it was', () => {
@@ -47,9 +47,9 @@ describe('migration orchestration', () => {
   it('generates the destructive migration when permitted, marking each destructive statement', () => {
     const plan = planMigration(request('remove-node-type', { allowDestructive: true }))
     expect(plan.refused).toBe(false)
-    for (const target of ['ladybug', 'neo4j', 'falkordb']) {
+    for (const target of ['ladybug', 'neo4j', 'falkordb', 'memgraph']) {
       const lines = script(plan, target).split('\n')
-      const drop = lines.findIndex((l) => /DROP (TABLE|CONSTRAINT) (Car|car_)|CONSTRAINT DROP .* Car /.test(l))
+      const drop = lines.findIndex((l) => /DROP (TABLE|CONSTRAINT) (Car|car_)|CONSTRAINT DROP .* Car |DROP CONSTRAINT ON \(n:Car\)/.test(l))
       expect(drop, target).toBeGreaterThan(0)
       expect(lines[drop - 1], target).toMatch(/DESTRUCTIVE: .*Car/)
     }
@@ -84,7 +84,7 @@ describe('migration orchestration', () => {
 
   it('warns when a subset of the database targets is migrated', () => {
     const plan = planMigration(request('add-optional-property', { targets: ['ladybug'] }))
-    expect(plan.diagnostics.find((d) => d.code === 'partial-migration')?.message).toMatch(/neo4j and falkordb/)
+    expect(plan.diagnostics.find((d) => d.code === 'partial-migration')?.message).toMatch(/neo4j, falkordb and memgraph/)
   })
 
   it('refuses a model whose element ids are derived', () => {
@@ -108,6 +108,7 @@ describe('migration scripts, golden', () => {
       await expect(script(community, 'neo4j')).toMatchFileSnapshot(`./golden/migrate/${pair.name}.neo4j.community.cypher`)
       await expect(script(enterprise, 'neo4j')).toMatchFileSnapshot(`./golden/migrate/${pair.name}.neo4j.enterprise.cypher`)
       await expect(script(community, 'falkordb')).toMatchFileSnapshot(`./golden/migrate/${pair.name}.falkordb.sh`)
+      await expect(script(community, 'memgraph')).toMatchFileSnapshot(`./golden/migrate/${pair.name}.memgraph.cypher`)
     })
   }
 })
@@ -168,5 +169,41 @@ describe('falkordb migration', () => {
     const s = script(planMigration(request('change-key', { allowDestructive: true })), 'falkordb')
     expect(s).toContain('CREATE INDEX FOR (n:Car) ON (n.seats)')
     expect(s).not.toContain('ON (n.vin, n.seats)')
+  })
+})
+
+// @lat: [[emitters#Migrations#Target Planners]]
+describe('memgraph migration', () => {
+  it('drops the old key constraints, relabels in batches, then creates the new ones, in that order', () => {
+    const s = script(planMigration(request('rename-node-type')), 'memgraph')
+    const drop = s.indexOf('DROP CONSTRAINT ON (n:Person) ASSERT n.id IS UNIQUE;')
+    const relabel = s.indexOf('USING PERIODIC COMMIT 1000 MATCH (n:Person) SET n:Individual REMOVE n:Person;')
+    const create = s.indexOf('CREATE CONSTRAINT ON (n:Individual) ASSERT n.id IS UNIQUE;')
+    expect(drop).toBeGreaterThan(0)
+    expect(relabel).toBeGreaterThan(drop)
+    expect(create).toBeGreaterThan(relabel)
+  })
+
+  it('replaces a type constraint on a retyped property, warning that existing values block it', () => {
+    // Ladybug has to drop and re-add the column, so the migration needs the flag.
+    const lines = script(planMigration(request('retype-property', { allowDestructive: true })), 'memgraph').split('\n')
+    const drop = lines.indexOf('DROP CONSTRAINT ON (n:Car) ASSERT n.seats IS TYPED INTEGER;')
+    const create = lines.indexOf('CREATE CONSTRAINT ON (n:Car) ASSERT n.seats IS TYPED STRING;')
+    expect(drop).toBeGreaterThan(0)
+    expect(create).toBeGreaterThan(drop)
+    expect(lines[create - 1]).toMatch(/BREAKING: .*refused while existing values of the previous type remain/)
+  })
+
+  it('adds an enum value in place, and a new enum', () => {
+    expect(script(planMigration(request('add-enum-value')), 'memgraph')).toContain('ALTER ENUM Status ADD VALUE sold;')
+    expect(script(planMigration(request('add-enum')), 'memgraph')).toContain('CREATE ENUM Fuel VALUES { petrol, electric };')
+  })
+
+  it('reports an enum value it cannot remove, with a comment instead of a statement', () => {
+    const plan = planMigration(request('remove-enum-value', { allowDestructive: true }))
+    const s = script(plan, 'memgraph')
+    expect(plan.diagnostics.some((d) => d.code === 'migration-downgrade' && d.target === 'memgraph' && d.message.includes('retired'))).toBe(true)
+    expect(s).toContain("// DOWNGRADE: 'retired' removed from enum 'Status'; Memgraph cannot remove an enum value, so it stays valid.")
+    expect(plan.scripts.find((x) => x.target === 'memgraph')?.statements).toBe(0)
   })
 })

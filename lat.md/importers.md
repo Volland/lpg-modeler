@@ -106,6 +106,20 @@ What these queries return was measured against LadybugDB 0.19.1, not taken from 
 
 Opening read-only is what makes an import safe to run against a database in use. The engine rejects any write through such a connection, and a path that does not exist is refused rather than created. The runtime itself is optional for the command line — see [[architecture#Distribution]].
 
+## Reading a Memgraph Instance
+
+A running Memgraph is read over Bolt, in read sessions, through `SHOW CONSTRAINT INFO`, `SHOW INDEX INFO`, `SHOW ENUMS` and — when the server runs with `--schema-info-enabled` — `SHOW SCHEMA INFO`.
+
+As with a LadybugDB database, `core` never loads the driver: [[packages/core/src/import/memgraph.ts#readMemgraphSchema]] reads through a session the command line opens, and [[packages/core/src/import/memgraph.ts#memgraphCatalogToModel]] builds the model. Constraints are declarations and outrank anything observed in the data.
+
+A key is a uniqueness constraint whose every property also has an existence constraint. When several qualify, the one whose properties carry an index is taken, because [[emitters#Memgraph Target|the generator indexes the key]] for exactly this reason; otherwise the smallest wins and the choice is reported. Existence makes a property required, a single-property uniqueness makes it unique, and a type constraint gives its type. A uniqueness over several properties that is not the key has no place in the model and is reported.
+
+Schema information adds what constraints cannot say: every label set nodes actually carry, the properties and observed value types under each, and every edge type with the labels at each end. It is also the only source that names an enum — a value observed as `Enum::Status` says which enum an `IS TYPED ENUM` property holds. When it is off, the import reads constraints and enums only and says how to turn it on.
+
+A hierarchy is read from labels that occur together, conservatively. Label X is a parent of Y when every node carrying Y also carries X and some node carries X without Y; a label two types always share proves nothing about which is the parent, so nothing is inferred from it. A label is abstract when no node carries it with only its own ancestors. Every inference is reported, in the voice of [[importers#Un-flattening Inheritance]], because co-occurrence is evidence rather than a declaration. Properties are not hoisted to a parent, since a Memgraph schema never declared them there.
+
+An edge seen between several label pairs collapses to the nearest type both ends descend from, as a LadybugDB endpoint set does. A property observed with more than one value type takes the commonest, and says so. What no Memgraph schema holds — edge constraints, cardinality, value bounds, mixins, widths — is reported as lost.
+
 ## Combining Sources
 
 RDF and DDL are complementary, so an import given both uses each for what only it has. RDF is the base, because it alone carries the hierarchy.

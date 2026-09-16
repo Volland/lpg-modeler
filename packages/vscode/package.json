@@ -35,6 +35,7 @@
     "lpg",
     "schema",
     "neo4j",
+    "memgraph",
     "cypher",
     "ladybugdb",
     "kuzu",

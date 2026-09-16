@@ -6,9 +6,10 @@ import { build } from 'esbuild'
  * carries no node_modules cannot resolve a bare workspace import.
  * See lat.md/architecture#Distribution.
  *
- * The LadybugDB runtime is the one exception. It carries a native binding per platform,
- * which a bundle cannot inline, and only a database import needs it, so it stays an
- * external `require` resolved when that command runs.
+ * Two runtimes are the exception, each needed by one command family only: the LadybugDB
+ * runtime carries a native binding per platform, which a bundle cannot inline, and the
+ * Bolt driver is several megabytes that only a Memgraph import and `apply` use. Both stay
+ * external `require`s resolved when those commands run.
  */
 await build({
   entryPoints: ['dist/cli.js'],
@@ -18,7 +19,7 @@ await build({
   platform: 'node',
   target: 'node18',
   format: 'cjs',
-  external: ['@ladybugdb/core'],
+  external: ['@ladybugdb/core', 'neo4j-driver'],
   logLevel: 'warning',
 })
 console.log('cli bundled')

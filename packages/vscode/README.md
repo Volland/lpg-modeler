@@ -205,7 +205,7 @@ That is the whole loop. Nothing here needs a running database.
 ## Examples to download
 
 Five complete models. Each is checked in continuous integration — a test resolves every one
-of them and generates all eight targets — so the file you download is the file the test
+of them and generates all nine targets — so the file you download is the file the test
 checked. Save one as `<name>.lpg.yaml` in a workspace and run **LPG: Open Canvas** on it.
 
 | Model | Shows |

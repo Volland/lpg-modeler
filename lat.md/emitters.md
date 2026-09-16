@@ -80,6 +80,37 @@ An index that a unique constraint depends on cannot be dropped ("Index supports 
 
 The status of constraints is read with `CALL db.constraints()`. `GRAPH.CONSTRAINT LIST` is rejected by 4.20.4, although the emitted schema script's header still names it.
 
+## Memgraph Target
+
+Memgraph is schema-optional and multi-label like Neo4j, but its Community edition enforces more: existence, uniqueness and value-type constraints, and native enums, all checked on write.
+
+That makes it the one Cypher target where a model's commonest constraints cost nothing to hold. A key becomes a uniqueness constraint over its properties plus an existence constraint on each part, because uniqueness alone ignores a node without the property. A required property gets an existence constraint with no edition gate, and a property whose type Memgraph can check gets an `IS TYPED` constraint. [[packages/core/src/emit/memgraph.ts#memgraphSchema]] builds them as objects that both the emitter and the migration planner use.
+
+The key is also indexed. Memgraph constraints carry no name, so a type with two unique, present properties — `Person.id` and `Person.email` — would not say which is the key, and a reader could not recover it. The index asserts it, by the rule in [[emitters#Capability Matrix]] that anything a machine reads back is asserted rather than left in a comment; it also serves key lookups.
+
+What Memgraph cannot hold is reported, with a comment at the site:
+- there is no relationship constraint of any kind, so a required or unique edge property is unenforced;
+- there is no cardinality or value-bound constraint;
+- an integer type holds no width and is 64-bit, and a float holds no precision;
+- `uuid`, `json` and `blob` have no Memgraph type at all;
+- `IS TYPED LIST` cannot say the element type, and a composite has nothing better than "some map".
+
+Enums are native, and that is a trade-off made deliberately. Each model enum becomes `CREATE ENUM`, and a property limited to one becomes `IS TYPED ENUM` — which requires *an* enum value but cannot name which enum, so that is reported too. The cost is on the application side: a value is written `Status::active`, and a plain string is rejected. The alternative, storing a string and documenting the value set as on Neo4j, would give away enforcement the engine really offers. The script header says how values are written.
+
+A generated script is for a fresh instance. A type constraint and an enum cannot be created twice, and an enum outlives every reset and even a restart, so an existing instance is carried forward with a migration rather than re-applied.
+
+### Measured Schema Syntax
+
+What Memgraph accepts was measured against 3.13.1 Community under Podman, and a live suite pins each finding, so a release that changes one fails there first.
+
+Accepted: `CREATE CONSTRAINT ON (n:L) ASSERT n.p IS UNIQUE` (and over several properties), `ASSERT EXISTS (n.p)`, `ASSERT n.p IS TYPED <T>` for BOOLEAN, DATE, DURATION, ENUM, FLOAT, INTEGER, LIST, LOCALDATETIME, LOCALTIME, MAP, POINT, STRING and ZONEDDATETIME; `CREATE INDEX ON :L(p)`, over several properties, and `CREATE EDGE INDEX ON :T(p)`; `CREATE ENUM`, `ALTER ENUM … ADD VALUE` and `UPDATE VALUE`. Every constraint is enforced on write, and a constraint existing data violates is refused at once, unlike FalkorDB's asynchronous `FAILED`.
+
+Refused: `NODE KEY`, any relationship constraint, `IF NOT EXISTS` in the `ON … ASSERT` form, a named enum in `IS TYPED`, `DROP ENUM` and `ALTER ENUM … REMOVE VALUE` ("Not yet implemented"). An enum survives `DROP GRAPH` and a restart.
+
+Two findings shape the code directly. Repeating a uniqueness or existence constraint, an index, or any drop is silent, but repeating a type constraint or an enum is an error. And `SHOW CONSTRAINT INFO` spells four types differently from the syntax that creates and drops them — `BOOL`, `LOCAL DATE TIME`, `LOCAL TIME`, `ZONED DATE TIME` — so anything reading the catalogue translates them back.
+
+Batching was measured too: `DELETE` inside `CALL { … } IN TRANSACTIONS` is refused, while `USING PERIODIC COMMIT n` works for every data step a migration needs.
+
 ## Standards Targets
 
 Three targets exist to make a model readable by tools this project does not own: GQL graph types, PG-Schema, and LinkML. None of them is a database dialect, and none can be executed against an engine, so all three carry golden coverage only.
@@ -116,7 +147,7 @@ LinkML has one `integer`, so every [[metamodel#Scalar Types#Integer Widths|width
 
 Targets that cannot be tested against a running instance are not shipped as code. Instead the resolved IR is exposed to a user-supplied template, so an additional dialect is a small amount of configuration rather than a feature request.
 
-Cypher compatibility is a marketing category rather than a dialect: Ladybug, Neo4j, Memgraph, and Apache AGE disagree on nearly everything schema-related, and a generic emitter would have no reference implementation to test against.
+Cypher compatibility is a marketing category rather than a dialect: Ladybug, Neo4j, Memgraph, and Apache AGE disagree on nearly everything schema-related, and a generic emitter would have no reference implementation to test against. Memgraph has since become a coded target, once a container made it testable — see [[emitters#Memgraph Target]]; the rule was never about Memgraph, only about being able to check the output.
 
 The rule is about reference implementations, not about running engines, which is why [[emitters#Standards Targets]] ship as code despite having no instance to execute against. A published specification is a reference an emitter can be held to; a dialect nobody has specified is not.
 
@@ -215,7 +246,9 @@ Each database target registers a planner beside its emitter, and every planner b
 
 The Ladybug planner, [[packages/core/src/emit/ladybug.migrate.ts#migrateLadybug]], diffs the *tables* the two revisions flatten to, not the declarations. Tables are matched by type id and columns by property identity, so a property added to an abstract parent is one column per concrete table, and a mixin or hierarchy change is simply columns gained or lost. The order follows the [[emitters#Ladybug Target#Measured ALTER Support|measured]] constraints: drop rel tables and vanished endpoint pairs, drop node tables, rename tables, alter columns, then create node tables, rel tables and new pairs. What cannot be done in place is realized destructively and gated: a key change or a multiplicity change recreates the table, a type change drops and re-adds the column, and a rel table losing every pair is recreated.
 
-The Neo4j and FalkorDB planners, [[packages/core/src/emit/neo4j.migrate.ts#migrateNeo4j]] and [[packages/core/src/emit/falkordb.migrate.ts#migrateFalkorDb]], are set differences over the schema objects the emitter builds for each revision. They drop what only the old revision had, rewrite the data a rename or a hierarchy change touches — relabelling nodes, moving a property, copying relationships to a new type, adding or removing ancestor labels — and then create what only the new revision has, so a renamed type's old constraint never sees the relabelled nodes. Neo4j batches data steps in `CALL { … } IN TRANSACTIONS`; FalkorDB follows its [[emitters#FalkorDB Target#Measured DROP Syntax|measured]] drop order. A removed concrete type also has its nodes deleted, and only under the flag, since that step is destructive.
+The Neo4j, FalkorDB and Memgraph planners, [[packages/core/src/emit/neo4j.migrate.ts#migrateNeo4j]], [[packages/core/src/emit/falkordb.migrate.ts#migrateFalkorDb]] and [[packages/core/src/emit/memgraph.migrate.ts#migrateMemgraph]], are set differences over the schema objects the emitter builds for each revision. They drop what only the old revision had, rewrite the data a rename or a hierarchy change touches — relabelling nodes, moving a property, copying relationships to a new type, adding or removing ancestor labels — and then create what only the new revision has, so a renamed type's old constraint never sees the relabelled nodes. Neo4j batches data steps in `CALL { … } IN TRANSACTIONS`; FalkorDB follows its [[emitters#FalkorDB Target#Measured DROP Syntax|measured]] drop order. A removed concrete type also has its nodes deleted, and only under the flag, since that step is destructive.
+
+Memgraph adds its own gaps to that shape. Data steps use `USING PERIODIC COMMIT`, since it refuses `DELETE` inside `CALL … IN TRANSACTIONS`. An enum value added is `ALTER ENUM … ADD VALUE`, but a removed value or enum has no statement at all, so it is a `migration-downgrade` with a comment — not a realization, since no data is lost and the old value simply stays admissible. A retyped property's new type constraint is marked as breaking, because Memgraph refuses it while values of the old type remain.
 
 The Ladybug planner is checked by an oracle: for every before/after fixture pair, a database built from the old DDL and migrated must have the same catalogue as one built from the new DDL, and rows must survive a rename. The catalogue does not record multiplicity, so that is checked by writing. The FalkorDB scripts were run the same way against a container, once, while the planner was written; they are pinned by golden files, as are the Neo4j scripts, which have no embedded engine to run against.
 
@@ -225,4 +258,6 @@ Every emitter has golden-file tests for output stability. The Ladybug target add
 
 The standards targets are the other side of this rule: GQL, PG-Schema, and LinkML have no engine to execute against, so they assert on the structures that matter — implied labels, PG-Keys constraints, `is_a` — rather than on a golden file alone. The LinkML output is additionally parsed back as YAML, so a formatting slip cannot pass as a valid schema.
 
-Real execution is affordable here because the database is embedded: `@ladybugdb/core` provides native bindings and `@ladybugdb/wasm-core` a WebAssembly build, so no container is required. Two engine defaults are bounded for that to hold: `maxDBSize` reserves 8 TiB of address space per database, and the buffer pool is sized from system memory, so a test file opening one database per test exhausts the mapping when several files run in parallel. Neo4j and Memgraph have no embedded mode, so they keep golden coverage with containerised tests gated behind an opt-in flag. A golden file alone only proves that output has not changed, not that it is valid.
+Real execution is affordable here because the database is embedded: `@ladybugdb/core` provides native bindings and `@ladybugdb/wasm-core` a WebAssembly build, so no container is required. Two engine defaults are bounded for that to hold: `maxDBSize` reserves 8 TiB of address space per database, and the buffer pool is sized from system memory, so a test file opening one database per test exhausts the mapping when several files run in parallel. Neo4j and Memgraph have no embedded mode, so they keep golden coverage, and Memgraph adds tests against a running instance gated behind `LPG_MEMGRAPH_URI`. A golden file alone only proves that output has not changed, not that it is valid.
+
+The Memgraph suites run locally against a container — `podman run -d -p 7697:7687 memgraph/memgraph:3.13.1 --schema-info-enabled=true`, then `LPG_MEMGRAPH_URI=bolt://localhost:7697 npm test` — and in a separate CI job that starts the same image. They check that generated constraints reject bad writes, apply every migration pair and compare the result with a fresh instance, as the Ladybug oracle does, and import a seeded instance back. Every suite shares one instance, so each takes a cross-process lock and resets it, and every test names its enums uniquely, since nothing can drop one.
