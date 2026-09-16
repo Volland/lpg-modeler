@@ -48,6 +48,14 @@
     "README.md",
     "LICENSE"
   ],
+  "peerDependencies": {
+    "@ladybugdb/core": "0.19.1"
+  },
+  "peerDependenciesMeta": {
+    "@ladybugdb/core": {
+      "optional": true
+    }
+  },
   "devDependencies": {
     "@lpg/core": "*",
     "esbuild": "^0.24.0"

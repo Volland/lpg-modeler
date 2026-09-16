@@ -1,8 +1,17 @@
 import { info, type Diagnostic, type ModelIR, type NodeTypeIR } from '../ir'
-import { importRdf, type ImportInput, type ImportResult } from './rdf'
-import { importLadybug } from './ladybug'
+import { importRdf, type ImportResult, type TextImportInput } from './rdf'
+import { importLadybug, type CatalogImportInput } from './ladybug'
 
-export type { ImportInput, ImportResult }
+/**
+ * A file read as text, or a LadybugDB database whose catalog the caller has already
+ * read -- `core` never opens a database itself. See lat.md/importers#Reading a LadybugDB Database.
+ */
+export type ImportInput = TextImportInput | CatalogImportInput
+
+export type { ImportResult, TextImportInput, CatalogImportInput }
+
+const texts = (inputs: ImportInput[]): TextImportInput[] =>
+  inputs.filter((i): i is TextImportInput => 'text' in i)
 
 /**
  * Internal registry, the mirror of the emitter one. Adding a source is a file plus one
@@ -18,7 +27,7 @@ interface Registration {
 }
 
 const REGISTRY = new Map<string, Registration>([
-  ['rdf', { importer: (i) => importRdf(i), extensions: ['.ttl', '.owl', '.shacl', '.n3'] }],
+  ['rdf', { importer: (i) => importRdf(texts(i)), extensions: ['.ttl', '.owl', '.shacl', '.n3'] }],
   ['ladybug', { importer: (i) => importLadybug(i), extensions: ['.cypher', '.ddl'] }],
 ])
 
@@ -30,8 +39,14 @@ export function importerNames(): string[] {
   return [...REGISTRY.keys()].sort()
 }
 
-/** `shacl` and `owl` are read by one reader, so both name the same importer. */
-const ALIASES: Record<string, string> = { shacl: 'rdf', owl: 'rdf', turtle: 'rdf', ttl: 'rdf' }
+/**
+ * `shacl` and `owl` are read by one reader, so both name the same importer. `ladybug-db`
+ * does too: to the command line it means "open this path as a database", but once the
+ * catalog is read a database is just another LadybugDB source.
+ */
+const ALIASES: Record<string, string> = {
+  shacl: 'rdf', owl: 'rdf', turtle: 'rdf', ttl: 'rdf', 'ladybug-db': 'ladybug',
+}
 
 export function resolveFormat(name: string): string | undefined {
   const key = name.toLowerCase()
@@ -44,6 +59,7 @@ export function resolveFormat(name: string): string | undefined {
  * that the extension already settled; it is the fallback for a file named `schema.txt`.
  */
 export function detectFormat(input: ImportInput): string | undefined {
+  if ('ladybugCatalog' in input) return 'ladybug'
   const lower = input.path.toLowerCase()
   for (const [name, reg] of REGISTRY) {
     if (reg.extensions.some((e) => lower.endsWith(e))) return name
@@ -64,7 +80,9 @@ export function importModel(inputs: ImportInput[], format?: string): ImportResul
 
   const groups = new Map<string, ImportInput[]>()
   for (const input of inputs) {
-    const kind = format ? resolveFormat(format) : detectFormat(input)
+    // A catalog was already read from a database, so no format named for files applies to it.
+    const kind = 'ladybugCatalog' in input ? 'ladybug'
+      : format ? resolveFormat(format) : detectFormat(input)
     if (!kind) {
       diagnostics.push(info('import-unknown-format',
         `Could not tell what '${input.path}' is from its name or its first lines. Name the format explicitly to read it.`))
@@ -79,7 +97,7 @@ export function importModel(inputs: ImportInput[], format?: string): ImportResul
   const ddlInputs = groups.get('ladybug') ?? []
 
   if (rdfInputs.length > 0 && ddlInputs.length === 0) {
-    const out = importRdf(rdfInputs)
+    const out = importRdf(texts(rdfInputs))
     return { model: out.model, diagnostics: [...diagnostics, ...out.diagnostics] }
   }
   if (ddlInputs.length > 0 && rdfInputs.length === 0) {
@@ -99,7 +117,7 @@ export function importModel(inputs: ImportInput[], format?: string): ImportResul
 
   // Both kinds are present, so each can supply what the other cannot: RDF carries the
   // hierarchy and the constraints, the DDL the exact column widths and the endpoints.
-  const rdf = importRdf(rdfInputs)
+  const rdf = importRdf(texts(rdfInputs))
   const parents = new Map<string, string>()
   for (const n of rdf.model.nodes) if (n.extends) parents.set(n.name, n.extends)
   const ddl = importLadybug(ddlInputs, { parents })

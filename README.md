@@ -104,6 +104,13 @@ because each carries what the other cannot:
 npx lpg-modeler-cli import domain.shacl.ttl domain.owl.ttl --out domain.lpg.yaml
 ```
 
+Or read a LadybugDB database you already run. It is opened read-only, and reading it needs the
+engine's runtime, which the CLI does not bundle:
+
+```bash
+npx -p lpg-modeler-cli -p @ladybugdb/core@0.19.1 lpg import graph.lbdb --out domain.lpg.yaml
+```
+
 Browse them with commentary: **https://volland.github.io/lpg-modeler/examples.html**
 
 ## Install

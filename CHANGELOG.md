@@ -4,6 +4,25 @@ All notable changes to LPG Modeler are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **A LadybugDB database can be imported directly.** `lpg import graph.lbdb --out
+  domain.lpg.yaml` opens the database read-only and reads its catalog: node and rel tables,
+  exact column types, primary keys and every endpoint pair. A directory or a `.lbdb`, `.lbug`
+  or `.kuzu` file is recognised as a database; `--from ladybug-db` names any other path. A
+  database imports to the same model as the DDL that created it, and combines with a shapes
+  graph and an ontology exactly as the DDL does.
+
+  What the catalog does not hold is reported rather than guessed: rel multiplicity
+  (`import-multiplicity`) and table comments (`import-comment`), alongside the hierarchy,
+  mixins and constraints no LadybugDB source carries.
+
+  The engine runtime is an optional peer dependency of the CLI rather than a dependency,
+  because its native binaries would otherwise be downloaded by every `check` and `emit`.
+  A database import without it exits with the command that installs it.
+
 ## [0.11.0] — 2026-09-15
 
 ### Added

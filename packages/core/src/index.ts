@@ -20,7 +20,10 @@ export { LINKML_CAPABILITIES } from './emit/linkml'
 export * from './emit/reify'
 export {
   importModel, importerNames, registerImporter, detectFormat, resolveFormat,
-  type ImportInput, type ImportResult, type Importer,
+  type ImportInput, type ImportResult, type Importer, type TextImportInput, type CatalogImportInput,
 } from './import/index'
 export { importRdf } from './import/rdf'
-export { importLadybug } from './import/ladybug'
+export {
+  importLadybug, parseLadybugDdl, readLadybugCatalog, catalogToModel,
+  type LadybugCatalog, type LadybugConnection, type LadybugQueryResult, type LadybugSource,
+} from './import/ladybug'

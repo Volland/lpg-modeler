@@ -19,7 +19,8 @@ import { lowerCamel } from '../emit/reify'
  * property lives. See lat.md/importers#Why SHACL and OWL Are Read Together.
  */
 
-export interface ImportInput {
+/** A source read as text: a Turtle file or a DDL script. */
+export interface TextImportInput {
   path: string
   text: string
 }
@@ -90,7 +91,7 @@ function byPath(shapes: PropShape[]): PropShape[] {
   return [...out.values()]
 }
 
-export function importRdf(inputs: ImportInput[]): ImportResult {
+export function importRdf(inputs: TextImportInput[]): ImportResult {
   const diagnostics: Diagnostic[] = []
   const store = new Store()
   const prefixes = new Map<string, string>()

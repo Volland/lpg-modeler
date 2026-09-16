@@ -106,6 +106,23 @@ context: |
   A golden file alone would have frozen the invalid `--` form, which is why the
   Ladybug target executes its DDL in-process rather than only snapshotting it.
 
+  Verified against LadybugDB 0.19.1 while implementing the database importer:
+
+  - The catalog is `CALL show_tables()`, `CALL table_info('<t>')` and
+    `CALL show_connection('<t>')`. Result columns are named with spaces:
+    `database name`, `primary key`, `source table name`, `destination table name`.
+  - `show_tables` returns tables in no particular order; sort by `id` to get
+    declaration order.
+  - `table_info` spells a decimal `DECIMAL(10, 2)` (with a space) and the 32-bit
+    float `FLOAT`. A `SERIAL` column is accepted by the engine and has no scalar in
+    the metamodel.
+  - Rel multiplicity (`ONE_ONE`, `MANY_ONE`, ...) appears in no catalog function,
+    including `storage_info`. It is unrecoverable from a database; do not propose
+    reading it.
+  - `new Database(path, pool, compression, readOnly = true, maxDBSize)` rejects every
+    write, and refuses a missing path ("Cannot create an empty database under READ
+    ONLY mode") rather than creating it.
+
   ## Editing the model file
 
   Canvas edits are targeted text splices computed from the YAML syntax tree, never a

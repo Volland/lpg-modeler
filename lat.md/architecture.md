@@ -176,6 +176,8 @@ A published `.vsix` carries no `node_modules`, so a bare `require('@lpg/core')` 
 
 The CLI ships to npm the same way, as a single self-contained package, so `core` is never published at all and is marked private to keep it that way. Bundling also settles a naming problem rather than working around it: the `@lpg` scope is not ours, and a published package carrying a bare workspace dependency would not install. The published names differ by necessity — the extension owns `lpg-modeler` as its Marketplace id, so the CLI is `lpg-modeler-cli` — and `npx lpg` is deliberately not advertised, because an unrelated package already holds that name on npm.
 
+One dependency is deliberately left out of that bundle. Importing a LadybugDB database needs `@ladybugdb/core`, which carries a native binding per platform that a bundle cannot inline. It is an optional peer dependency rather than a dependency, because the runtime and its platform binary come to roughly 38 MB, and every CI run that only checks and emits would otherwise download them. The command line loads it only when a database is imported, looking beside itself and then in the working directory, and says how to install it when it finds neither — see [[importers#Reading a LadybugDB Database]].
+
 ### Documentation site
 
 `docs/` is a hand-written static site that GitHub Pages serves verbatim from the branch folder. It is the public face of the material this knowledge graph holds, aimed at someone deciding whether to install rather than at someone changing the code.

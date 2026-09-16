@@ -19,4 +19,24 @@ describe('package boundary', () => {
     walk(root)
     expect(offenders).toEqual([])
   })
+
+  /**
+   * The LadybugDB runtime carries native bindings, and the extension inlines `core`, so
+   * `core` reads a database only through a connection the command line hands it. A
+   * type-only import counts too: it would make the package a build dependency of `core`.
+   */
+  it('core never imports the LadybugDB runtime', () => {
+    const root = join(__dirname, '..', 'src')
+    const offenders: string[] = []
+    const walk = (dir: string) => {
+      for (const entry of readdirSync(dir)) {
+        const p = join(dir, entry)
+        if (statSync(p).isDirectory()) { walk(p); continue }
+        if (!p.endsWith('.ts')) continue
+        if (/['"]@ladybugdb\/[^'"]*['"]/.test(readFileSync(p, 'utf8'))) offenders.push(p)
+      }
+    }
+    walk(root)
+    expect(offenders).toEqual([])
+  })
 })

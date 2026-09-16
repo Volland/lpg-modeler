@@ -1,10 +1,11 @@
 #!/usr/bin/env node
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs'
+import { readFileSync, writeFileSync, existsSync, mkdirSync, statSync } from 'node:fs'
+import { createRequire } from 'node:module'
 import { join, resolve as resolvePath, basename } from 'node:path'
 import {
-  applyEdits, backfillIdEdits, emit, importModel, importerNames, parseViews,
-  resolveModel, serializeModel, sidecarPaths, targetNames, validateModel,
-  type Diagnostic, type EmitOptions,
+  applyEdits, backfillIdEdits, detectFormat, emit, importModel, importerNames, parseViews,
+  readLadybugCatalog, resolveModel, serializeModel, sidecarPaths, targetNames, validateModel,
+  type Diagnostic, type EmitOptions, type ImportInput, type LadybugConnection,
 } from '@lpg/core'
 
 const read = (p: string): string | undefined => {
@@ -56,14 +57,15 @@ Usage:
   lpg check <model.lpg.yaml>
   lpg emit  <model.lpg.yaml> --target <${targetNames().join('|')}> [options]
   lpg ids    <model.lpg.yaml>       assign any missing stable element ids
-  lpg import <file...> [--from <${importerNames().join('|')}>] [--out <model.lpg.yaml>]
+  lpg import <file...> [--from <${[...importerNames(), 'ladybug-db'].sort().join('|')}>] [--out <model.lpg.yaml>]
   lpg targets
 
 Options:
   --target <name>       generation target (repeatable)
   --out <path>          emit: a directory to write artifacts into
                         import: the model file to write, instead of stdout
-  --from <name>         import: what the inputs are, when the names do not say
+  --from <name>         import: what the inputs are, when the names do not say;
+                        ladybug-db opens each path as a LadybugDB database
   --edition <name>      neo4j edition: community (default) or enterprise
   --graph-key <key>     falkordb: the Redis key the graph lives under
                         (default: the model's namespace prefix)
@@ -71,6 +73,9 @@ Options:
 Several files are imported together: a SHACL shapes graph and the OWL ontology
 beside it each carry half of a model, and the DDL adds the endpoints and the
 exact column widths neither of them keeps.
+
+A LadybugDB database is read from its catalog, opened read-only. A directory or a
+.lbdb, .lbug or .kuzu file is taken to be one; that needs @ladybugdb/core installed.
 `)
   return 2
 }
@@ -101,28 +106,105 @@ function parseArgs(argv: string[]) {
   return { positional, targets, out, from, graphKey, edition }
 }
 
+/** Where a database import pauses for a message rather than a stack trace. */
+class ImportFailure extends Error {}
+
+const DATABASE_EXTENSIONS = ['.lbdb', '.lbug', '.kuzu']
+
+/**
+ * A path is opened as a database when the user said so, or when it can be nothing else a
+ * text reader would accept. Content is not sniffed: the file format is not a contract.
+ */
+function isDatabasePath(path: string, from: string | undefined): boolean {
+  if (from?.toLowerCase() === 'ladybug-db') return true
+  if (DATABASE_EXTENSIONS.some((e) => path.toLowerCase().endsWith(e))) return true
+  try { return statSync(path).isDirectory() } catch { return false }
+}
+
+const LADYBUG_VERSION = '0.19.1'
+
+/**
+ * The runtime is an optional peer, not a dependency: it is a native binding per platform
+ * that every `check` and `emit` would otherwise download. It is looked for beside the CLI
+ * first and then in the working directory, so a project-local install serves a global
+ * CLI too. See lat.md/architecture#Distribution.
+ */
+function loadLadybug(): typeof import('@ladybugdb/core') {
+  for (const base of [__filename, join(process.cwd(), 'noop.js')]) {
+    try { return createRequire(base)('@ladybugdb/core') } catch { /* try the next place */ }
+  }
+  throw new ImportFailure(
+    `importing a LadybugDB database needs @ladybugdb/core: npm install @ladybugdb/core@${LADYBUG_VERSION} ` +
+    `(or npx -p lpg-modeler-cli -p @ladybugdb/core@${LADYBUG_VERSION} lpg import …)`)
+}
+
+/** Bounded as in the live tests: the defaults reserve 8 TiB of address space per open. */
+const BUFFER_POOL = 256 * 1024 * 1024
+const MAX_DB_SIZE = 1024 * 1024 * 1024
+
+/**
+ * Open a database read-only, read its catalog, and close it. A catalog query the engine
+ * refuses is an error, and nothing is written from a catalog known to be incomplete.
+ * See lat.md/importers#Reading a LadybugDB Database.
+ */
+async function readDatabase(path: string): Promise<ImportInput> {
+  const lbug = loadLadybug()
+  if (!existsSync(path)) throw new ImportFailure(`cannot open LadybugDB database ${path}: no such file or directory`)
+  let db: InstanceType<typeof lbug.Database> | undefined
+  let conn: InstanceType<typeof lbug.Connection> | undefined
+  try {
+    try {
+      db = new lbug.Database(path, BUFFER_POOL, true, /* readOnly */ true, MAX_DB_SIZE)
+      conn = new lbug.Connection(db)
+      await conn.init()
+    } catch (e) {
+      throw new ImportFailure(`cannot open LadybugDB database ${path}: ${(e as Error).message}`)
+    }
+    const { catalog, diagnostics } = await readLadybugCatalog(conn as unknown as LadybugConnection)
+    if (diagnostics.some((d) => d.severity === 'error')) {
+      report(diagnostics)
+      throw new ImportFailure(`cannot read the catalog of LadybugDB database ${path}`)
+    }
+    return { path, ladybugCatalog: catalog }
+  } finally {
+    await conn?.close().catch(() => undefined)
+    await db?.close().catch(() => undefined)
+  }
+}
+
 /**
  * Read one or more foreign schemas into a model. The result is written through the
  * normal pipeline rather than trusted: it is serialized, then resolved and validated
  * from that text, so what the user is told is true of the file they now have.
  * See lat.md/importers#Importers.
  */
-function runImport(files: string[], from: string | undefined, out: string | undefined): number {
-  const inputs: Array<{ path: string; text: string }> = []
-  for (const file of files) {
-    const abs = resolvePath(file)
-    const text = read(abs)
-    if (text === undefined) { process.stderr.write(`cannot read ${abs}\n`); return 1 }
-    inputs.push({ path: abs, text })
+async function runImport(files: string[], from: string | undefined, out: string | undefined): Promise<number> {
+  const inputs: ImportInput[] = []
+  try {
+    for (const file of files) {
+      const abs = resolvePath(file)
+      if (isDatabasePath(abs, from)) { inputs.push(await readDatabase(abs)); continue }
+      const text = read(abs)
+      if (text === undefined) { process.stderr.write(`cannot read ${abs}\n`); return 1 }
+      inputs.push({ path: abs, text })
+    }
+  } catch (e) {
+    if (!(e instanceof ImportFailure)) throw e
+    process.stderr.write(`${e.message}\n`)
+    return 1
   }
 
   const { model, diagnostics } = importModel(inputs, from)
+  const rdf = inputs.some((i) => (from ? from !== 'ladybug' && from !== 'ladybug-db' : detectFormat(i) === 'rdf'))
   const source = serializeModel(model, {
     header: [
       `Imported by lpg-modeler from ${files.map((f) => basename(f)).join(', ')}.`,
       '',
-      'Check anything the import reported: RDF cannot express an abstract type, a',
-      'mixin or a uniqueness constraint, and several scalars share one XSD datatype.',
+      ...(rdf
+        ? ['Check anything the import reported: RDF cannot express an abstract type, a',
+          'mixin or a uniqueness constraint, and several scalars share one XSD datatype.']
+        : ['Check anything the import reported: LadybugDB keeps one table per concrete',
+          'type, so an abstract type, a mixin, an enum and a value constraint are not in it.']),
     ],
   })
 
@@ -140,7 +222,7 @@ function runImport(files: string[], from: string | undefined, out: string | unde
   return errors > 0 ? 1 : 0
 }
 
-function main(argv: string[]): number {
+async function main(argv: string[]): Promise<number> {
   const [command, ...rest] = argv
   if (!command || command === '--help' || command === '-h') return usage()
   if (command === 'targets') {
@@ -208,10 +290,12 @@ function main(argv: string[]): number {
 }
 
 // Assign exitCode rather than calling process.exit, which can truncate buffered
-// stdout/stderr when either is a pipe.
-try {
-  process.exitCode = main(process.argv.slice(2))
-} catch (e) {
-  process.exitCode = e instanceof UsageError ? usage() : 1
-  if (!(e instanceof UsageError)) process.stderr.write(`${(e as Error).message}\n`)
-}
+// stdout/stderr when either is a pipe. Only a database import awaits anything; every
+// other command settles in the same tick it did when `main` was synchronous.
+main(process.argv.slice(2)).then(
+  (code) => { process.exitCode = code },
+  (e: unknown) => {
+    process.exitCode = e instanceof UsageError ? usage() : 1
+    if (!(e instanceof UsageError)) process.stderr.write(`${(e as Error).message}\n`)
+  },
+)

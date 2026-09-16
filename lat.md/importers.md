@@ -78,9 +78,11 @@ Uniqueness is not recoverable. Core SHACL cannot express it, so the emitter writ
 
 ## Reading LadybugDB DDL
 
-The DDL is read by parsing the script, not by opening a database. It is the one artifact carrying an edge's endpoints and the exact width of every column.
+A DDL script is read by parsing its text. Like a database's catalog, it is the one artifact carrying an edge's endpoints and the exact width of every column.
 
-Parsing text rather than introspecting an instance keeps the reader offline and adds no dependency: `@ladybugdb/core` carries native bindings, and the extension inlines everything it uses. The generated script is also the thing a team actually has in version control.
+Parsing a script keeps that reader offline and free of dependencies: `@ladybugdb/core` carries native bindings, and the extension inlines everything it uses. The generated script is also the thing a team usually has in version control. A team that has only a database reads it instead, as [[importers#Reading a LadybugDB Database]] describes.
+
+The script is parsed into the same plain catalog a database yields, and [[packages/core/src/import/ladybug.ts#catalogToModel]] turns either into the IR. Every rule below therefore holds for both sources, and a script and a database holding the same schema import to the same model.
 
 Column types go through the same [[metamodel#Composite Types|type reader]] the model format uses, so a nested `STRUCT` or `MAP` arrives whole rather than being re-parsed by a second, divergent implementation.
 
@@ -88,11 +90,29 @@ One spelling has to be translated: LadybugDB writes the 32-bit float as `FLOAT`,
 
 What the DDL cannot carry is the hierarchy. A table is emitted per concrete type with inherited columns copied down, so an abstract parent has no table, and an edge on an abstract endpoint is expanded to one pair per concrete subtype.
 
+## Reading a LadybugDB Database
+
+A database is read from its own catalog, opened read-only, for a team whose schema grew in the engine and was never kept as a script. `core` never opens it: the command line does and hands in a connection.
+
+The catalog is three queries: `show_tables` lists the tables, `table_info` gives each one's columns with the engine's exact type spellings and which column is the primary key, and `show_connection` gives each rel table's endpoint pairs. [[packages/core/src/import/ladybug.ts#readLadybugCatalog]] asks them through a structural connection type, so `core` never imports the runtime, not even for its types — a test asserts this alongside the `vscode` rule in [[architecture#Package Boundary]].
+
+What these queries return was measured against LadybugDB 0.19.1, not taken from documentation, and several details are easy to get wrong:
+
+- The result columns are named with spaces (`primary key`, `source table name`). They are read from one table of names, and a missing one is an `import-catalog` error rather than an empty model, so a future release renaming one fails loudly.
+- `show_tables` lists tables in no particular order. They are sorted by their `id`, which is assigned on creation, to get back declaration order, so the database and its script produce the same file.
+- A decimal comes back as `DECIMAL(10, 2)`, with a space the script did not have, and a float as `FLOAT`. Both go through the same type reader and dialect fix as DDL.
+- Rel multiplicity (`ONE_ONE`, `MANY_ONE`) appears in no catalog function. An edge read from a database therefore has unconstrained cardinality and `import-multiplicity` says so. This is the one difference from the script, which states it.
+- A table comment is in the catalog but has nowhere to go, because the metamodel has no description field. It is reported per table as `import-comment` rather than widening the metamodel to keep it.
+
+Opening read-only is what makes an import safe to run against a database in use. The engine rejects any write through such a connection, and a path that does not exist is refused rather than created. The runtime itself is optional for the command line — see [[architecture#Distribution]].
+
 ## Combining Sources
 
 RDF and DDL are complementary, so an import given both uses each for what only it has. RDF is the base, because it alone carries the hierarchy.
 
 A datatype from the DDL overrides the one read from RDF, for the reason [[importers#Ambiguous Datatypes]] gives: `INT128` and `UUID` each name one scalar, where `xsd:integer` and `xsd:string` name several. A width is applied to whichever ancestor declares the property rather than pushed back onto the subtype the generator copied it to.
+
+A database takes exactly the DDL's place here, because both are read into one catalog before anything is merged. A database imported beside a shapes graph and an ontology gets its hierarchy from them and gives them its widths and endpoints.
 
 An expanded endpoint set collapses when the hierarchy says what it expands from. Three pairs that are exactly the concrete descendants of one type become that type; without a hierarchy there is nothing to collapse to, so the first pair stands and the rest are reported as dropped.
 
@@ -113,5 +133,7 @@ An inherited property is not written by the type that received it. The IR carrie
 The round trip is the test: emit an artifact, read it back, and compare. It is stronger evidence than a golden file, because it exercises both directions against each other rather than asserting that output has not changed.
 
 The serializer is checked against every fixture and every published example, comparing the resolved IR rather than the text — a stable file that silently dropped `unique` would pass a text comparison and fail this one.
+
+A database is checked against its own script: for the fixtures and every published example, the generated DDL is executed into a real in-process database, and importing the script and importing the database must serialize to the same file once edge cardinality — which only the script records — is set aside. The same tests confirm that an import leaves the database's catalog and data unchanged.
 
 The importer is checked on what each source is supposed to carry, and equally on what it is not: that `abstract` and mixins come back missing is asserted, so the loss stays documented rather than becoming a surprise. A foreign ontology that names no vocabulary of ours is read too, since a source generated elsewhere is the case that matters.
