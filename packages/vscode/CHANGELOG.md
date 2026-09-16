@@ -4,6 +4,15 @@ All notable changes to LPG Modeler are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.0] — 2026-09-16
+
+### Added
+
+- **Start a model from a LadybugDB database you already run.** The command-line tool can
+  now read a database directly: `lpg import graph.lbdb --out domain.lpg.yaml`, then open
+  the file here. The database is opened read-only. The editor itself is unchanged in this
+  release; it moves to 0.12.0 so the extension and the CLI keep the same version.
+
 ## [0.11.0] — 2026-09-15
 
 ### Added
