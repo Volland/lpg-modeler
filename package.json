@@ -1,7 +1,7 @@
 {
   "name": "lpg-modeler-workspace",
   "private": true,
-  "version": "0.13.0",
+  "version": "0.14.0",
   "scripts": {
     "build": "npm run build -w packages/core && npm run build -w packages/cli && npm run build -w packages/vscode",
     "test": "vitest run",
