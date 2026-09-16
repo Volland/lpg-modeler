@@ -4,6 +4,17 @@ All notable changes to LPG Modeler are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.13.0] — 2026-09-16
+
+### Added
+
+- **Evolve a deployed schema without losing its data.** The command-line tool can now
+  record what you deployed (`lpg lock`), show what changed since, and flag breaking changes
+  (`lpg diff`). It can also write migration scripts for LadybugDB, Neo4j and FalkorDB
+  (`lpg migrate`). Renaming a type or property in the editor is migrated as a rename, keeping
+  its data, because the tool matches elements by their ids. The editor itself is unchanged
+  in this release; it moves to 0.13.0 so the extension and the CLI keep the same version.
+
 ## [0.12.0] — 2026-09-16
 
 ### Added
