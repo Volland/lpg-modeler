@@ -560,7 +560,15 @@ export const COMPARISON_KINDS: readonly string[] =
 export const CONSTRAINT_SEVERITIES = ['violation', 'warning', 'info'] as const
 export type ConstraintSeverity = typeof CONSTRAINT_SEVERITIES[number]
 
-export interface ConstraintIR {
+/**
+ * Present on an element whose id the file did not write, so the id was derived from the
+ * element's name and follows it through a rename. See lat.md/metamodel#Stable Element IDs.
+ */
+export interface IdProvenance {
+  idDerived?: true
+}
+
+export interface ConstraintIR extends IdProvenance {
   id: string
   name: string
   assert: Assertion
@@ -571,9 +579,14 @@ export interface ConstraintIR {
   loc?: Loc
 }
 
-export interface PropertyIR {
+export interface PropertyIR extends IdProvenance {
   /** Stable element id. See lat.md/metamodel#Stable Element IDs. */
   id: string
+  /**
+   * The id of the mixin property this one was applied from. A mixin's property takes an
+   * id per type it reaches, so this, not `id`, is what stays put when the mixin changes.
+   */
+  sourceId?: string
   name: string
   type: ScalarType
   /** Total digits and digits after the point of a `decimal`, when it declares them. */
@@ -603,7 +616,7 @@ export interface PropertyIR {
   loc?: Loc
 }
 
-export interface NodeTypeIR {
+export interface NodeTypeIR extends IdProvenance {
   id: string
   name: string
   /** Prefix-qualified name, for display when several models are in play. */
@@ -639,7 +652,7 @@ export interface NodeTypeIR {
   loc?: Loc
 }
 
-export interface EdgeTypeIR {
+export interface EdgeTypeIR extends IdProvenance {
   id: string
   name: string
   qname: string
@@ -654,7 +667,7 @@ export interface EdgeTypeIR {
   loc?: Loc
 }
 
-export interface EnumIR {
+export interface EnumIR extends IdProvenance {
   id: string
   name: string
   /** Prefix-qualified name, for display when several models are in play. */
@@ -666,7 +679,7 @@ export interface EnumIR {
   loc?: Loc
 }
 
-export interface MixinIR {
+export interface MixinIR extends IdProvenance {
   id: string
   name: string
   props: PropertyIR[]

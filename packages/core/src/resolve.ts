@@ -68,11 +68,20 @@ function dedupeByNamespace(loaded: Map<string, LoadedModel>): Map<string, Loaded
   return canonical
 }
 
+/**
+ * Marks an element whose id the file did not write. A derived id follows the name, so a
+ * rename of that element cannot be told from a drop-plus-add, which is what the lockfile
+ * refuses. See lat.md/metamodel#Stable Element IDs.
+ */
+const derived = (written: string | undefined): { idDerived?: true } =>
+  (written === undefined ? { idDerived: true } : {})
+
 /** `owner` is the type, edge or mixin the property is declared on, which is half of what
  * identifies it when the file gives it no id. */
 function toProp(p: RawProperty, owner: string, inheritedFrom?: string): PropertyIR {
   return {
     id: p.id ?? deriveId('prop', p.name, owner),
+    ...derived(p.id),
     name: p.name,
     type: p.type,
     ...(p.precision !== undefined ? { precision: p.precision } : {}),
@@ -158,6 +167,7 @@ export function resolveModel(entry: string, readFile: ReadFile): ResolveResult {
       seenEnums.add(x.name)
       const e: EnumIR = {
         id: x.id ?? deriveId('enum', x.name),
+        ...derived(x.id),
         name: x.name,
         qname: prefix ? `${prefix}:${x.name}` : x.name,
         iri: base + x.name,
@@ -170,7 +180,7 @@ export function resolveModel(entry: string, readFile: ReadFile): ResolveResult {
     for (const mx of m.raw.mixins) {
       mixinProps.set(mx.name, mx.props.map((p) => toProp(p, mx.name)))
       model.mixins.push({
-        id: mx.id ?? deriveId('mixin', mx.name), name: mx.name,
+        id: mx.id ?? deriveId('mixin', mx.name), ...derived(mx.id), name: mx.name,
         props: mx.props.map((p) => toProp(p, mx.name)), ...(mx.loc ? { loc: mx.loc } : {}),
       })
     }
@@ -230,7 +240,11 @@ export function resolveModel(entry: string, readFile: ReadFile): ResolveResult {
         for (const p of mp) {
           if (seenProps.has(p.name)) continue
           seenProps.add(p.name)
-          props.push({ ...p, id: deriveId('prop', p.name, name), inheritedFrom: mixinName })
+          // The id is per receiving type, so two types applying one mixin do not share a
+          // row id; `sourceId` keeps the declaration's own, which is what a diff matches on.
+          props.push({
+            ...p, id: deriveId('prop', p.name, name), sourceId: p.id, inheritedFrom: mixinName,
+          })
         }
       }
     }
@@ -264,6 +278,7 @@ export function resolveModel(entry: string, readFile: ReadFile): ResolveResult {
 
     const node: NodeTypeIR = {
       id: decl.raw.id ?? deriveId('node', name),
+      ...derived(decl.raw.id),
       name,
       qname: decl.prefix ? `${decl.prefix}:${name}` : name,
       iri: decl.iri,
@@ -280,6 +295,7 @@ export function resolveModel(entry: string, readFile: ReadFile): ResolveResult {
       // meaningless on the parent, and silently widening a parent's contract is worse.
       constraints: decl.raw.constraints.map((k) => ({
         id: k.id ?? deriveId('constraint', k.name, name),
+        ...derived(k.id),
         name: k.name,
         // A count names types the way an endpoint does, so it may write an import alias.
         assert: k.assert.kind === 'count'
@@ -319,6 +335,7 @@ export function resolveModel(entry: string, readFile: ReadFile): ResolveResult {
       }
       const edge: EdgeTypeIR = {
         id: e.id ?? deriveId('edge', e.name),
+        ...derived(e.id),
         name: e.name,
         qname: prefix ? `${prefix}:${e.name}` : e.name,
         iri: base + e.name,

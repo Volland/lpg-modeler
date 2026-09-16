@@ -158,9 +158,9 @@ The original plan deferred interactive editing to v2 and shipped a read-only can
 
 ### Still deferred
 
-Migrations and the lockfile diff, the Memgraph target, and user-supplied template targets remain out of scope.
+The Memgraph target and user-supplied template targets remain out of scope.
 
-Nothing in the implementation assumes a lockfile exists. The model serializer that [[importers#Serializing a Model|importing]] needed orders keys stably and is checked for it, so introducing one later is a serialization call rather than a rework.
+Migrations and the lockfile diff were deferred from v1 and have since landed — see [[emitters#Migrations]]. They were pulled forward once their prerequisites existed: stable element ids, a stable serializer, and three database targets to migrate. A lockfile is still optional: nothing but `lock`, `diff` and `migrate` reads one, and `emit` never does.
 
 ## Packages
 

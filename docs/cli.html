@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>CLI — LPG Modeler</title>
-<meta name="description" content="Reference for the lpg command line tool: check, emit, ids and targets, with flags, exit codes and a continuous integration example.">
+<meta name="description" content="Reference for the lpg command line tool: check, emit, ids, targets, lock, diff and migrate, with flags, exit codes and a continuous integration example.">
 <link rel="icon" href="assets/icon.png">
 <link rel="stylesheet" href="assets/fonts.css">
 <link rel="stylesheet" href="assets/site.css">
@@ -45,6 +45,10 @@ Usage:
   lpg check &lt;model.lpg.yaml&gt;
   lpg emit  &lt;model.lpg.yaml&gt; --target &lt;gql|ladybug|linkml|neo4j|owl|pgschema|shacl&gt; [options]
   lpg ids   &lt;model.lpg.yaml&gt;        assign any missing stable element ids
+  lpg lock    &lt;model.lpg.yaml&gt; [--check]
+  lpg diff    &lt;model.lpg.yaml&gt; [--fail-on &lt;additive|breaking|destructive&gt;] [--json]
+  lpg migrate &lt;model.lpg.yaml&gt; [--target &lt;ladybug|neo4j|falkordb&gt;] [--out &lt;dir&gt;]
+                               [--allow-destructive] [--edition ...] [--graph-key ...]
   lpg targets
 
 Options:
@@ -100,6 +104,42 @@ NOT NULL and only the primary key is non-null.</span></code></pre>
 <pre><code>$ lpg ids social.lpg.yaml
 assigned 14 id(s) in /work/social.lpg.yaml</code></pre>
 
+  <h2>lock</h2>
+  <p>
+    Writes <code>&lt;stem&gt;.lpg.lock.json</code> beside the model: a canonical snapshot of what is
+    deployed, which <code>diff</code> and <code>migrate</code> compare against. Commit it with the model.
+    It refuses a model with errors, and a model whose element ids are not all written in the
+    file — run <code>ids</code> first. With <code>--check</code> it writes nothing and exits
+    <code>1</code> when the model has changed since the lockfile.
+  </p>
+<pre><code>$ lpg lock shop.lpg.yaml
+/work/shop.lpg.lock.json (revision 1)</code></pre>
+
+  <h2>diff</h2>
+  <p>
+    Prints every change since the lockfile, matched by element id, each classed
+    <code>additive</code>, <code>breaking</code> or <code>destructive</code>. With
+    <code>--fail-on</code> it exits <code>1</code> on a change of that class or a more severe one.
+  </p>
+<pre><code>$ lpg diff shop.lpg.yaml --fail-on breaking
+breaking    property Person.mail: renamed from 'email'
+1 breaking since revision 1
+<span class="c-warn">1 change(s) are breaking or more severe</span></code></pre>
+
+  <h2>migrate</h2>
+  <p>
+    Writes one script per database target — <code>ladybug</code>, <code>neo4j</code> and
+    <code>falkordb</code> unless <code>--target</code> narrows it — named for the revision it
+    produces, then advances the lockfile. A change that would discard stored data is refused
+    unless <code>--allow-destructive</code> is given, and a refusal writes nothing.
+    <a href="migrations.html">Migrating a deployed model</a> walks through it.
+  </p>
+<pre><code>$ lpg migrate shop.lpg.yaml
+/work/migrations/shop.0002.ladybug.cypher
+/work/migrations/shop.0002.neo4j.cypher
+/work/migrations/shop.0002.falkordb.sh
+/work/shop.lpg.lock.json (revision 2: 1 breaking)</code></pre>
+
   <h2>targets</h2>
   <p>Prints the registered target names, one per line.</p>
 <pre><code>$ lpg targets
@@ -119,6 +159,14 @@ shacl</code></pre>
     <dd>Write artifacts into this directory instead of stdout. Created recursively if missing.</dd>
     <dt>--edition &lt;community|enterprise&gt;</dt>
     <dd>Neo4j edition. Community — the default — cannot enforce existence or node key constraints, so under it those become downgrades and comments.</dd>
+    <dt>--check</dt>
+    <dd><code>lock</code>: write nothing, and fail if the model has changed since the lockfile.</dd>
+    <dt>--fail-on &lt;additive|breaking|destructive&gt;</dt>
+    <dd><code>diff</code>: fail on a change of this class or a more severe one.</dd>
+    <dt>--json</dt>
+    <dd><code>diff</code>: print the change set as JSON.</dd>
+    <dt>--allow-destructive</dt>
+    <dd><code>migrate</code>: generate changes that discard stored data, each marked in the script.</dd>
   </dl>
 
   <h2>Exit codes</h2>
@@ -127,7 +175,7 @@ shacl</code></pre>
       <thead><tr><th>Code</th><th>When</th></tr></thead>
       <tbody>
         <tr><td><code>0</code></td><td>Success. Warnings may still have been printed.</td></tr>
-        <tr><td><code>1</code></td><td>The model has errors, a file could not be read, or a generator failed.</td></tr>
+        <tr><td><code>1</code></td><td>The model has errors, a file could not be read, or a generator failed. For <code>lock</code>, <code>diff</code> and <code>migrate</code> also: no lockfile, element ids not written, a <code>--fail-on</code> or <code>--check</code> failure, or a refused destructive change.</td></tr>
         <tr><td><code>2</code></td><td>Usage error — an unknown flag, a missing target, or no model path.</td></tr>
       </tbody>
     </table>
@@ -152,7 +200,10 @@ jobs:
 
       <span class="c-com"># Regenerate and fail if the committed artifacts drifted.</span>
       - run: npx lpg-modeler-cli emit model/domain.lpg.yaml --target ladybug --target shacl --out schema
-      - run: git diff --exit-code schema</code></pre>
+      - run: git diff --exit-code schema
+
+      <span class="c-com"># Fail a pull request that breaks what is deployed.</span>
+      - run: npx lpg-modeler-cli diff model/domain.lpg.yaml --fail-on breaking</code></pre>
   <p>
     The second step is the one that matters over time. It turns "someone forgot to regenerate
     the DDL" from a thing you discover during an incident into a red build.
@@ -164,6 +215,7 @@ jobs:
   <div class="next">
     <a href="model-format.html"><div class="k">Model format</div><div class="v">What the checker is checking.</div></a>
     <a href="targets.html"><div class="k">Targets</div><div class="v">What each <code>--target</code> produces.</div></a>
+    <a href="migrations.html"><div class="k">Migrations</div><div class="v">Carry a deployed schema forward.</div></a>
     <a href="getting-started.html"><div class="k">Getting started</div><div class="v">The extension side of the same pipeline.</div></a>
   </div>
 </section>

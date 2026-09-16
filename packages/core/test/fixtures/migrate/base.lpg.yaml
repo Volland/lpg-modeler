@@ -1,0 +1,65 @@
+# The revision every migration test starts from. Each pair in test/migrate-pairs.ts is
+# this file plus one edit, so a pair's name says exactly what changed.
+namespace:
+  prefix: shop
+  iri: https://example.org/shop#
+
+mixins:
+  Timestamped:
+    id: m_stamp
+    props:
+      createdAt: { id: p_creat, type: datetime }
+
+enums:
+  Status:
+    id: x_status
+    values: [active, retired]
+
+nodes:
+  Party:
+    id: n_party
+    abstract: true
+    key: [id]
+    props:
+      id: { id: p_pid, type: string, required: true }
+
+  Person:
+    id: n_person
+    extends: Party
+    mixins: [Timestamped]
+    props:
+      email: { id: p_mail, type: string, unique: true }
+      nickname: { id: p_nick, type: string }
+
+  Company:
+    id: n_comp
+    extends: Party
+    props:
+      vat: { id: p_vat, type: string }
+
+  Asset:
+    id: n_asset
+    abstract: true
+
+  Car:
+    id: n_car
+    extends: Asset
+    key: [vin]
+    props:
+      vin: { id: p_vin, type: string, required: true }
+      seats: { id: p_seat, type: int }
+      status: { id: p_stat, type: string, enum: Status }
+
+edges:
+  OWNS:
+    id: e_owns
+    from: Party
+    to: Car
+    cardinality: one-to-many
+    props:
+      since: { id: p_since, type: date }
+
+  KNOWS:
+    id: e_knows
+    from: Person
+    to: Person

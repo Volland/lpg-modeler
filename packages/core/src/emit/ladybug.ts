@@ -61,7 +61,7 @@ const TYPES: Record<ScalarType, string> = {
  * is emitted whenever an end is bounded at one, and whatever it cannot carry is
  * reported rather than dropped.
  */
-function multiplicity(c: Cardinality): string | undefined {
+export function multiplicity(c: Cardinality): string | undefined {
   const { from, to } = endpointIsSingular(c)
   if (from && to) return 'ONE_ONE'
   if (from) return 'ONE_MANY'
@@ -84,7 +84,7 @@ function unexpressible(c: Cardinality): string[] {
  * A column type, with the `[]` suffix LadybugDB uses for a list. A composite is spelled
  * out whole — the target's own syntax is what the metamodel borrowed.
  */
-const columnType = (p: PropertyIR) => (p.composite
+export const columnType = (p: PropertyIR) => (p.composite
   ? formatValueType(p.composite, (s) => TYPES[s])
   : `${TYPES[p.type]}${typeParams(p)}${p.list ? '[]' : ''}`)
 
@@ -93,35 +93,71 @@ export function syntheticKeyColumn(node: NodeTypeIR): string {
   return `${node.name.toLowerCase()}_key`
 }
 
+/**
+ * What a column cannot carry, as comment lines and diagnostics. Shared with the
+ * migration planner, so a column added later says exactly what it would have said had
+ * it been there from the start. `indent` differs because a migration's ALTER is not
+ * inside a parenthesised table body.
+ */
+export function columnNotes(
+  owner: string, p: PropertyIR, isKey: boolean, diags: Diagnostic[], indent: string,
+): string[] {
+  const lines: string[] = []
+  if (p.required && !isKey) {
+    downgrade(diags, 'ladybug', 'downgrade-required',
+      `Property '${owner}.${p.name}' is required, which LadybugDB cannot enforce: it has no NOT NULL and only the primary key is non-null.`,
+      p.loc)
+    lines.push(`${indent}// UNENFORCED: '${p.name}' is required in the model; LadybugDB has no NOT NULL.`)
+  }
+  if (p.unique && !isKey) {
+    downgrade(diags, 'ladybug', 'downgrade-unique',
+      `Property '${owner}.${p.name}' is unique, which LadybugDB enforces only for the primary key.`,
+      p.loc)
+    lines.push(`${indent}// UNENFORCED: '${p.name}' is unique in the model; only the primary key is unique.`)
+  }
+  if (p.enum) {
+    downgrade(diags, 'ladybug', 'downgrade-enum',
+      `Property '${owner}.${p.name}' is constrained to enum '${p.enum}', which LadybugDB has no column type for. Stored as ${columnType(p)} with the value set unenforced.`,
+      p.loc)
+    lines.push(`${indent}// UNENFORCED: '${p.name}' is limited to enum '${p.enum}' in the model.`)
+  }
+  return lines
+}
+
+/** The same for an edge property, where uniqueness was never claimed on a rel table. */
+export function edgeColumnNotes(
+  edge: string, p: PropertyIR, diags: Diagnostic[], indent: string,
+): string[] {
+  const lines: string[] = []
+  if (p.required) {
+    downgrade(diags, 'ladybug', 'downgrade-required',
+      `Edge property '${edge}.${p.name}' is required, which LadybugDB cannot enforce on a relationship table.`,
+      p.loc)
+    lines.push(`${indent}// UNENFORCED: '${p.name}' is required in the model.`)
+  }
+  if (p.enum) {
+    downgrade(diags, 'ladybug', 'downgrade-enum',
+      `Edge property '${edge}.${p.name}' is constrained to enum '${p.enum}', which LadybugDB has no column type for.`,
+      p.loc)
+    lines.push(`${indent}// UNENFORCED: '${p.name}' is limited to enum '${p.enum}' in the model.`)
+  }
+  return lines
+}
+
 function columnLines(node: NodeTypeIR, diags: Diagnostic[]): string[] {
   const lines: string[] = []
-  const isKey = (p: PropertyIR) => node.key.length === 1 && node.key[0] === p.name
-
   for (const p of node.props) {
-    if (p.required && !isKey(p)) {
-      downgrade(diags, 'ladybug', 'downgrade-required',
-        `Property '${node.name}.${p.name}' is required, which LadybugDB cannot enforce: it has no NOT NULL and only the primary key is non-null.`,
-        p.loc)
-      lines.push(`  // UNENFORCED: '${p.name}' is required in the model; LadybugDB has no NOT NULL.`)
-    }
-    if (p.unique && !isKey(p)) {
-      downgrade(diags, 'ladybug', 'downgrade-unique',
-        `Property '${node.name}.${p.name}' is unique, which LadybugDB enforces only for the primary key.`,
-        p.loc)
-      lines.push(`  // UNENFORCED: '${p.name}' is unique in the model; only the primary key is unique.`)
-    }
-    if (p.enum) {
-      downgrade(diags, 'ladybug', 'downgrade-enum',
-        `Property '${node.name}.${p.name}' is constrained to enum '${p.enum}', which LadybugDB has no column type for. Stored as ${columnType(p)} with the value set unenforced.`,
-        p.loc)
-      lines.push(`  // UNENFORCED: '${p.name}' is limited to enum '${p.enum}' in the model.`)
-    }
+    lines.push(...columnNotes(node.name, p, isSingleKey(node, p), diags, '  '))
     lines.push(`  ${p.name} ${columnType(p)},`)
   }
   return lines
 }
 
-function nodeTable(node: NodeTypeIR, diags: Diagnostic[]): string {
+/** Whether this property is the whole key, which is the only column LadybugDB enforces. */
+export const isSingleKey = (node: NodeTypeIR, p: PropertyIR): boolean =>
+  node.key.length === 1 && node.key[0] === p.name
+
+export function nodeTable(node: NodeTypeIR, diags: Diagnostic[]): string {
   const lines = [`CREATE NODE TABLE IF NOT EXISTS ${node.name} (`]
   if (node.open) {
     downgrade(diags, 'ladybug', 'downgrade-open',
@@ -147,6 +183,18 @@ function nodeTable(node: NodeTypeIR, diags: Diagnostic[]): string {
   return lines.join('\n')
 }
 
+/**
+ * Every concrete endpoint pair an edge expands to, as node types. The migration planner
+ * needs the pairs without the diagnostic the emitter raises for an edge that has none.
+ */
+export function endpointNodePairs(model: ModelIR, edge: EdgeTypeIR): Array<[NodeTypeIR, NodeTypeIR]> {
+  const out: Array<[NodeTypeIR, NodeTypeIR]> = []
+  for (const f of concreteDescendants(model, edge.from)) {
+    for (const t of concreteDescendants(model, edge.to)) out.push([f, t])
+  }
+  return out
+}
+
 function endpointPairs(model: ModelIR, edge: EdgeTypeIR, diags: Diagnostic[]): string[] {
   const from = concreteDescendants(model, edge.from)
   const to = concreteDescendants(model, edge.to)
@@ -156,12 +204,10 @@ function endpointPairs(model: ModelIR, edge: EdgeTypeIR, diags: Diagnostic[]): s
       edge.loc)
     return []
   }
-  const pairs: string[] = []
-  for (const f of from) for (const t of to) pairs.push(`FROM ${f.name} TO ${t.name}`)
-  return pairs
+  return endpointNodePairs(model, edge).map(([f, t]) => `FROM ${f.name} TO ${t.name}`)
 }
 
-function relTable(model: ModelIR, edge: EdgeTypeIR, diags: Diagnostic[]): string | undefined {
+export function relTable(model: ModelIR, edge: EdgeTypeIR, diags: Diagnostic[]): string | undefined {
   const pairs = endpointPairs(model, edge, diags)
   if (pairs.length === 0) return undefined
 
@@ -171,18 +217,7 @@ function relTable(model: ModelIR, edge: EdgeTypeIR, diags: Diagnostic[]): string
   }
   lines.push(...pairs.map((p) => `  ${p},`))
   for (const p of edge.props) {
-    if (p.required) {
-      downgrade(diags, 'ladybug', 'downgrade-required',
-        `Edge property '${edge.name}.${p.name}' is required, which LadybugDB cannot enforce on a relationship table.`,
-        p.loc)
-      lines.push(`  // UNENFORCED: '${p.name}' is required in the model.`)
-    }
-    if (p.enum) {
-      downgrade(diags, 'ladybug', 'downgrade-enum',
-        `Edge property '${edge.name}.${p.name}' is constrained to enum '${p.enum}', which LadybugDB has no column type for.`,
-        p.loc)
-      lines.push(`  // UNENFORCED: '${p.name}' is limited to enum '${p.enum}' in the model.`)
-    }
+    lines.push(...edgeColumnNotes(edge.name, p, diags, '  '))
     lines.push(`  ${p.name} ${columnType(p)},`)
   }
 

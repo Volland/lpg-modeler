@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Migrations — LPG Modeler</title>
+<meta name="description" content="Carry a deployed LadybugDB, Neo4j or FalkorDB schema forward: write element ids, record a baseline lockfile, then generate reviewed migration scripts.">
+<link rel="icon" href="assets/icon.png">
+<link rel="stylesheet" href="assets/fonts.css">
+<link rel="stylesheet" href="assets/site.css">
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="index.html"><img src="assets/icon.png" alt=""> LPG Modeler</a>
+    <nav class="links">
+      <a href="index.html">Overview</a>
+      <a href="getting-started.html">Getting started</a>
+      <a href="examples.html">Examples</a>
+      <a href="model-format.html">Model format</a>
+      <a href="targets.html">Targets</a>
+      <a href="cli.html">CLI</a>
+      <a href="architecture.html">Architecture</a>
+      <a href="blog/index.html">Blog</a>
+      <a href="https://github.com/Volland/lpg-modeler">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+<div class="wrap hero">
+  <span class="eyebrow">Guide</span>
+  <h1>Migrating a deployed model</h1>
+  <p class="lede">
+    <code>emit</code> produces the schema a database <em>should</em> have. Once one is deployed,
+    you need the steps from the schema it <em>has</em>. A committed lockfile records what was
+    deployed, and <code>lpg migrate</code> writes the scripts that carry it to the current model.
+  </p>
+</div>
+
+<section class="wrap narrow">
+  <h2>1. Write the element ids</h2>
+  <p>
+    A migration tells a rename from a removal by each element&rsquo;s id. A model written by hand
+    has ids derived from names, and those follow a rename, so a renamed property would be
+    migrated as a dropped column and a new one. <code>lock</code>, <code>diff</code> and
+    <code>migrate</code> refuse such a model. Write the ids once and commit them:
+  </p>
+<pre><code>$ lpg ids model/domain.lpg.yaml
+assigned 14 id(s) in /work/model/domain.lpg.yaml</code></pre>
+
+  <h2>2. Record the baseline</h2>
+  <p>
+    The lockfile must describe what is <em>deployed</em>, not what is on your branch. Check out the
+    commit the database was built from, lock there, and commit the lockfile:
+  </p>
+<pre><code>$ git checkout &lt;deployed-commit&gt; -- model/domain.lpg.yaml
+$ lpg lock model/domain.lpg.yaml
+/work/model/domain.lpg.lock.json (revision 1)
+$ git checkout HEAD -- model/domain.lpg.yaml</code></pre>
+  <p>
+    If the deployed schema already matches your current model, lock the current model instead.
+  </p>
+
+  <h2>3. See what changed</h2>
+  <p>
+    Every change is matched by id and classed <code>additive</code> (nothing existing becomes
+    invalid), <code>breaking</code> (existing data or queries may stop fitting) or
+    <code>destructive</code> (stored data is removed):
+  </p>
+<pre><code>$ lpg diff model/domain.lpg.yaml
+additive    property Person.phone: added as string
+breaking    property Person.mail: renamed from 'email'
+1 breaking, 1 additive since revision 1</code></pre>
+  <p>In CI, <code>--fail-on breaking</code> turns that into a gate on the pull request.</p>
+
+  <h2>4. Generate the scripts</h2>
+<pre><code>$ lpg migrate model/domain.lpg.yaml
+/work/model/migrations/domain.0002.ladybug.cypher
+/work/model/migrations/domain.0002.neo4j.cypher
+/work/model/migrations/domain.0002.falkordb.sh
+/work/model/domain.lpg.lock.json (revision 2: 1 breaking, 1 additive)</code></pre>
+  <p>
+    Review the scripts and commit them with the lockfile. Each one lists the changes it realizes
+    at the top. The tool never connects to a database, so running them is up to you:
+  </p>
+<pre><code><span class="c-com"># LadybugDB: statements run in order with no enclosing transaction; back up first.</span>
+<span class="c-com"># Neo4j: data steps use CALL { ... } IN TRANSACTIONS, so run in auto-commit mode.</span>
+cypher-shell -f model/migrations/domain.0002.neo4j.cypher
+<span class="c-com"># FalkorDB: not idempotent; run once against a graph at the previous revision.</span>
+GRAPH_KEY=domain sh model/migrations/domain.0002.falkordb.sh</code></pre>
+
+  <h2>Destructive changes</h2>
+  <p>
+    A migration that would discard stored data is refused, and a refusal writes nothing: no
+    script, and the lockfile keeps its revision. That covers a removed type or property, and also a
+    change the model calls merely <code>breaking</code> that a target can only apply by
+    discarding data. LadybugDB cannot change a primary key, a column type or a multiplicity
+    in place, so it recreates the table or column instead.
+  </p>
+<pre><code>$ lpg migrate model/domain.lpg.yaml
+<span class="c-warn">error destructive-change: property Person.nickname removed, which discards data.
+Nothing was written. Pass --allow-destructive to generate it anyway.</span></code></pre>
+  <p>
+    With <code>--allow-destructive</code>, every such statement is preceded by a
+    <code>DESTRUCTIVE:</code> comment naming what it drops.
+  </p>
+
+  <h2>What is migrated</h2>
+  <p>
+    Only the database targets hold a schema to carry forward: <code>ladybug</code>,
+    <code>neo4j</code> and <code>falkordb</code>. SHACL, OWL, GQL, PG-Schema and LinkML are
+    regenerated with <code>emit</code>. The lockfile is per model, so migrate every deployed
+    target in the same run; naming only some of them is allowed, with a warning. A change no
+    target stores, such as a value pattern, still advances the revision, and each script says it
+    has no schema effect.
+  </p>
+</section>
+
+<section class="wrap">
+  <h2>Where to go next</h2>
+  <div class="next">
+    <a href="cli.html"><div class="k">CLI</div><div class="v">Every flag of <code>lock</code>, <code>diff</code> and <code>migrate</code>.</div></a>
+    <a href="targets.html"><div class="k">Targets</div><div class="v">What each database can enforce.</div></a>
+    <a href="model-format.html"><div class="k">Model format</div><div class="v">Where element ids live in the file.</div></a>
+  </div>
+</section>
+</main>
+
+<footer class="site">
+  <div class="wrap">
+    <span>LPG Modeler — MIT licensed</span>
+    <span class="spacer"><a href="impressum.html">Impressum</a></span>
+    <span><a href="datenschutz.html">Datenschutz</a></span>
+    <span><a href="agb.html">AGB</a></span>
+    <span><a href="https://github.com/Volland/lpg-modeler">Source</a></span>
+    <span><a href="https://github.com/Volland/lpg-modeler/issues">Issues</a></span>
+  </div>
+</footer>
+
+</body>
+</html>

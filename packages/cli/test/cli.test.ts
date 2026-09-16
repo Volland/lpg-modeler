@@ -225,3 +225,122 @@ describe('lpg import from a LadybugDB database', () => {
     expect(run(['check', join(FIXTURES, 'social.lpg.yaml')], cli, dir).status).toBe(0)
   })
 })
+
+// @lat: [[emitters#Migrations#Destructive Gate]]
+describe('lpg lock, diff and migrate', () => {
+  const BASE = join(FIXTURES, 'migrate', 'base.lpg.yaml')
+
+  /** A copy of the migration base model in a fresh directory, optionally locked. */
+  function project(locked = true): { dir: string; model: string; lock: string } {
+    const dir = mkdtempSync(join(tmpdir(), 'lpg-migrate-'))
+    const model = join(dir, 'shop.lpg.yaml')
+    writeFileSync(model, readFileSync(BASE, 'utf8'))
+    if (locked) expect(run(['lock', model]).status).toBe(0)
+    return { dir, model, lock: join(dir, 'shop.lpg.lock.json') }
+  }
+  const edit = (file: string, from: string, to: string) =>
+    writeFileSync(file, readFileSync(file, 'utf8').replace(from, to))
+
+  it('locks a model at revision 1, byte-identically on a second run', () => {
+    const { model, lock } = project()
+    const first = readFileSync(lock, 'utf8')
+    expect(JSON.parse(first)).toMatchObject({ lockfileVersion: 1, revision: 1 })
+    expect(run(['lock', model]).status).toBe(0)
+    expect(readFileSync(lock, 'utf8')).toBe(first)
+  })
+
+  it('refuses to lock a model with errors, writing nothing', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'lpg-migrate-'))
+    const model = join(dir, 'broken.lpg.yaml')
+    writeFileSync(model, readFileSync(join(FIXTURES, 'broken.lpg.yaml'), 'utf8'))
+    expect(run(['lock', model]).status).toBe(1)
+    expect(existsSync(join(dir, 'broken.lpg.lock.json'))).toBe(false)
+  })
+
+  it('refuses to lock a model with derived element ids', () => {
+    const { model, lock } = project(false)
+    edit(model, 'nickname: { id: p_nick, type: string }', 'nickname: { type: string }')
+    const r = run(['lock', model])
+    expect(r.status).toBe(1)
+    expect(r.stderr).toContain('ids-not-written')
+    expect(existsSync(lock)).toBe(false)
+  })
+
+  it('requires a lockfile for diff and migrate', () => {
+    const { model } = project(false)
+    for (const verb of ['diff', 'migrate']) {
+      const r = run([verb, model])
+      expect(r.status, verb).toBe(1)
+      expect(r.stderr, verb).toContain('lockfile-missing')
+    }
+  })
+
+  it('gates on breaking changes, and passes only additive ones', () => {
+    const renamed = project()
+    edit(renamed.model, '      email: {', '      mail: {')
+    const r = run(['diff', renamed.model, '--fail-on', 'breaking'])
+    expect(r.status).toBe(1)
+    expect(r.stdout).toMatch(/breaking\s+property Person\.mail: renamed from 'email'/)
+
+    const added = project()
+    edit(added.model, '\nedges:\n', '\n  Bike:\n    id: n_bike\n    extends: Asset\n    key: [serial]\n    props:\n      serial: { id: p_serial, type: string, required: true }\n\nedges:\n')
+    expect(run(['diff', added.model, '--fail-on', 'breaking']).status).toBe(0)
+  })
+
+  it('fails lock --check on a model changed since its lockfile, naming the change', () => {
+    const { model } = project()
+    expect(run(['lock', model, '--check']).status).toBe(0)
+    edit(model, '      email: {', '      mail: {')
+    const r = run(['lock', model, '--check'])
+    expect(r.status).toBe(1)
+    expect(r.stderr).toContain('Person.mail')
+  })
+
+  it('prints the change set as JSON', () => {
+    const { model } = project()
+    edit(model, '      email: {', '      mail: {')
+    const out = JSON.parse(run(['diff', model, '--json']).stdout)
+    expect(out.revision).toBe(1)
+    expect(out.changes).toMatchObject([{ kind: 'renamed', class: 'breaking', label: 'property Person.mail' }])
+  })
+
+  it('writes one script per database target at the next revision, then advances the lockfile', () => {
+    const { dir, model, lock } = project()
+    edit(model, '      id: { id: p_pid, type: string, required: true }\n',
+      '      id: { id: p_pid, type: string, required: true }\n      phone: { id: p_phone, type: string }\n')
+    const r = run(['migrate', model, '--out', join(dir, 'out')])
+    expect(r.status).toBe(0)
+    for (const f of ['shop.0002.ladybug.cypher', 'shop.0002.neo4j.cypher', 'shop.0002.falkordb.sh']) {
+      expect(existsSync(join(dir, 'out', f)), f).toBe(true)
+    }
+    expect(JSON.parse(readFileSync(lock, 'utf8')).revision).toBe(2)
+    expect(run(['lock', model, '--check']).status).toBe(0)
+  })
+
+  it('refuses a destructive change without the flag, writing nothing and keeping the revision', () => {
+    const { dir, model, lock } = project()
+    edit(model, '      nickname: { id: p_nick, type: string }\n', '')
+    const r = run(['migrate', model])
+    expect(r.status).toBe(1)
+    expect(r.stderr).toContain('destructive-change')
+    expect(existsSync(join(dir, 'migrations'))).toBe(false)
+    expect(JSON.parse(readFileSync(lock, 'utf8')).revision).toBe(1)
+
+    expect(run(['migrate', model, '--allow-destructive']).status).toBe(0)
+    expect(readFileSync(join(dir, 'migrations', 'shop.0002.ladybug.cypher'), 'utf8'))
+      .toMatch(/DESTRUCTIVE: property Person\.nickname[^\n]*\nALTER TABLE Person DROP nickname;/)
+  })
+
+  it('refuses a target that is regenerated rather than migrated', () => {
+    const { model } = project()
+    edit(model, '      email: {', '      mail: {')
+    const r = run(['migrate', model, '--target', 'shacl'])
+    expect(r.status).toBe(1)
+    expect(r.stderr).toContain('not-migratable')
+  })
+
+  it('names lock, diff and migrate among the verbs it offers', () => {
+    const help = run(['--help']).stderr
+    for (const verb of ['lpg lock', 'lpg diff', 'lpg migrate']) expect(help).toContain(verb)
+  })
+})

@@ -4,6 +4,29 @@ All notable changes to LPG Modeler are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **Migrations for a deployed schema.** `lpg lock` commits a lockfile beside the model
+  recording what is deployed; `lpg diff` prints every change since then, matched by element
+  id and classed additive, breaking or destructive, and `--fail-on breaking` gates a pull
+  request on it; `lpg migrate` writes one reviewed script per database target — LadybugDB,
+  Neo4j and FalkorDB — and advances the lockfile. A renamed type or property is migrated as a
+  rename, keeping its data, never as a drop plus an add.
+
+  A change that discards stored data is refused unless `--allow-destructive` is given, and a
+  refusal writes nothing. That includes a change the model calls merely breaking but a target
+  can only apply by discarding data: LadybugDB cannot change a primary key, a column type or a
+  multiplicity in place. Each destructive statement is marked in the script.
+
+  Every Ladybug migration is checked by applying it to a real database built from the previous
+  revision and comparing the result with a fresh one. The FalkorDB migrations were run the same
+  way against a FalkorDB 4.20.4 container while they were written.
+
+  A model whose element ids are not written in the file cannot be locked, diffed or migrated
+  (`ids-not-written`): run `lpg ids` first.
+
 ## [0.12.0] — 2026-09-16
 
 ### Added

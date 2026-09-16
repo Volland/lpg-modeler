@@ -27,3 +27,15 @@ export {
   importLadybug, parseLadybugDdl, readLadybugCatalog, catalogToModel,
   type LadybugCatalog, type LadybugConnection, type LadybugQueryResult, type LadybugSource,
 } from './import/ladybug'
+export {
+  planMigration, migrationFileName, describeChange, summarizeChanges, DATABASE_TARGETS,
+  type MigrationRequest, type MigrationPlan,
+} from './migrate/index'
+export {
+  lockfilePath, readLockfile, writeLockfile, idsNotWritten, LOCKFILE_VERSION, type Lockfile,
+} from './migrate/lockfile'
+export { diffModels } from './migrate/diff'
+export { atLeast } from './migrate/classify'
+export {
+  CHANGE_CLASSES, type Change, type ChangeClass, type ChangeKind, type MigrationScript,
+} from './migrate/types'

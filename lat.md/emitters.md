@@ -40,6 +40,16 @@ Comments in generated DDL use `//`. The SQL-style `--` is rejected by the parser
 
 The alternative of a single root table with a discriminator column is the idiom used by the multipartite pattern in the author's own work, and remains a reasonable per-model override, but it cannot enforce a property that is required on only one subtype.
 
+### Measured ALTER Support
+
+What a Ladybug migration may change in place was measured against 0.19.1, not taken from documentation, and the planner is built on exactly these findings.
+
+Accepted: adding a column (with or without `DEFAULT`), dropping a column, renaming a column — the primary key column included — renaming a table, and adding or dropping a `FROM … TO …` pair on a rel table. A rename carries its rows and relationships with it, and a rel table's pairs follow a renamed node table.
+
+Refused: there is no statement that changes a column's type (`ALTER` accepts only `ADD`, `DROP`, `RENAME` and `SET`); a primary key column cannot be dropped; and a node table cannot be dropped while a rel table still references it.
+
+One finding is a hazard rather than a refusal. Dropping a rel table's *last* endpoint pair is accepted, and the next statement against that table crashes the engine process. Adding the new pair before dropping the old one is safe, so the planner never empties a table's pairs and recreates the table instead.
+
 ## Neo4j Target
 
 Neo4j is schema-optional: there is no table DDL, only constraints and indexes. Multi-label nodes are native, so an abstract hierarchy flattens to labels rather than to separate tables.
@@ -59,6 +69,16 @@ A unique constraint requires its exact-match index to already exist, so the inde
 Two operational facts are stated in the artifact rather than assumed away. Enforcement is asynchronous — the command returns `PENDING`, and a constraint that existing data violates ends `FAILED` and is never enforced — and there is no `IF NOT EXISTS` for either an index or a constraint, so a second run reports each as already existing.
 
 A map cannot be stored as a property value, so a [[metamodel#Composite Types|composite]] has nowhere to go and is reported, exactly as on [[emitters#Neo4j Target|Neo4j]]. An array can be stored, so a list is native.
+
+### Measured DROP Syntax
+
+What a FalkorDB migration may drop, and in what order, was measured against a FalkorDB 4.20.4 container rather than inferred from the create syntax.
+
+A constraint is dropped with `GRAPH.CONSTRAINT DROP <key> UNIQUE|MANDATORY NODE|RELATIONSHIP <label> PROPERTIES <n> <props>` and an index with the Cypher `DROP INDEX FOR (n:<label>) ON (n.<prop>)`. Neither has `IF EXISTS`, and dropping what is absent is an error.
+
+An index that a unique constraint depends on cannot be dropped ("Index supports constraint"), so every constraint drop comes before every index drop. Indexes are per property: `CREATE INDEX … ON (n.a, n.b)` creates two, `DROP INDEX … ON (n.a, n.b)` removes only one, and a composite create fails outright if any of its properties is already indexed. A migration therefore drops, and adds to, an index one property at a time.
+
+The status of constraints is read with `CALL db.constraints()`. `GRAPH.CONSTRAINT LIST` is rejected by 4.20.4, although the emitted schema script's header still names it.
 
 ## Standards Targets
 
@@ -149,6 +169,55 @@ Reifying a struct into a node shape was the alternative for the RDF targets. It 
 A canonical, stable-ordered snapshot of the IR is committed alongside the model. Diffing the snapshot against the current model produces an ordered migration script, reviewable in version control and requiring no database connection.
 
 Destructive changes are gated behind an explicit flag. Renames are detected through [[metamodel#Stable Element IDs]] rather than inferred from structural similarity, because a diff alone cannot distinguish a rename from a drop-plus-add, and guessing wrong generates a migration that destroys data.
+
+`lpg lock` records the baseline, `lpg diff` prints and gates on the change set, and `lpg migrate` writes one script per database target — `<stem>.<revision>.<target>.<ext>`, the revision four digits wide — and then advances the lockfile. Only ladybug, neo4j and falkordb are migrated; every other target is regenerated, and naming one is `not-migratable`. Migrating a subset of the three is allowed but warned about, because the lockfile is per model rather than per target.
+
+### Lockfile
+
+The lockfile is `<stem>.lpg.lock.json` beside the model: canonical JSON of the resolved IR, headed by `lockfileVersion`, the model format `lpg`, and a `revision` that numbers the migrations taken from it.
+
+It snapshots the *resolved* model, not the declarations, because the targets consume flattened IR: a mixin change reaching five tables should read as five column changes, which is what a script must contain. JSON rather than YAML, because it is machine-written and sorted-key JSON is trivially canonical.
+
+[[packages/core/src/migrate/lockfile.ts#writeLockfile]] makes it byte-identical for the same model whatever the file's layout. Keys are sorted in code-unit order, so the locale cannot change it. Every array of identified elements is sorted by element id, so reordering declarations changes nothing, while arrays whose order carries meaning — a key, an ancestor chain, a mixin list — keep it. What is not semantics is stripped: source locations, the file path, and whether an id was derived. Sorting by name was rejected because a rename would then look like a move within the file.
+
+Reading is total, as everywhere else: [[packages/core/src/migrate/lockfile.ts#readLockfile]] reports a file that is not JSON or not the expected shape as `lockfile-unreadable`, and one written by a newer format as `lockfile-newer`, telling the user to upgrade rather than overwrite it.
+
+A model is lockable only when every element id is written in its file. A derived id follows the element's name, so a rename would read as a removal plus an addition; [[packages/core/src/migrate/lockfile.ts#idsNotWritten]] raises `ids-not-written` for each such element, once where it is declared rather than once per type it reaches.
+
+### Change Classification
+
+The lockfile and the current model are diffed by element id, and every change is classed `additive`, `breaking` or `destructive` so a pull request can be gated on how dangerous it is.
+
+Elements are matched per kind by id. A flattened property is identified by its owner type's id together with its own, because one property id appears on every type that inherits it — so a change to an inherited property arrives once per concrete owner, which is the shape a flattening target needs. One element can yield several changes: a rename plus a retype is two. A property whose id was replaced by hand is therefore a removal and an addition, and a property moved up to an ancestor is a `moved` change that no flattened target sees.
+
+Classification is a pure table over the change's kind and its direction — whether it loosens, tightens, or loses data — so the diff decides *what* happened and [[packages/core/src/migrate/classify.ts#classify]] decides how much it matters:
+
+- Losing data is always `destructive`, whatever the kind.
+- A rename, a rekey, changed endpoints and a changed namespace are always `breaking`: every query naming the old form stops matching, whichever way it moved.
+- A move between owners is always `additive`.
+- Otherwise loosening is `additive` and tightening is `breaking`.
+
+An unknown direction is classed as tightening. A false alarm costs a reviewer a look; a false `additive` costs production data.
+
+### Destructive Gate
+
+`lpg migrate` refuses a migration that would discard stored data unless `--allow-destructive` is given, and a refusal writes no script and leaves the lockfile where it was.
+
+The gate asks two questions, because a change can be safe in the model and still unsafe on a target. The first is whether the change set holds a `destructive` change. The second is whether any target can only *apply* a change by discarding data: a key change is merely `breaking`, but Ladybug cannot change a primary key in place and has to recreate the table. A planner reports such a statement as a realization, the gate refuses on it as it would on a destructive change, and the target raises a `migration-downgrade` naming what it cannot do.
+
+Every target is planned before anything is written, so the gate judges the whole migration; refusing after two of three scripts were on disk would leave a half-migrated set and a lockfile agreeing with neither. [[packages/core/src/migrate/index.ts#planMigration]] holds that order. When permitted, every destructive statement is preceded by a `DESTRUCTIVE:` comment naming the element, and the CLI writes the scripts first and the lockfile last, so a failed write keeps the old baseline.
+
+A change no target stores — a value pattern, an enum value — still advances the lockfile, and each script says it has no schema effect rather than being left empty.
+
+### Target Planners
+
+Each database target registers a planner beside its emitter, and every planner builds statements with the emitter's own functions, so a migration cannot spell a table, column or constraint differently from `emit`.
+
+The Ladybug planner, [[packages/core/src/emit/ladybug.migrate.ts#migrateLadybug]], diffs the *tables* the two revisions flatten to, not the declarations. Tables are matched by type id and columns by property identity, so a property added to an abstract parent is one column per concrete table, and a mixin or hierarchy change is simply columns gained or lost. The order follows the [[emitters#Ladybug Target#Measured ALTER Support|measured]] constraints: drop rel tables and vanished endpoint pairs, drop node tables, rename tables, alter columns, then create node tables, rel tables and new pairs. What cannot be done in place is realized destructively and gated: a key change or a multiplicity change recreates the table, a type change drops and re-adds the column, and a rel table losing every pair is recreated.
+
+The Neo4j and FalkorDB planners, [[packages/core/src/emit/neo4j.migrate.ts#migrateNeo4j]] and [[packages/core/src/emit/falkordb.migrate.ts#migrateFalkorDb]], are set differences over the schema objects the emitter builds for each revision. They drop what only the old revision had, rewrite the data a rename or a hierarchy change touches — relabelling nodes, moving a property, copying relationships to a new type, adding or removing ancestor labels — and then create what only the new revision has, so a renamed type's old constraint never sees the relabelled nodes. Neo4j batches data steps in `CALL { … } IN TRANSACTIONS`; FalkorDB follows its [[emitters#FalkorDB Target#Measured DROP Syntax|measured]] drop order. A removed concrete type also has its nodes deleted, and only under the flag, since that step is destructive.
+
+The Ladybug planner is checked by an oracle: for every before/after fixture pair, a database built from the old DDL and migrated must have the same catalogue as one built from the new DDL, and rows must survive a rename. The catalogue does not record multiplicity, so that is checked by writing. The FalkorDB scripts were run the same way against a container, once, while the planner was written; they are pinned by golden files, as are the Neo4j scripts, which have no embedded engine to run against.
 
 ## Verification
 

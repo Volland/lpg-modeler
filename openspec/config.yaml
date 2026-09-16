@@ -81,7 +81,14 @@ context: |
        targets; CLI `check`, `emit`, `ids`, `targets`; canvas as the authoring
        surface with ELK auto-layout; named views and the layout sidecar; keys,
        element ids, imports, namespaces.
-  OUT: migrations and the lockfile diff, memgraph, template targets.
+  OUT: memgraph, template targets.
+
+  Migrations and the lockfile diff moved from OUT to IN with change
+  `add-migrations-and-lockfile`: CLI `lock`, `diff`, `migrate` for the ladybug,
+  neo4j and falkordb targets. Their prerequisites had landed (element ids, a
+  stable serializer, three database targets), and a deployed schema with no path
+  forward was the first wall a real user hit. A lockfile is still optional:
+  nothing but those three commands reads one.
 
   Visual authoring, the layout sidecar, editable views, and the RDF targets moved
   from OUT to IN: shipping a compiler first would have left the tool unusable for
@@ -122,6 +129,24 @@ context: |
   - `new Database(path, pool, compression, readOnly = true, maxDBSize)` rejects every
     write, and refuses a missing path ("Cannot create an empty database under READ
     ONLY mode") rather than creating it.
+
+  Verified against LadybugDB 0.19.1 while implementing the Ladybug migration planner:
+
+  - `ALTER TABLE` accepts ADD column (with or without DEFAULT), DROP column, RENAME
+    column (the primary key column too), RENAME TO, and ADD/DROP `FROM x TO y` on a
+    rel table. There is no column type change; a PK column cannot be dropped; a node
+    table referenced by a rel table cannot be dropped.
+  - Dropping a rel table's LAST endpoint pair is accepted, and the next statement on
+    that table segfaults the process. Never empty a rel table's pairs in place.
+
+  Verified against FalkorDB 4.20.4 (Podman container) for the FalkorDB planner:
+
+  - `GRAPH.CONSTRAINT DROP <key> UNIQUE|MANDATORY NODE|RELATIONSHIP <label>
+    PROPERTIES <n> <props>` and `DROP INDEX FOR (n:L) ON (n.p)`; neither has IF
+    EXISTS. An index backing a unique constraint cannot be dropped first.
+  - Indexes are per property: a composite CREATE makes one per property, a composite
+    DROP removes only one, and a composite CREATE fails if any property is indexed.
+  - `GRAPH.CONSTRAINT LIST` is rejected; use `CALL db.constraints()`.
 
   ## Editing the model file
 

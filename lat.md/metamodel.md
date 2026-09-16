@@ -42,6 +42,8 @@ Identifiers make a rename distinguishable from a drop-plus-add, which a structur
 
 A file that carries none — one written by hand, or by another tool — is read with an identifier derived from what names each element instead: its kind, and its name within its owner. Layout is keyed by identifier, so an identifier invented afresh on every read would let the canvas lay a diagram out, save those positions and then never recognise them again, and a hand-written model could never keep an arrangement. Deriving it also means the identifiers written into the file later are the ones already on screen, so writing them moves nothing. A derived identifier follows the name rather than the element, which is what the written one is for: it is the weaker guarantee a file that declares nothing can be given.
 
+That weaker guarantee is not enough to migrate on. A rename of an element with a derived identifier reads as a removal and an addition, and a migration generated from that destroys data, so resolution records which identifiers were derived and `lpg lock`, `diff` and `migrate` refuse a model with any, as `ids-not-written`. The destructive-change flag does not bypass this: `lpg ids` writes the identifiers, and nothing moves on screen when it does. See [[emitters#Migrations#Lockfile]].
+
 ## Format Version
 
 A model file may declare the format version it is written against with a top-level `lpg:` key. A file that declares nothing is read as 1.0, which is what every model written before the key existed is.

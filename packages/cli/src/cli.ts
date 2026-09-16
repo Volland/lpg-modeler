@@ -1,11 +1,14 @@
 #!/usr/bin/env node
 import { readFileSync, writeFileSync, existsSync, mkdirSync, statSync } from 'node:fs'
 import { createRequire } from 'node:module'
-import { join, resolve as resolvePath, basename } from 'node:path'
+import { join, resolve as resolvePath, basename, dirname } from 'node:path'
 import {
-  applyEdits, backfillIdEdits, detectFormat, emit, importModel, importerNames, parseViews,
-  readLadybugCatalog, resolveModel, serializeModel, sidecarPaths, targetNames, validateModel,
-  type Diagnostic, type EmitOptions, type ImportInput, type LadybugConnection,
+  applyEdits, atLeast, backfillIdEdits, CHANGE_CLASSES, describeChange, detectFormat, diffModels,
+  emit, idsNotWritten, importModel, importerNames, lockfilePath, migrationFileName, parseViews,
+  planMigration, readLadybugCatalog, readLockfile, resolveModel, serializeModel, sidecarPaths,
+  summarizeChanges, targetNames, validateModel, writeLockfile,
+  type ChangeClass, type Diagnostic, type EmitOptions, type ImportInput, type LadybugConnection,
+  type Lockfile, type ModelIR,
 } from '@lpg/core'
 
 const read = (p: string): string | undefined => {
@@ -57,18 +60,31 @@ Usage:
   lpg check <model.lpg.yaml>
   lpg emit  <model.lpg.yaml> --target <${targetNames().join('|')}> [options]
   lpg ids    <model.lpg.yaml>       assign any missing stable element ids
+  lpg lock    <model.lpg.yaml> [--check]
+  lpg diff    <model.lpg.yaml> [--fail-on <${CHANGE_CLASSES.join('|')}>] [--json]
+  lpg migrate <model.lpg.yaml> [--target <ladybug|neo4j|falkordb>] [--out <dir>]
+                               [--allow-destructive] [--edition ...] [--graph-key ...]
   lpg import <file...> [--from <${[...importerNames(), 'ladybug-db'].sort().join('|')}>] [--out <model.lpg.yaml>]
   lpg targets
 
 Options:
-  --target <name>       generation target (repeatable)
+  --target <name>       generation or migration target (repeatable); migrate defaults
+                        to ladybug, neo4j and falkordb
   --out <path>          emit: a directory to write artifacts into
+                        migrate: where scripts go (default: migrations/ beside the model)
                         import: the model file to write, instead of stdout
   --from <name>         import: what the inputs are, when the names do not say;
                         ladybug-db opens each path as a LadybugDB database
   --edition <name>      neo4j edition: community (default) or enterprise
   --graph-key <key>     falkordb: the Redis key the graph lives under
                         (default: the model's namespace prefix)
+  --check               lock: fail if the model has changed since the lockfile
+  --fail-on <class>     diff: fail on a change of this class or a more severe one
+  --json                diff: print the change set as JSON
+  --allow-destructive   migrate: generate changes that discard stored data
+
+The lockfile (<stem>.lpg.lock.json) is committed beside the model. It records what was
+last deployed, so diff and migrate compare the model against it by element id.
 
 Several files are imported together: a SHACL shapes graph and the OWL ontology
 beside it each carry half of a model, and the DDL adds the endpoints and the
@@ -90,6 +106,10 @@ function parseArgs(argv: string[]) {
   let from: string | undefined
   let graphKey: string | undefined
   let edition: 'community' | 'enterprise' | undefined
+  let failOn: ChangeClass | undefined
+  let check = false
+  let json = false
+  let allowDestructive = false
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]
     if (a === '--target') targets.push(argv[++i] ?? '')
@@ -100,10 +120,17 @@ function parseArgs(argv: string[]) {
       const v = argv[++i]
       if (v !== 'community' && v !== 'enterprise') throw new UsageError()
       edition = v
-    } else if (a?.startsWith('--')) throw new UsageError()
+    } else if (a === '--fail-on') {
+      const v = argv[++i] as ChangeClass
+      if (!CHANGE_CLASSES.includes(v)) throw new UsageError()
+      failOn = v
+    } else if (a === '--check') check = true
+    else if (a === '--json') json = true
+    else if (a === '--allow-destructive') allowDestructive = true
+    else if (a?.startsWith('--')) throw new UsageError()
     else if (a) positional.push(a)
   }
-  return { positional, targets, out, from, graphKey, edition }
+  return { positional, targets, out, from, graphKey, edition, failOn, check, json, allowDestructive }
 }
 
 /** Where a database import pauses for a message rather than a stack trace. */
@@ -222,6 +249,120 @@ async function runImport(files: string[], from: string | undefined, out: string 
   return errors > 0 ? 1 : 0
 }
 
+const stemOf = (modelPath: string) => basename(modelPath).replace(/\.lpg\.ya?ml$/, '')
+
+/**
+ * The model and its lockfile, or the reason a lock, diff or migrate cannot go on. A model
+ * with errors, or with ids that follow names, cannot be compared by element id at all.
+ * See lat.md/emitters#Migrations#Lockfile.
+ */
+function lockInputs(modelPath: string, needLockfile: boolean):
+  { abs: string; model: ModelIR; lockfile?: Lockfile; lockPath: string; diagnostics: Diagnostic[] } | undefined {
+  const { abs, model, diagnostics } = analyse(modelPath)
+  const lockPath = lockfilePath(abs)
+  const errors = diagnostics.filter((d) => d.severity === 'error')
+  if (errors.length > 0) {
+    report(errors)
+    process.stderr.write('refusing to compare a model with errors\n')
+    return undefined
+  }
+  const derived = idsNotWritten(model)
+  if (derived.length > 0) { report(derived); return undefined }
+
+  const text = read(lockPath)
+  if (text === undefined) {
+    if (!needLockfile) return { abs, model, lockPath, diagnostics }
+    report([{ severity: 'error', code: 'lockfile-missing',
+      message: `No lockfile at ${lockPath}. Run \`lpg lock\` on the model as it is deployed to record a baseline.` }])
+    return undefined
+  }
+  const { lockfile, diagnostics: lockDiags } = readLockfile(text, lockPath)
+  // Relocking is how an unreadable lockfile is replaced; one from a newer build is not overwritten.
+  if (!lockfile && !needLockfile && lockDiags.every((d) => d.code === 'lockfile-unreadable')) {
+    report(lockDiags.map((d) => ({ ...d, severity: 'warning' as const })))
+    return { abs, model, lockPath, diagnostics }
+  }
+  if (!lockfile) { report(lockDiags); return undefined }
+  return { abs, model, lockfile, lockPath, diagnostics }
+}
+
+/** `lpg lock`: record the baseline, or with --check fail when the model has moved on. */
+function runLock(modelPath: string, check: boolean): number {
+  const inputs = lockInputs(modelPath, check)
+  if (!inputs) return 1
+  const { model, lockfile, lockPath, diagnostics } = inputs
+  report(diagnostics.filter((d) => d.severity === 'warning'))
+  if (check) {
+    const changes = diffModels(lockfile!.model, model)
+    if (changes.length === 0) { process.stdout.write(`${lockPath} is up to date\n`); return 0 }
+    for (const c of changes) process.stderr.write(`${describeChange(c)}\n`)
+    process.stderr.write(`lockfile is stale: ${summarizeChanges(changes)} since revision ${lockfile!.revision}. Run \`lpg migrate\`, or \`lpg lock\` to rebaseline.\n`)
+    return 1
+  }
+  // Relocking keeps the revision: it rebaselines what is deployed, it does not migrate it.
+  const revision = lockfile?.revision ?? 1
+  writeFileSync(lockPath, writeLockfile(model, revision))
+  process.stdout.write(`${lockPath} (revision ${revision})\n`)
+  return 0
+}
+
+/** `lpg diff`: print the change set, and fail at the chosen severity. */
+function runDiff(modelPath: string, failOn: ChangeClass | undefined, json: boolean): number {
+  const inputs = lockInputs(modelPath, true)
+  if (!inputs) return 1
+  const { model, lockfile } = inputs
+  const changes = diffModels(lockfile!.model, model)
+  if (json) {
+    process.stdout.write(`${JSON.stringify({ revision: lockfile!.revision, changes: changes.map(({ loc: _loc, ...c }) => c) }, null, 2)}\n`)
+  } else {
+    for (const c of changes) process.stdout.write(`${describeChange(c)}\n`)
+    process.stdout.write(`${summarizeChanges(changes)} since revision ${lockfile!.revision}\n`)
+  }
+  if (!failOn) return 0
+  const failing = changes.filter((c) => atLeast(c.class, failOn))
+  if (failing.length > 0) {
+    process.stderr.write(`${failing.length} change(s) are ${failOn} or more severe\n`)
+    return 1
+  }
+  return 0
+}
+
+/**
+ * `lpg migrate`: every script is planned before anything is written, the scripts are
+ * written before the lockfile, and the lockfile last -- so a refusal writes nothing and
+ * a failed write leaves the old baseline in place. See lat.md/emitters#Migrations#Destructive Gate.
+ */
+function runMigrate(
+  modelPath: string, targets: string[], out: string | undefined, allowDestructive: boolean,
+  options: EmitOptions,
+): number {
+  const inputs = lockInputs(modelPath, true)
+  if (!inputs) return 1
+  const { abs, model, lockfile, lockPath, diagnostics } = inputs
+  const plan = planMigration({
+    lockfile: lockfile!, model, allowDestructive, options,
+    ...(targets.length > 0 ? { targets } : {}),
+  })
+  const collected = [...diagnostics.filter((d) => d.severity !== 'error'), ...plan.diagnostics]
+  if (plan.refused || plan.scripts.length === 0) {
+    const { errors } = report(collected)
+    if (!plan.refused) process.stdout.write(`unchanged since revision ${lockfile!.revision}; nothing written\n`)
+    return plan.refused || errors > 0 ? 1 : 0
+  }
+
+  const dir = resolvePath(out ?? join(dirname(abs), 'migrations'))
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
+  for (const s of plan.scripts) {
+    const file = join(dir, migrationFileName(stemOf(abs), plan.revision, s.target, s.extension))
+    writeFileSync(file, s.content)
+    process.stdout.write(`${file}\n`)
+  }
+  writeFileSync(lockPath, plan.lockfileText!)
+  process.stdout.write(`${lockPath} (revision ${plan.revision}: ${summarizeChanges(plan.changes)})\n`)
+  const { errors } = report(collected)
+  return errors > 0 ? 1 : 0
+}
+
 async function main(argv: string[]): Promise<number> {
   const [command, ...rest] = argv
   if (!command || command === '--help' || command === '-h') return usage()
@@ -230,11 +371,21 @@ async function main(argv: string[]): Promise<number> {
     return 0
   }
 
-  const { positional, targets, out, from, graphKey, edition } = parseArgs(rest)
+  const {
+    positional, targets, out, from, graphKey, edition, failOn, check, json, allowDestructive,
+  } = parseArgs(rest)
   const modelPath = positional[0]
   if (!modelPath) return usage()
 
+  const options: EmitOptions = {
+    ...(edition ? { neo4jEdition: edition } : {}),
+    ...(graphKey ? { falkorGraphKey: graphKey } : {}),
+  }
+
   if (command === 'import') return runImport(positional, from, out)
+  if (command === 'lock') return runLock(modelPath, check)
+  if (command === 'diff') return runDiff(modelPath, failOn, json)
+  if (command === 'migrate') return runMigrate(modelPath, targets, out, allowDestructive, options)
 
   if (command === 'ids') {
     const abs = resolvePath(modelPath)
@@ -266,10 +417,6 @@ async function main(argv: string[]): Promise<number> {
     return 1
   }
 
-  const options: EmitOptions = {
-    ...(edition ? { neo4jEdition: edition } : {}),
-    ...(graphKey ? { falkorGraphKey: graphKey } : {}),
-  }
   const collected: Diagnostic[] = [...diagnostics.filter((d) => d.severity !== 'error')]
   for (const target of targets) {
     const result = emit(model, target, options)
