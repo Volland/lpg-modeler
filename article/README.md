@@ -14,6 +14,10 @@ published post and the tool it describes move together.
 | [`rules-without-code.md`](rules-without-code.md) | Hands-on long-read: one model compiled into FalkorDB's own constraints (rejected at write) and, through SHACL and shacl2cypher, into read-only Cypher rules for the business constraints no database holds — worked through agentic commerce, with install and setup for all four tools. |
 | [`agent-commerce.lpg.yaml`](agent-commerce.lpg.yaml) | The model `rules-without-code.md` is built around, on the same footing as `agent-trust.lpg.yaml`. |
 | [`agent-commerce.seed.cypher`](agent-commerce.seed.cypher) | A graph for that model with fourteen planted problems, loaded in the article's step 3. Linked by absolute GitHub URL, because the blog generator copies only `.lpg.yaml` files to the site. |
+| [`renames-are-not-deletes.md`](renames-are-not-deletes.md) | Hands-on long-read on migrations: element ids instead of structural diffs, the lockfile, change classes and the destructive gate, worked end to end against Memgraph with `lpg lock`, `diff`, `migrate` and `apply`, and what LadybugDB, FalkorDB and Memgraph each taught the planners. |
+| [`renames-shop.lpg.yaml`](renames-shop.lpg.yaml) | The model `renames-are-not-deletes.md` is built around, written without ids so the article's first step can add them. |
+| [`renames-shop.seed.cypher`](renames-shop.seed.cypher) | The data that article loads before migrating. Linked by absolute GitHub URL, because the blog generator copies only `.lpg.yaml` files to the site. |
+| [`semantic-layer.md`](semantic-layer.md) | Essay separating domain model, ontology and metrics layer: correspondence versus computation, what one structural model can generate for the first two, and a five-class metrics ontology kept out of the schema file. |
 | [`posts.json`](posts.json) | Publication manifest for the site's blog: which files are published, under which slug, and on which date. A file reaches the site only by being named here. |
 
 A short-form companion compresses the long read rather than restating it loosely: every claim in it

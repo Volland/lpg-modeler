@@ -67,7 +67,7 @@ CREATE CONSTRAINT ON (n:Truck) ASSERT n.longitude IS TYPED FLOAT;
 CREATE CONSTRAINT ON (n:Truck) ASSERT n.vin IS UNIQUE;
 CREATE CONSTRAINT ON (n:Truck) ASSERT EXISTS (n.vin);
 CREATE CONSTRAINT ON (n:Truck) ASSERT n.vin IS TYPED STRING;
-// PARTIAL: 'fuel' must be an enum value; that it is a Fuel value is unenforced.
+// PARTIAL: 'fuel' must be an enum value; that it belongs to Fuel is unenforced.
 CREATE CONSTRAINT ON (n:Truck) ASSERT n.fuel IS TYPED ENUM;
 CREATE CONSTRAINT ON (n:Truck) ASSERT n.assetTag IS TYPED STRING;
 CREATE INDEX ON :Truck(createdAt);
@@ -83,7 +83,7 @@ CREATE CONSTRAINT ON (n:Van) ASSERT n.updatedAt IS TYPED ZONEDDATETIME;
 CREATE CONSTRAINT ON (n:Van) ASSERT n.vin IS UNIQUE;
 CREATE CONSTRAINT ON (n:Van) ASSERT EXISTS (n.vin);
 CREATE CONSTRAINT ON (n:Van) ASSERT n.vin IS TYPED STRING;
-// PARTIAL: 'fuel' must be an enum value; that it is a Fuel value is unenforced.
+// PARTIAL: 'fuel' must be an enum value; that it belongs to Fuel is unenforced.
 CREATE CONSTRAINT ON (n:Van) ASSERT n.fuel IS TYPED ENUM;
 CREATE CONSTRAINT ON (n:Van) ASSERT n.assetTag IS TYPED STRING;
 CREATE INDEX ON :Van(createdAt);

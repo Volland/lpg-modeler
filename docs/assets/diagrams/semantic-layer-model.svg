@@ -1,0 +1,114 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1040 700" width="1040" height="700" font-family="ui-sans-serif, -apple-system, Segoe UI, Inter, Helvetica, Arial, sans-serif" role="img" aria-label="The metrics ontology as an LPG Modeler model. Structural node types Dataset and Field; a Field is FIELD_OF one Dataset and MAPS_TO other fields with a mapping type, confidence and justification on the edge. Computed node types Metric and Filter; a Metric is BASED_ON a field, has a GRAIN field, is FILTERED_BY filters, and points at other metrics as NUMERATOR and DENOMINATOR. A Filter is ON_FIELD one field. Name and description come from the Named mixin.">
+  <rect width="1040" height="700" rx="14" fill="#fcfbf9"/>
+  <defs>
+    <marker id="mg" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#8a94a6"/>
+    </marker>
+    <marker id="ma" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#c2761b"/>
+    </marker>
+    <marker id="mp" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#7a4de0"/>
+    </marker>
+  </defs>
+
+  <text x="40" y="46" font-size="19" font-weight="700" fill="#101318">semantic-layer.lpg.yaml</text>
+  <text x="40" y="70" font-size="13.5" fill="#5b6472">4 node types, 8 edge types, 4 enums, 1 mixin. The vocabulary a metrics layer is written in — not the metrics.</text>
+
+  <!-- ============ edges (under the boxes) ============ -->
+  <g stroke="#8a94a6" stroke-width="1.4" fill="none" marker-end="url(#mg)">
+    <path d="M170 360 V250"/>              <!-- FIELD_OF -->
+    <path d="M540 405 H282"/>              <!-- BASED_ON -->
+    <path d="M540 450 H282"/>              <!-- GRAIN -->
+    <path d="M660 466 V528"/>              <!-- FILTERED_BY -->
+    <path d="M560 600 H270 V490"/>         <!-- ON_FIELD -->
+  </g>
+  <g stroke="#7a4de0" stroke-width="1.4" fill="none" marker-end="url(#mp)">
+    <path d="M780 330 H860 V244 H700 V298"/>   <!-- NUMERATOR -->
+    <path d="M780 360 H900 V206 H620 V298"/>   <!-- DENOMINATOR -->
+  </g>
+  <path d="M110 486 V548 H220 V490" stroke="#c2761b" stroke-width="1.6" fill="none" marker-end="url(#ma)"/> <!-- MAPS_TO -->
+
+  <g font-family="ui-monospace, Menlo, monospace" font-size="10.5" fill="#5b6472">
+    <text x="178" y="310">FIELD_OF · 1</text>
+    <text x="411" y="398" text-anchor="middle">BASED_ON · 0..1</text>
+    <text x="411" y="443" text-anchor="middle">GRAIN · 0..1</text>
+    <text x="668" y="504">FILTERED_BY</text>
+    <text x="415" y="593" text-anchor="middle">ON_FIELD · 1</text>
+  </g>
+  <g font-family="ui-monospace, Menlo, monospace" font-size="10.5" fill="#7a4de0">
+    <text x="780" y="238" text-anchor="middle">NUMERATOR · 0..1</text>
+    <text x="760" y="200" text-anchor="middle">DENOMINATOR · 0..1</text>
+  </g>
+
+  <!-- ============ Dataset ============ -->
+  <rect x="60" y="112" width="220" height="138" rx="9" fill="#ffffff" stroke="#2f5fe0" stroke-width="1.4"/>
+  <path d="M60 121 a9 9 0 0 1 9 -9 H271 a9 9 0 0 1 9 9 V146 H60 z" fill="#eef2fb"/>
+  <text x="74" y="135" font-size="13.5" font-weight="700" fill="#2f5fe0">Dataset</text>
+  <g font-family="ui-monospace, Menlo, monospace" font-size="11">
+    <text x="74" y="168" fill="#101318">id</text>          <text x="266" y="168" fill="#2f5fe0" text-anchor="end">string · key</text>
+    <text x="74" y="188" fill="#8a94a6">name</text>        <text x="266" y="188" fill="#8a94a6" text-anchor="end">Named</text>
+    <text x="74" y="208" fill="#8a94a6">description</text> <text x="266" y="208" fill="#8a94a6" text-anchor="end">Named</text>
+    <text x="74" y="228" fill="#101318">system</text>      <text x="266" y="228" fill="#5b6472" text-anchor="end">string · required</text>
+  </g>
+
+  <!-- ============ Field ============ -->
+  <rect x="60" y="360" width="220" height="126" rx="9" fill="#ffffff" stroke="#2f5fe0" stroke-width="1.4"/>
+  <path d="M60 369 a9 9 0 0 1 9 -9 H271 a9 9 0 0 1 9 9 V394 H60 z" fill="#eef2fb"/>
+  <text x="74" y="383" font-size="13.5" font-weight="700" fill="#2f5fe0">Field</text>
+  <g font-family="ui-monospace, Menlo, monospace" font-size="11">
+    <text x="74" y="414" fill="#101318">id</text>          <text x="266" y="414" fill="#2f5fe0" text-anchor="end">string · key</text>
+    <text x="74" y="434" fill="#8a94a6">name</text>        <text x="266" y="434" fill="#8a94a6" text-anchor="end">Named</text>
+    <text x="74" y="454" fill="#8a94a6">description</text> <text x="266" y="454" fill="#8a94a6" text-anchor="end">Named</text>
+    <text x="74" y="474" fill="#101318">dataType</text>    <text x="266" y="474" fill="#5b6472" text-anchor="end">string · required</text>
+  </g>
+
+  <!-- MAPS_TO edge properties -->
+  <rect x="40" y="566" width="214" height="92" rx="9" fill="#fdf6ec" stroke="#eccfa4"/>
+  <text x="54" y="588" font-family="ui-monospace, Menlo, monospace" font-size="11.5" font-weight="700" fill="#8a5a13">MAPS_TO · Field → Field</text>
+  <g font-family="ui-monospace, Menlo, monospace" font-size="11">
+    <text x="54" y="610" fill="#101318">mappingType</text>   <text x="242" y="610" fill="#8a5a13" text-anchor="end">MappingType</text>
+    <text x="54" y="629" fill="#101318">confidence</text>    <text x="242" y="629" fill="#5b6472" text-anchor="end">float 0..1</text>
+    <text x="54" y="648" fill="#101318">justification</text> <text x="242" y="648" fill="#5b6472" text-anchor="end">string</text>
+  </g>
+
+  <!-- ============ Metric ============ -->
+  <rect x="540" y="300" width="240" height="166" rx="9" fill="#ffffff" stroke="#7a4de0" stroke-width="1.8"/>
+  <path d="M540 309 a9 9 0 0 1 9 -9 H771 a9 9 0 0 1 9 9 V334 H540 z" fill="#f3effd"/>
+  <text x="554" y="323" font-size="13.5" font-weight="700" fill="#7a4de0">Metric</text>
+  <g font-family="ui-monospace, Menlo, monospace" font-size="11">
+    <text x="554" y="355" fill="#101318">id</text>          <text x="766" y="355" fill="#7a4de0" text-anchor="end">string · key</text>
+    <text x="554" y="375" fill="#8a94a6">name</text>        <text x="766" y="375" fill="#8a94a6" text-anchor="end">Named</text>
+    <text x="554" y="395" fill="#8a94a6">description</text> <text x="766" y="395" fill="#8a94a6" text-anchor="end">Named</text>
+    <text x="554" y="415" fill="#101318">aggregateFn</text> <text x="766" y="415" fill="#5b6472" text-anchor="end">AggregateFn</text>
+    <text x="554" y="435" fill="#101318">grainUnit</text>   <text x="766" y="435" fill="#5b6472" text-anchor="end">TimeUnit</text>
+    <text x="554" y="455" fill="#101318">owner</text>       <text x="766" y="455" fill="#5b6472" text-anchor="end">string · required</text>
+  </g>
+
+  <!-- ============ Filter ============ -->
+  <rect x="560" y="530" width="200" height="106" rx="9" fill="#ffffff" stroke="#7a4de0" stroke-width="1.4"/>
+  <path d="M560 539 a9 9 0 0 1 9 -9 H751 a9 9 0 0 1 9 9 V564 H560 z" fill="#f3effd"/>
+  <text x="574" y="553" font-size="13.5" font-weight="700" fill="#7a4de0">Filter</text>
+  <g font-family="ui-monospace, Menlo, monospace" font-size="11">
+    <text x="574" y="584" fill="#101318">id</text>       <text x="746" y="584" fill="#7a4de0" text-anchor="end">string · key</text>
+    <text x="574" y="604" fill="#101318">operator</text> <text x="746" y="604" fill="#5b6472" text-anchor="end">Operator</text>
+    <text x="574" y="624" fill="#101318">value</text>    <text x="746" y="624" fill="#5b6472" text-anchor="end">string</text>
+  </g>
+
+  <!-- ============ legend ============ -->
+  <g font-size="12">
+    <rect x="820" y="420" width="16" height="16" rx="4" fill="#eef2fb" stroke="#2f5fe0"/>
+    <text x="846" y="433" fill="#101318">structural layer</text>
+    <rect x="820" y="448" width="16" height="16" rx="4" fill="#f3effd" stroke="#7a4de0"/>
+    <text x="846" y="461" fill="#101318">computed layer</text>
+    <path d="M820 484 H836" stroke="#c2761b" stroke-width="2"/>
+    <text x="846" y="489" fill="#101318">correspondence</text>
+    <text x="820" y="520" font-size="11.5" fill="#8a94a6">grey rows come from the</text>
+    <text x="820" y="536" font-size="11.5" fill="#8a94a6">Named mixin</text>
+  </g>
+  <rect x="800" y="566" width="200" height="92" rx="9" fill="#ffffff" stroke="#dfe2e7"/>
+  <text x="814" y="590" font-size="11.5" font-weight="700" fill="#101318">In OWL</text>
+  <text x="814" y="610" font-size="11.5" fill="#5b6472">MAPS_TO carries data, so it</text>
+  <text x="814" y="627" font-size="11.5" fill="#5b6472">becomes the class</text>
+  <text x="814" y="644" font-family="ui-monospace, Menlo, monospace" font-size="11.5" fill="#7a4de0">sem:MapsTo</text>
+</svg>

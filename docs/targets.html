@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Targets — LPG Modeler</title>
-<meta name="description" content="What each LPG Modeler generator emits: LadybugDB DDL, Neo4j constraints, SHACL shapes and an OWL ontology, and exactly which constraints each target cannot enforce.">
+<meta name="description" content="What each LPG Modeler generator emits — LadybugDB, Neo4j, FalkorDB and Memgraph schema, SHACL, OWL, GQL, PG-Schema and LinkML — which constraints each cannot enforce, and which targets can be migrated.">
 <link rel="icon" href="assets/icon.png">
 <link rel="stylesheet" href="assets/fonts.css">
 <link rel="stylesheet" href="assets/site.css">
@@ -21,6 +21,7 @@
       <a href="model-format.html">Model format</a>
       <a href="targets.html">Targets</a>
       <a href="cli.html">CLI</a>
+      <a href="migrations.html">Migrations</a>
       <a href="architecture.html">Architecture</a>
       <a href="blog/index.html">Blog</a>
       <a href="https://github.com/Volland/lpg-modeler">GitHub</a>
@@ -31,17 +32,18 @@
 <main>
 <div class="wrap hero">
   <span class="eyebrow">Reference</span>
-  <h1>Eight targets, and what each one refuses to promise</h1>
+  <h1>Nine targets, and what each one refuses to promise</h1>
   <p class="lede">
     Every generator publishes a typed capability set. The compiler works out what your model
     requires, compares the two, and reports every gap — as an editor diagnostic and as a
-    comment at the lossy site in the artifact.
+    comment at the lossy site in the artifact. The four database targets can also be
+    <a href="#migrations">migrated</a>, so a deployed schema follows the model forward.
   </p>
 </div>
 
 <div class="wrap">
   <figure>
-    <img src="assets/diagrams/capabilities.svg" alt="A matrix of five model features against four targets, showing which are enforced natively, which are downgraded, and which are transformed.">
+    <img src="assets/diagrams/capabilities.svg" alt="A matrix of five model features against six targets — LadybugDB, Neo4j, FalkorDB, Memgraph, SHACL and OWL — showing which are enforced natively, which are downgraded, and which are transformed.">
     <figcaption>Silent best-effort was rejected deliberately: a <code>required</code> constraint that quietly vanishes is a data-integrity bug that surfaces in production, long after the model stopped being read.</figcaption>
   </figure>
 </div>
@@ -345,6 +347,34 @@ CREATE CONSTRAINT ON (n:Person) ASSERT n.createdAt IS TYPED LOCALDATETIME;</code
   </div>
 </section>
 
+<section class="wrap narrow" id="migrations">
+  <h2>Which targets migrate</h2>
+  <p>
+    A generated schema describes what a database <em>should</em> hold. Once one is deployed,
+    <code>lpg migrate</code> writes the steps from the schema it <em>has</em>: it compares the
+    model with a committed lockfile by element id, so a renamed type or property is migrated as
+    a rename and keeps its data. Only the targets that hold a schema of their own migrate. SHACL,
+    OWL, GQL, PG-Schema and LinkML are regenerated with <code>emit</code>.
+  </p>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Target</th><th>How a migration is built</th><th>What it cannot do in place</th></tr></thead>
+      <tbody>
+        <tr><td><code>ladybug</code></td><td>Diffs the tables the two revisions flatten to, then drops, renames, alters and creates in the order the engine accepts.</td><td>Change a primary key, a column type or a multiplicity: the table or column is recreated, which discards data and needs <code>--allow-destructive</code>.</td></tr>
+        <tr><td><code>neo4j</code></td><td>Drops the constraints and indexes only the old revision had, relabels and renames the data in batches, then creates the new ones.</td><td>Rename a relationship type: relationships are copied to the new type and the old ones deleted.</td></tr>
+        <tr><td><code>falkordb</code></td><td>The same, as <code>redis-cli</code> commands, dropping each constraint before the index it depends on.</td><td>Drop an index over several properties at once, or drop anything idempotently: the script runs once, against the previous revision.</td></tr>
+        <tr><td><code>memgraph</code></td><td>The same, with data steps in <code>USING PERIODIC COMMIT</code> batches; <a href="cli.html">lpg apply</a> runs it for you.</td><td>Drop an enum or remove an enum value: the migration reports it and leaves the value valid.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>
+    A change that would discard stored data is refused unless you pass
+    <code>--allow-destructive</code>, and a refusal writes nothing. That includes a change the model
+    calls merely breaking but a target can only apply by discarding data. The
+    <a href="migrations.html">migrations guide</a> walks through adopting it on a deployed model.
+  </p>
+</section>
+
 <section class="wrap narrow">
   <h2>Targets that are deliberately absent</h2>
   <p>
@@ -368,9 +398,9 @@ CREATE CONSTRAINT ON (n:Person) ASSERT n.createdAt IS TYPED LOCALDATETIME;</code
 
   <h2>Adding a target</h2>
   <p>
-    Generators sit behind an internal registry: a target is one file plus one entry. The public
-    plugin API is deliberately deferred until three real generators have shown where the seam
-    actually falls — the capability set on this page is what that API will eventually expose.
+    Generators sit behind an internal registry: a target is one file plus one entry, and a
+    database target adds a migration planner beside it. The public plugin API is still
+    deliberately internal — the capability set on this page is what it will eventually expose.
   </p>
 <pre><code><span class="c-key">interface</span> Capabilities {
   target: string
@@ -382,6 +412,7 @@ CREATE CONSTRAINT ON (n:Person) ASSERT n.createdAt IS TYPED LOCALDATETIME;</code
   edgeProps: 'native' | 'reified'
   nestedEdges: boolean
   listProps: 'native' | 'unsupported'
+  compositeTypes: 'native' | 'unsupported'
   enums: 'enforced' | 'documented' | 'unsupported'
   openTypes: 'native' | 'always-open' | 'unsupported'
   cardinality: 'enforced' | 'upper-bound-only' | 'unsupported'
@@ -415,6 +446,7 @@ CREATE CONSTRAINT ON (n:Person) ASSERT n.createdAt IS TYPED LOCALDATETIME;</code
   <div class="next">
     <a href="model-format.html"><div class="k">Model format</div><div class="v">The concepts these generators consume.</div></a>
     <a href="cli.html"><div class="k">CLI</div><div class="v">Generate every target in one command.</div></a>
+    <a href="migrations.html"><div class="k">Migrations</div><div class="v">Carry a deployed schema forward.</div></a>
     <a href="architecture.html"><div class="k">Architecture</div><div class="v">How generators are tested against a real engine.</div></a>
   </div>
 </section>

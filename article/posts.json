@@ -2,6 +2,16 @@
   "$comment": "Publication manifest for the blog section of the documentation site. An allowlist: a file in article/ reaches docs/blog/ only by being named here, which is what keeps working notes and the platform-specific companions unpublished. Order is reading order, newest first. Run `npm run build:blog` after editing.",
   "posts": [
     {
+      "slug": "semantic-layer",
+      "source": "semantic-layer.md",
+      "date": "2026-09-17"
+    },
+    {
+      "slug": "renames-are-not-deletes",
+      "source": "renames-are-not-deletes.md",
+      "date": "2026-09-16"
+    },
+    {
       "slug": "rules-without-code",
       "source": "rules-without-code.md",
       "date": "2026-09-15"

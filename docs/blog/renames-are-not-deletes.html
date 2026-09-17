@@ -1,0 +1,382 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>A rename is not a delete. Migrating a graph schema you have already deployed. — LPG Modeler</title>
+<meta name="description" content="A property renamed in the model should keep its data in the database. LPG Modeler compares a model with a committed lockfile by element id, so name becoming fullName is migrated as a rename — and anything that would discard data waits for you to say so.">
+<meta property="og:title" content="A rename is not a delete. Migrating a graph schema you have already deployed.">
+<meta property="og:description" content="A property renamed in the model should keep its data in the database. LPG Modeler compares a model with a committed lockfile by element id, so name becoming fullName is migrated as a rename — and anything that would discard data waits for you to say so.">
+<meta property="og:type" content="article">
+<meta property="og:image" content="https://www.lpg-modeler.com/assets/diagrams/pipeline.png">
+<link rel="icon" href="../assets/icon.png">
+<link rel="stylesheet" href="../assets/fonts.css">
+<link rel="stylesheet" href="../assets/site.css">
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="../index.html"><img src="../assets/icon.png" alt=""> LPG Modeler</a>
+    <nav class="links">
+      <a href="../index.html">Overview</a>
+      <a href="../getting-started.html">Getting started</a>
+      <a href="../examples.html">Examples</a>
+      <a href="../model-format.html">Model format</a>
+      <a href="../targets.html">Targets</a>
+      <a href="../cli.html">CLI</a>
+      <a href="../migrations.html">Migrations</a>
+      <a href="../architecture.html">Architecture</a>
+      <a href="../blog/index.html" aria-current="page">Blog</a>
+      <a href="https://github.com/Volland/lpg-modeler">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+
+<div class="wrap post-head">
+  <a class="back" href="index.html">← Blog</a>
+  <h1>A rename is not a delete. Migrating a graph schema you have already deployed.</h1>
+  <p class="lede">A property renamed in the model should keep its data in the database. LPG Modeler compares a model with a committed lockfile by element id, so <code>name</code> becoming <code>fullName</code> is migrated as a rename — and anything that would discard data waits for you to say so.</p>
+  <p class="post-meta"><time datetime="2026-09-16">16 September 2026</time> · 17 min read</p>
+</div>
+
+<hr class="rule">
+
+<div class="wrap">
+  <article class="post">
+<p>The first release of a graph schema is the easy one. You write the model, generate the constraints, run them against an empty database, and load data. Everything after that is harder, because the database is no longer empty.</p>
+<p>A week later the model changes. <code>Customer.name</code> should be <code>fullName</code>. <code>Product.legacyCode</code> was a mistake. Purchases need a <code>channel</code>. And the status enum needs a <code>cancelled</code> value. Regenerating the schema from scratch gives you the constraints the database <em>should</em> have. It does not give you the steps from the schema it <em>has</em>, and those steps are where data gets lost.</p>
+<p>The usual tool for those steps is a diff. Compare the old schema with the new one and emit the difference. That works until the first rename. A diff sees <code>name</code> disappear and <code>fullName</code> appear, and has two honest readings: a property was renamed, or one was removed and an unrelated one added. Guessing &quot;rename&quot; because the types match is wrong often enough to matter. Guessing &quot;remove and add&quot; drops every customer's name.</p>
+<p><strong>This article takes a different route.</strong> Every element in the model carries an id. A lockfile records what was deployed. Changes are matched by id, never by resemblance, so a rename is a rename because the id says so. Then each change is classed by how dangerous it is, and the dangerous ones wait for you.</p>
+<p><em>(Everything below was run against Memgraph 3.13.1 Community with LPG Modeler 0.14.0. Every output block is pasted from that run, with the absolute path trimmed from the front of file names.)</em></p>
+<hr>
+<h2 id="why-names-cannot-carry-identity">Why names cannot carry identity<a class="anchor" href="#why-names-cannot-carry-identity" aria-label="Link to this section">#</a></h2>
+<p>Here is the change from the introduction, as a diff of the model file:</p>
+<pre><code>   Customer:
+     props:
+       id: { type: string, required: true }
+       email: { type: string, required: true, unique: true }
+-      name: { type: string }
++      fullName: { type: string }</code></pre>
+<p>Nothing in those two lines says whether <code>fullName</code> is <code>name</code> under a new name. Two people can read it two ways, and so can a tool. A structural guess — same owner, same type, one removed and one added in the same change — would be right here and wrong the day someone really does replace one string property with another.</p>
+<p>So the model does not rely on names. Each node type, edge type, enum and property carries a short generated id, written once into the file:</p>
+<pre><code>-      name: { id: p_dehbt, type: string }
++      fullName: { id: p_dehbt, type: string }</code></pre>
+<p>Now the diff is not ambiguous. <code>p_dehbt</code> was called <code>name</code> and is now called <code>fullName</code>. It is the same property, and its values should come with it.</p>
+<hr>
+<h2 id="the-model">The model<a class="anchor" href="#the-model" aria-label="Link to this section">#</a></h2>
+<p>A small shop: customers, products and purchases, with a status enum and two edges.</p>
+<pre><code>namespace:
+  prefix: shop
+  iri: https://example.org/shop#
+
+enums:
+  PurchaseStatus:
+    values: [placed, shipped]
+
+nodes:
+  Customer:
+    key: [id]
+    props:
+      id: { type: string, required: true }
+      email: { type: string, required: true, unique: true }
+      name: { type: string }
+
+  Product:
+    key: [sku]
+    props:
+      sku: { type: string, required: true }
+      title: { type: string, required: true }
+      legacyCode: { type: string }
+      price: { type: float }
+
+  Purchase:
+    key: [ref]
+    props:
+      ref: { type: string, required: true }
+      status: { type: string, enum: PurchaseStatus }
+      placedAt: { type: datetime, required: true }
+
+edges:
+  PLACED:
+    from: Customer
+    to: Purchase
+    cardinality: one-to-many
+
+  CONTAINS:
+    from: Purchase
+    to: Product
+    props:
+      quantity: { type: int, required: true }</code></pre>
+<p>It is written the way a person writes a model: no ids yet. That is the first thing the tool will object to.</p>
+<hr>
+<h2 id="install-the-tools">Install the tools<a class="anchor" href="#install-the-tools" aria-label="Link to this section">#</a></h2>
+<p>The CLI, and the Bolt driver it uses to talk to Memgraph:</p>
+<pre><code>npm install -g lpg-modeler-cli@0.14.0 neo4j-driver@6.2.0</code></pre>
+<p>The driver is an optional dependency of the CLI. Only reading a running Memgraph and <code>lpg apply</code> need it, so nothing else downloads it.</p>
+<p>Memgraph, with schema information enabled so it can also be read back later:</p>
+<pre><code>docker run -d --name memgraph -p 7687:7687 memgraph/memgraph:3.13.1 --schema-info-enabled=true</code></pre>
+<p>Podman works the same way — the run for this article used <code>podman run</code> and <code>podman exec</code> with identical arguments.</p>
+<p>Save the model above as <code>shop.lpg.yaml</code>, or download <a href="models/renames-shop.lpg.yaml"><code>renames-shop.lpg.yaml</code></a> under that name.</p>
+<hr>
+<h2 id="step-1-give-every-element-an-id">Step 1 — give every element an id<a class="anchor" href="#step-1-give-every-element-an-id" aria-label="Link to this section">#</a></h2>
+<p>The model is valid:</p>
+<pre><code>$ lpg check shop.lpg.yaml
+0 error(s), 0 warning(s)</code></pre>
+<p>But it cannot be locked. Every element's id is still derived from its name, so a rename could not be told from a removal. The first two of seventeen errors:</p>
+<pre><code>$ lpg lock shop.lpg.yaml
+shop.lpg.yaml:6:3 error ids-not-written: Enum 'PurchaseStatus' has no element id written in its file, so renaming it could not be told apart from removing it and adding another. Run `lpg ids` on the file that declares it.
+shop.lpg.yaml:10:3 error ids-not-written: Node type 'Customer' has no element id written in its file, so renaming it could not be told apart from removing it and adding another. Run `lpg ids` on the file that declares it.</code></pre>
+<p>This refusal is deliberate, and there is no flag to bypass it. A migration generated from a model without ids would look correct until the first rename, and then drop a column. <code>lpg ids</code> writes them:</p>
+<pre><code>$ lpg ids shop.lpg.yaml
+assigned 17 id(s) in shop.lpg.yaml</code></pre>
+<p>The file now reads:</p>
+<pre><code>nodes:
+  Customer:
+    id: n_3dmir
+    key: [id]
+    props:
+      id: { id: p_3yqbr, type: string, required: true }
+      email: { id: p_ejauq, type: string, required: true, unique: true }
+      name: { id: p_dehbt, type: string }</code></pre>
+<p>The ids are derived from what the file already said, so running <code>lpg ids</code> on your own copy writes the same ones. From here on they belong to the file. Commit them, and never edit one by hand: a changed id reads as a removal and an addition, on purpose.</p>
+<hr>
+<h2 id="step-2-deploy-revision-1">Step 2 — deploy revision 1<a class="anchor" href="#step-2-deploy-revision-1" aria-label="Link to this section">#</a></h2>
+<p>Generate the Memgraph schema and apply it:</p>
+<pre><code>$ lpg emit shop.lpg.yaml --target memgraph --out schema
+schema/shop.memgraph.cypher
+shop.lpg.yaml:33:7 warning [memgraph] downgrade-enum-identity: Property 'Purchase.status' is limited to enum 'PurchaseStatus'. Memgraph can require that the value is an enum, but not that it is this one.
+shop.lpg.yaml:48:7 warning [memgraph] downgrade-edge-required: Edge property 'CONTAINS.quantity' is required, but Memgraph has no constraint on relationships.
+shop.lpg.yaml:37:3 warning [memgraph] downgrade-cardinality: Edge type 'PLACED' declares one-to-many cardinality, which Memgraph has no constraint for.</code></pre>
+<p>The three warnings are what Memgraph cannot hold, said before anything is deployed. Everything else — keys, required properties, uniqueness, value types, and that <code>status</code> holds an enum value — becomes a constraint Memgraph enforces on write.</p>
+<p><code>lpg apply</code> runs the script one statement at a time and stops at the first one Memgraph refuses. The last lines:</p>
+<pre><code>$ lpg apply schema/shop.memgraph.cypher --target memgraph --uri bolt://localhost:7687
+...
+[25/26] CREATE CONSTRAINT ON (n:Purchase) ASSERT n.placedAt IS TYPED LOCALDATETIME
+[26/26] CREATE INDEX ON :Purchase(placedAt)
+applied 26 statement(s) to bolt://localhost:7687</code></pre>
+<p>Load some data with <a href="https://github.com/Volland/lpg-modeler/blob/main/article/renames-shop.seed.cypher" rel="noopener"><code>renames-shop.seed.cypher</code></a>: two customers, a product with a legacy code, and a purchase.</p>
+<pre><code>docker exec -i memgraph mgconsole &lt; renames-shop.seed.cypher</code></pre>
+<p>The enum is a real Memgraph enum. A purchase with a plain-string status is refused:</p>
+<pre><code>$ echo &quot;CREATE (:Purchase {ref: 'o-2', status: 'placed', placedAt: localDateTime('2026-09-02T09:00:00')});&quot; | docker exec -i memgraph mgconsole
+Failed query: CREATE (:Purchase {ref: 'o-2', status: 'placed', placedAt: localDateTime('2026-09-02T09:00:00')})
+Client received query exception: IS TYPED ENUM violation on Purchase(status)</code></pre>
+<p>The seed writes <code>PurchaseStatus::placed</code>, which is how a value of a Memgraph enum is spelled.</p>
+<hr>
+<h2 id="step-3-record-what-is-deployed">Step 3 — record what is deployed<a class="anchor" href="#step-3-record-what-is-deployed" aria-label="Link to this section">#</a></h2>
+<pre><code>$ lpg lock shop.lpg.yaml
+shop.lpg.lock.json (revision 1)</code></pre>
+<p><code>shop.lpg.lock.json</code> is a snapshot of the resolved model: every type, property, enum and id, with inheritance and mixins already flattened, in a stable order. Writing it twice gives the same bytes, and rearranging the diagram changes nothing in it. Commit it next to the model. It is the answer to &quot;what does production have?&quot; that the rest of the workflow compares against.</p>
+<p>On a model that is already deployed, lock the commit the database was built from, not your working branch — the <a href="../migrations.html">migrations guide</a> walks through that.</p>
+<hr>
+<h2 id="step-4-change-the-model">Step 4 — change the model<a class="anchor" href="#step-4-change-the-model" aria-label="Link to this section">#</a></h2>
+<p>The four changes from the introduction:</p>
+<pre><code>@@ -5,7 +5,7 @@
+ enums:
+   PurchaseStatus:
+     id: x_dtn5i
+-    values: [placed, shipped]
++    values: [placed, shipped, cancelled]
+ 
+ nodes:
+   Customer:
+@@ -14,7 +14,7 @@
+     props:
+       id: { id: p_3yqbr, type: string, required: true }
+       email: { id: p_ejauq, type: string, required: true, unique: true }
+-      name: { id: p_dehbt, type: string }
++      fullName: { id: p_dehbt, type: string }
+ 
+   Product:
+     id: n_yjkgl
+@@ -22,7 +22,6 @@
+     props:
+       sku: { id: p_gsvp6, type: string, required: true }
+       title: { id: p_f6cj9, type: string, required: true }
+-      legacyCode: { id: p_l5rjz, type: string }
+       price: { id: p_0bdn9, type: float }
+ 
+   Purchase:
+@@ -32,6 +31,7 @@
+       ref: { id: p_8hy5c, type: string, required: true }
+       status: { id: p_9k0d3, type: string, enum: PurchaseStatus }
+       placedAt: { id: p_3r02r, type: datetime, required: true }
++      channel: { type: string }</code></pre>
+<p>The rename kept the id. The new <code>channel</code> has none yet, which is exactly what happens when a person adds a property by hand.</p>
+<hr>
+<h2 id="step-5-see-what-changed-and-how-much-it-matters">Step 5 — see what changed, and how much it matters<a class="anchor" href="#step-5-see-what-changed-and-how-much-it-matters" aria-label="Link to this section">#</a></h2>
+<pre><code>$ lpg diff shop.lpg.yaml
+shop.lpg.yaml:34:7 error ids-not-written: Property 'Purchase.channel' has no element id written in its file, so renaming it could not be told apart from removing it and adding another. Run `lpg ids` on the file that declares it.</code></pre>
+<p>The same refusal as in step 1, now for the one new property. Writing its id is one command, and it is worth making a habit before every diff:</p>
+<pre><code>$ lpg ids shop.lpg.yaml
+assigned 1 id(s) in shop.lpg.yaml</code></pre>
+<pre><code>$ lpg diff shop.lpg.yaml
+additive    enum PurchaseStatus: values added: cancelled
+destructive property Product.legacyCode: removed
+breaking    property Customer.fullName: renamed from 'name'
+additive    property Purchase.channel: added as string
+1 destructive, 1 breaking, 2 additive since revision 1</code></pre>
+<p>Four changes, each with a class:</p>
+<ul>
+<li><strong>additive</strong> — nothing that exists becomes invalid. A new optional property, a new enum value.</li>
+<li><strong>breaking</strong> — existing data may no longer fit, or existing queries may stop matching. A rename is breaking even though it loses nothing: every query that says <code>c.name</code> returns null afterwards.</li>
+<li><strong>destructive</strong> — something stored is removed. Dropping <code>legacyCode</code> throws away <code>NB-OLD-7</code>.</li>
+</ul>
+<p>An ambiguous change is classed as breaking rather than additive. A false alarm costs a reviewer a minute; a false &quot;additive&quot; costs data.</p>
+<p>The class is what continuous integration gates on. With <code>--fail-on breaking</code> the command exits non-zero on a breaking or destructive change:</p>
+<pre><code>$ lpg diff shop.lpg.yaml --fail-on breaking
+additive    enum PurchaseStatus: values added: cancelled
+destructive property Product.legacyCode: removed
+breaking    property Customer.fullName: renamed from 'name'
+additive    property Purchase.channel: added as string
+1 destructive, 1 breaking, 2 additive since revision 1
+2 change(s) are breaking or more severe</code></pre>
+<p>It exited <code>1</code>.</p>
+<hr>
+<h2 id="step-6-the-gate">Step 6 — the gate<a class="anchor" href="#step-6-the-gate" aria-label="Link to this section">#</a></h2>
+<pre><code>$ lpg migrate shop.lpg.yaml
+error destructive-change: property Product.legacyCode removed, which discards data. Nothing was written. Pass --allow-destructive to generate it anyway.</code></pre>
+<p>It exited <code>1</code>, and it means &quot;nothing&quot;. There is no <code>migrations/</code> directory, and the lockfile is still at revision 1. A refusal after writing half the scripts would leave a set that agrees with neither revision, so every target is planned before anything touches the disk.</p>
+<p>The gate also asks a second question the model alone cannot answer: can each <em>database</em> apply this change without losing data? A primary key change is only breaking in the model. On LadybugDB it means recreating the table, because a primary key cannot change in place, and that is refused the same way.</p>
+<p>Removing <code>legacyCode</code> is what we meant, so:</p>
+<pre><code>$ lpg migrate shop.lpg.yaml --allow-destructive
+migrations/shop.0002.ladybug.cypher
+migrations/shop.0002.neo4j.cypher
+migrations/shop.0002.falkordb.sh
+migrations/shop.0002.memgraph.cypher
+shop.lpg.lock.json (revision 2: 1 destructive, 1 breaking, 2 additive)</code></pre>
+<p>One script per database target, numbered by the revision it produces, and the lockfile advanced last.</p>
+<hr>
+<h2 id="step-7-read-the-memgraph-script">Step 7 — read the Memgraph script<a class="anchor" href="#step-7-read-the-memgraph-script" aria-label="Link to this section">#</a></h2>
+<pre><code><span class="c-com">// Generated by lpg-modeler. Target: memgraph migration.</span>
+<span class="c-com">// Model: shop &lt;https://example.org/shop#&gt;</span>
+<span class="c-com">// Revision 1 -&gt; 2.</span>
+<span class="c-com">//</span>
+<span class="c-com">// Apply once, to an instance at the previous revision, e.g. with `lpg apply`.</span>
+<span class="c-com">// Data steps use USING PERIODIC COMMIT, which runs only in an implicit (auto-commit)</span>
+<span class="c-com">// transaction. Measured against Memgraph 3.13.1 Community.</span>
+<span class="c-com">//</span>
+<span class="c-com">// Changes since revision 1:</span>
+<span class="c-com">//   additive     enum PurchaseStatus: values added: cancelled</span>
+<span class="c-com">//   destructive  property Product.legacyCode: removed</span>
+<span class="c-com">//   breaking     property Customer.fullName: renamed from 'name'</span>
+<span class="c-com">//   additive     property Purchase.channel: added as string</span>
+
+DROP CONSTRAINT ON (n:Customer) ASSERT n.name IS TYPED STRING;
+DROP CONSTRAINT ON (n:Product) ASSERT n.legacyCode IS TYPED STRING;
+
+USING PERIODIC COMMIT 1000 MATCH (n:Customer) WHERE n.name IS NOT NULL SET n.fullName = n.name REMOVE n.name;
+
+ALTER ENUM PurchaseStatus ADD VALUE cancelled;
+
+CREATE CONSTRAINT ON (n:Customer) ASSERT n.fullName IS TYPED STRING;
+CREATE CONSTRAINT ON (n:Purchase) ASSERT n.channel IS TYPED STRING;</code></pre>
+<p>The order is the point. Constraints that only the old revision had go first, so the old type constraint on <code>name</code> cannot object while values move. Then the data moves, in batches. Then the enum grows. Then the new constraints arrive, and they see the data they will govern.</p>
+<p>The rename is one statement that copies each value and removes the old key. There is no &quot;drop <code>name</code>, add <code>fullName</code>&quot; anywhere in it.</p>
+<hr>
+<h2 id="step-8-apply-it-and-check-the-data">Step 8 — apply it, and check the data<a class="anchor" href="#step-8-apply-it-and-check-the-data" aria-label="Link to this section">#</a></h2>
+<pre><code>$ lpg apply migrations/shop.0002.memgraph.cypher --target memgraph --uri bolt://localhost:7687
+[1/6] DROP CONSTRAINT ON (n:Customer) ASSERT n.name IS TYPED STRING
+[2/6] DROP CONSTRAINT ON (n:Product) ASSERT n.legacyCode IS TYPED STRING
+[3/6] USING PERIODIC COMMIT 1000 MATCH (n:Customer) WHERE n.name IS NOT NULL SET n.fullName = n.name REMOVE n.name
+[4/6] ALTER ENUM PurchaseStatus ADD VALUE cancelled
+[5/6] CREATE CONSTRAINT ON (n:Customer) ASSERT n.fullName IS TYPED STRING
+[6/6] CREATE CONSTRAINT ON (n:Purchase) ASSERT n.channel IS TYPED STRING
+applied 6 statement(s) to bolt://localhost:7687</code></pre>
+<p>Before connecting, <code>apply</code> checked that the script was generated for Memgraph and that no statement in it is marked destructive — a migration that deleted nodes would have needed <code>--allow-destructive</code> here too. It runs each statement in its own transaction. Had one failed, it would have stopped there and said how many had already run.</p>
+<p>The names came through:</p>
+<pre><code>$ echo 'MATCH (c:Customer) RETURN c.id, c.fullName, c.name ORDER BY c.id;' | docker exec -i memgraph mgconsole
++----------------+----------------+----------------+
+| c.id           | c.fullName     | c.name         |
++----------------+----------------+----------------+
+| &quot;c1&quot;           | &quot;Ada Lovelace&quot; | Null           |
+| &quot;c2&quot;           | &quot;Alan Turing&quot;  | Null           |
++----------------+----------------+----------------+</code></pre>
+<p>And the new enum value is accepted:</p>
+<pre><code>echo &quot;CREATE (:Purchase {ref: 'o-2', status: PurchaseStatus::cancelled, placedAt: localDateTime('2026-09-02T09:00:00')});&quot; | docker exec -i memgraph mgconsole</code></pre>
+<p>That returned nothing, which is mgconsole's way of saying it worked. The lockfile now matches the model:</p>
+<pre><code>$ lpg lock shop.lpg.yaml --check
+shop.lpg.lock.json is up to date</code></pre>
+<p>One result is worth noticing:</p>
+<pre><code>$ echo 'MATCH (p:Product) RETURN p.sku, p.legacyCode;' | docker exec -i memgraph mgconsole
++--------------+--------------+
+| p.sku        | p.legacyCode |
++--------------+--------------+
+| &quot;P-100&quot;      | &quot;NB-OLD-7&quot;   |
++--------------+--------------+</code></pre>
+<p>The value is still there. Memgraph is schema-optional: removing a property from the model removes its constraint, not the values already stored under it. The change was still classed destructive, because on a database with a fixed schema it does discard them, and a model does not know which database it will be deployed to.</p>
+<hr>
+<h2 id="the-same-change-on-the-other-engines">The same change, on the other engines<a class="anchor" href="#the-same-change-on-the-other-engines" aria-label="Link to this section">#</a></h2>
+<p>All four scripts came from the same change set. What differs is how each engine can carry it.</p>
+<p><strong>LadybugDB</strong> has a mandatory schema, so the rename is a column rename and the removal really is a drop:</p>
+<pre><code>$ grep -v '^//' migrations/shop.0002.ladybug.cypher | grep -v '^$'
+ALTER TABLE Customer RENAME name TO fullName;
+ALTER TABLE Product DROP legacyCode;
+ALTER TABLE Purchase ADD channel STRING;</code></pre>
+<p>The drop is marked in the script, where an operator reading it will see it:</p>
+<pre><code>$ grep -B1 'ALTER TABLE Product DROP' migrations/shop.0002.ladybug.cypher
+<span class="c-com">// DESTRUCTIVE: property Product.legacyCode: column dropped, discarding its values</span>
+ALTER TABLE Product DROP legacyCode;</code></pre>
+<p><strong>Neo4j</strong> had no constraint on any of these properties in this model, so only the data moves:</p>
+<pre><code>MATCH (n:Customer) WHERE n.name IS NOT NULL CALL { WITH n SET n.fullName = n.name REMOVE n.name } IN TRANSACTIONS;</code></pre>
+<p><strong>FalkorDB</strong> runs the same Cypher through <code>redis-cli</code>:</p>
+<pre><code>$REDIS_CLI GRAPH.QUERY &quot;$GRAPH_KEY&quot; &quot;MATCH (n:Customer) WHERE n.name IS NOT NULL SET n.fullName = n.name REMOVE n.name&quot;</code></pre>
+<hr>
+<h2 id="what-the-engines-taught-us">What the engines taught us<a class="anchor" href="#what-the-engines-taught-us" aria-label="Link to this section">#</a></h2>
+<p>None of the ordering above was designed from documentation. Each planner was written against a running engine, and several things the engines do were not what we expected. They are pinned by tests, so an engine release that changes one fails the build first.</p>
+<ul>
+<li><strong>LadybugDB 0.19.1</strong> has no statement that changes a column's type, so a type change drops and re-adds the column, behind the destructive gate. And dropping a relationship table's <em>last</em> endpoint pair is accepted — the next statement against that table crashes the process. The planner never empties a table's pairs; it recreates the table instead.</li>
+<li><strong>FalkorDB 4.20.4</strong> refuses to drop an index while a unique constraint depends on it, so every constraint drop comes first. Its indexes exist per property: creating one over two properties makes two, and dropping it over two removes one. A migration drops and creates them one property at a time.</li>
+<li><strong>Memgraph 3.13.1</strong> refuses <code>DELETE</code> inside <code>CALL { … } IN TRANSACTIONS</code>, which is why its data steps use <code>USING PERIODIC COMMIT</code>. It can add a value to an enum but cannot remove one or drop an enum, so a migration that removes a value says so in a comment and leaves it valid. And its constraints carry no name, so the generated schema indexes each key — otherwise nothing could tell <code>Customer.id</code> from <code>Customer.email</code> when the schema is read back.</li>
+</ul>
+<p>Every Ladybug migration is also checked by an oracle: for each pair of model revisions in the test suite, a database built from the old revision and migrated must have the same tables, columns, keys and endpoint pairs as a database built fresh from the new one. The Memgraph planner answers to the same oracle against a running instance.</p>
+<hr>
+<h2 id="put-it-in-ci">Put it in CI<a class="anchor" href="#put-it-in-ci" aria-label="Link to this section">#</a></h2>
+<p>Two commands do different jobs, and belong in different places.</p>
+<p>On pull requests, let additive changes through and stop a branch that renames or removes something until a person has looked:</p>
+<pre><code>- run: npx lpg-modeler-cli diff model/shop.lpg.yaml --fail-on breaking</code></pre>
+<p>On <code>main</code>, fail whenever the model has moved past the lockfile. Every model change should arrive together with its migration scripts and the advanced lockfile, and this is what notices when one did not:</p>
+<pre><code>- run: npx lpg-modeler-cli lock model/shop.lpg.yaml --check</code></pre>
+<p>Both exit <code>1</code> on the change set from this article.</p>
+<hr>
+<h2 id="what-it-does-not-do">What it does not do<a class="anchor" href="#what-it-does-not-do" aria-label="Link to this section">#</a></h2>
+<ul>
+<li><strong>It does not convert data.</strong> A property changing from <code>int</code> to <code>string</code> gets its constraint replaced, and on Memgraph the new constraint is refused while old integer values remain. Converting them is your call, and your statement.</li>
+<li><strong>It does not run migrations for you</strong>, except on Memgraph with <code>lpg apply</code>, and only a script you generated and reviewed. For the other engines the script is the artifact.</li>
+<li><strong>It does not guess renames.</strong> An element whose id changed is a removal and an addition, on purpose. If you want a rename, keep the id.</li>
+<li><strong>It does not remove Memgraph enum values</strong>, because Memgraph cannot.</li>
+</ul>
+<hr>
+<h2 id="try-it">Try it<a class="anchor" href="#try-it" aria-label="Link to this section">#</a></h2>
+<p>Download <a href="models/renames-shop.lpg.yaml"><code>renames-shop.lpg.yaml</code></a> and <a href="https://github.com/Volland/lpg-modeler/blob/main/article/renames-shop.seed.cypher" rel="noopener"><code>renames-shop.seed.cypher</code></a>, start Memgraph, and follow the eight steps. Then try the change that should worry you: edit <code>p_dehbt</code> to a new id instead of renaming the property, and watch <code>lpg diff</code> call it what it would really be.</p>
+<p>The <a href="../migrations.html">migrations guide</a> covers adopting this on a model that is already in production, and <a href="../targets.html#migrations">the targets page</a> lists what each database can and cannot change in place.</p>
+  </article>
+
+  <p class="post-source">
+    This post is <a href="https://github.com/Volland/lpg-modeler/blob/main/article/renames-are-not-deletes.md" rel="noopener"><code>article/renames-are-not-deletes.md</code></a>
+    in the repository, so a correction to the tool and a correction to the post travel together.
+  </p>
+
+  <div class="next">
+    <a href="index.html"><div class="k">All posts</div><div class="v">Everything written about the tool, longest first.</div></a>
+    <a href="../getting-started.html"><div class="k">Getting started</div><div class="v">Install, write your first model, open the canvas, generate.</div></a>
+  </div>
+</div>
+
+</main>
+
+<footer class="site">
+  <div class="wrap">
+    <span>LPG Modeler — MIT licensed</span>
+    <span class="spacer"><a href="../impressum.html">Impressum</a></span>
+    <span><a href="../datenschutz.html">Datenschutz</a></span>
+    <span><a href="../agb.html">AGB</a></span>
+    <span><a href="https://github.com/Volland/lpg-modeler">Source</a></span>
+    <span><a href="https://github.com/Volland/lpg-modeler/issues">Issues</a></span>
+  </div>
+</footer>
+
+</body>
+</html>

@@ -25,6 +25,7 @@
       <a href="../model-format.html">Model format</a>
       <a href="../targets.html">Targets</a>
       <a href="../cli.html">CLI</a>
+      <a href="../migrations.html">Migrations</a>
       <a href="../architecture.html">Architecture</a>
       <a href="../blog/index.html" aria-current="page">Blog</a>
       <a href="https://github.com/Volland/lpg-modeler">GitHub</a>
@@ -48,6 +49,16 @@
 
 <section class="wrap">
   <div class="posts">
+    <a class="post-card" href="semantic-layer.html">
+      <div class="meta"><time datetime="2026-09-17">17 September 2026</time> · 9 min read</div>
+      <div class="k">The semantic layer nobody agrees on — and what a property graph model can actually give it</div>
+      <div class="v">&quot;Semantic layer&quot; has come to mean three unrelated things: a domain model, an ontology, and a metrics layer. A single structural model can give you the first two, generated and in step. It will never give you the third, and it shouldn't try.</div>
+    </a>
+    <a class="post-card" href="renames-are-not-deletes.html">
+      <div class="meta"><time datetime="2026-09-16">16 September 2026</time> · 17 min read</div>
+      <div class="k">A rename is not a delete. Migrating a graph schema you have already deployed.</div>
+      <div class="v">A property renamed in the model should keep its data in the database. LPG Modeler compares a model with a committed lockfile by element id, so <code>name</code> becoming <code>fullName</code> is migrated as a rename — and anything that would discard data waits for you to say so.</div>
+    </a>
     <a class="post-card" href="rules-without-code.html">
       <div class="meta"><time datetime="2026-09-15">15 September 2026</time> · 20 min read</div>
       <div class="k">An agent will write anything your graph accepts. Make the rules the schema.</div>

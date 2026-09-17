@@ -38,6 +38,7 @@ const NAV = [
   ['model-format.html', 'Model format'],
   ['targets.html', 'Targets'],
   ['cli.html', 'CLI'],
+  ['migrations.html', 'Migrations'],
   ['architecture.html', 'Architecture'],
   ['blog/index.html', 'Blog'],
 ]

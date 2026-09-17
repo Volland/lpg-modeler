@@ -29,7 +29,7 @@ CREATE CONSTRAINT ON (n:Release) ASSERT EXISTS (n.catalogNumber);
 CREATE INDEX ON :Release(label, catalogNumber);
 CREATE CONSTRAINT ON (n:Release) ASSERT n.label IS TYPED STRING;
 CREATE CONSTRAINT ON (n:Release) ASSERT n.catalogNumber IS TYPED STRING;
-// PARTIAL: 'format' must be an enum value; that it is a Format value is unenforced.
+// PARTIAL: 'format' must be an enum value; that it belongs to Format is unenforced.
 CREATE CONSTRAINT ON (n:Release) ASSERT n.format IS TYPED ENUM;
 // PARTIAL: 'genres' must be a list; its elements being string is unenforced.
 CREATE CONSTRAINT ON (n:Release) ASSERT n.genres IS TYPED LIST;

@@ -21,7 +21,7 @@ CREATE INDEX ON :Driver(licence);
 CREATE CONSTRAINT ON (n:Driver) ASSERT n.licence IS TYPED STRING;
 // PARTIAL: 'nicknames' must be a list; its elements being string is unenforced.
 CREATE CONSTRAINT ON (n:Driver) ASSERT n.nicknames IS TYPED LIST;
-// PARTIAL: 'status' must be an enum value; that it is a Status value is unenforced.
+// PARTIAL: 'status' must be an enum value; that it belongs to Status is unenforced.
 CREATE CONSTRAINT ON (n:Driver) ASSERT n.status IS TYPED ENUM;
 
 // Vehicle

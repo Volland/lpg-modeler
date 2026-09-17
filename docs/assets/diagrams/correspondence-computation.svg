@@ -1,0 +1,73 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1040 430" width="1040" height="430" font-family="ui-sans-serif, -apple-system, Segoe UI, Inter, Helvetica, Arial, sans-serif" role="img" aria-label="Two kinds of mapping. Correspondence is an edge between two fields that already exist, such as Customer.email exactMatch Person.emailAddress with a confidence. Computation is a node: Revenue sums orders.amount, filtered by paid status, at a monthly grain on placedAt, and LTV points at it as its numerator.">
+  <rect width="1040" height="430" rx="14" fill="#fcfbf9"/>
+  <defs>
+    <marker id="ca" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#c2761b"/>
+    </marker>
+    <marker id="cg" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#8a94a6"/>
+    </marker>
+    <marker id="cp" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#7a4de0"/>
+    </marker>
+  </defs>
+
+  <text x="40" y="46" font-size="19" font-weight="700" fill="#101318">Correspondence is an edge. Computation is a node.</text>
+  <text x="40" y="70" font-size="13.5" fill="#5b6472">Both get called "mapping". Only one of them can be carried by a line between two fixed points.</text>
+
+  <!-- left panel: correspondence -->
+  <rect x="40" y="96" width="470" height="304" rx="12" fill="#ffffff" stroke="#dfe2e7"/>
+  <text x="62" y="126" font-size="11.5" font-weight="700" fill="#c2761b" letter-spacing="0.6">CORRESPONDENCE</text>
+
+  <rect x="66" y="196" width="170" height="64" rx="9" fill="#ffffff" stroke="#2f5fe0" stroke-width="1.4"/>
+  <text x="151" y="220" font-size="11" fill="#8a94a6" text-anchor="middle">System A</text>
+  <text x="151" y="242" font-family="ui-monospace, Menlo, monospace" font-size="12" font-weight="700" fill="#2f5fe0" text-anchor="middle">Customer.email</text>
+
+  <rect x="316" y="196" width="170" height="64" rx="9" fill="#ffffff" stroke="#2f5fe0" stroke-width="1.4"/>
+  <text x="401" y="220" font-size="11" fill="#8a94a6" text-anchor="middle">System B</text>
+  <text x="401" y="242" font-family="ui-monospace, Menlo, monospace" font-size="12" font-weight="700" fill="#2f5fe0" text-anchor="middle">Person.emailAddress</text>
+
+  <path d="M236 228 H314" stroke="#c2761b" stroke-width="1.8" fill="none" marker-end="url(#ca)"/>
+  <text x="276" y="184" font-family="ui-monospace, Menlo, monospace" font-size="11" fill="#8a5a13" text-anchor="middle">skos:exactMatch</text>
+  <text x="276" y="282" font-family="ui-monospace, Menlo, monospace" font-size="11" fill="#8a5a13" text-anchor="middle">confidence 0.98</text>
+
+  <text x="62" y="346" font-size="12.5" fill="#101318">A binary relation between two things that already exist.</text>
+  <text x="62" y="368" font-size="12.5" fill="#5b6472">SSSOM, R2RML. A graph edge is exactly the right shape.</text>
+
+  <!-- right panel: computation -->
+  <rect x="530" y="96" width="470" height="304" rx="12" fill="#ffffff" stroke="#dfe2e7"/>
+  <text x="552" y="126" font-size="11.5" font-weight="700" fill="#7a4de0" letter-spacing="0.6">COMPUTATION</text>
+
+  <!-- edges first -->
+  <g stroke="#8a94a6" stroke-width="1.4" fill="none" marker-end="url(#cg)">
+    <path d="M700 210 L668 184"/>
+    <path d="M700 250 L668 276"/>
+    <path d="M850 210 L884 184"/>
+  </g>
+  <path d="M912 276 L852 250" stroke="#7a4de0" stroke-width="1.4" fill="none" marker-end="url(#cp)"/>
+  <g font-family="ui-monospace, Menlo, monospace" font-size="10" fill="#5b6472">
+    <text x="712" y="186">BASED_ON</text>
+    <text x="712" y="282">GRAIN</text>
+    <text x="838" y="186" text-anchor="end">FILTERED_BY</text>
+    <text x="892" y="252" fill="#7a4de0">NUMERATOR</text>
+  </g>
+
+  <rect x="552" y="146" width="116" height="38" rx="8" fill="#ffffff" stroke="#2f5fe0" stroke-width="1.3"/>
+  <text x="610" y="170" font-family="ui-monospace, Menlo, monospace" font-size="11" fill="#2f5fe0" text-anchor="middle">orders.amount</text>
+
+  <rect x="552" y="276" width="116" height="38" rx="8" fill="#ffffff" stroke="#2f5fe0" stroke-width="1.3"/>
+  <text x="610" y="300" font-family="ui-monospace, Menlo, monospace" font-size="11" fill="#2f5fe0" text-anchor="middle">orders.placedAt</text>
+
+  <rect x="870" y="146" width="112" height="38" rx="8" fill="#f3effd" stroke="#c9b8f2" stroke-width="1.3"/>
+  <text x="926" y="170" font-family="ui-monospace, Menlo, monospace" font-size="11" fill="#7a4de0" text-anchor="middle">status = paid</text>
+
+  <rect x="870" y="276" width="112" height="38" rx="8" fill="#ffffff" stroke="#7a4de0" stroke-width="1.3"/>
+  <text x="926" y="300" font-size="12" font-weight="700" fill="#7a4de0" text-anchor="middle">LTV</text>
+
+  <rect x="700" y="198" width="150" height="64" rx="10" fill="#ffffff" stroke="#7a4de0" stroke-width="2"/>
+  <text x="775" y="224" font-size="14" font-weight="700" fill="#7a4de0" text-anchor="middle">Revenue</text>
+  <text x="775" y="245" font-family="ui-monospace, Menlo, monospace" font-size="11" fill="#5b6472" text-anchor="middle">sum · month</text>
+
+  <text x="552" y="346" font-size="12.5" fill="#101318">A value nothing in the source data contains.</text>
+  <text x="552" y="368" font-size="12.5" fill="#5b6472">It needs one identity, because other metrics point at it.</text>
+</svg>

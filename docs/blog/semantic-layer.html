@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The semantic layer nobody agrees on — and what a property graph model can actually give it — LPG Modeler</title>
+<meta name="description" content="&quot;Semantic layer&quot; has come to mean three unrelated things: a domain model, an ontology, and a metrics layer. A single structural model can give you the first two, generated and in step. It will never give you the third, and it shouldn't try.">
+<meta property="og:title" content="The semantic layer nobody agrees on — and what a property graph model can actually give it">
+<meta property="og:description" content="&quot;Semantic layer&quot; has come to mean three unrelated things: a domain model, an ontology, and a metrics layer. A single structural model can give you the first two, generated and in step. It will never give you the third, and it shouldn't try.">
+<meta property="og:type" content="article">
+<meta property="og:image" content="https://www.lpg-modeler.com/assets/diagrams/pipeline.png">
+<link rel="icon" href="../assets/icon.png">
+<link rel="stylesheet" href="../assets/fonts.css">
+<link rel="stylesheet" href="../assets/site.css">
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="../index.html"><img src="../assets/icon.png" alt=""> LPG Modeler</a>
+    <nav class="links">
+      <a href="../index.html">Overview</a>
+      <a href="../getting-started.html">Getting started</a>
+      <a href="../examples.html">Examples</a>
+      <a href="../model-format.html">Model format</a>
+      <a href="../targets.html">Targets</a>
+      <a href="../cli.html">CLI</a>
+      <a href="../migrations.html">Migrations</a>
+      <a href="../architecture.html">Architecture</a>
+      <a href="../blog/index.html" aria-current="page">Blog</a>
+      <a href="https://github.com/Volland/lpg-modeler">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+
+<div class="wrap post-head">
+  <a class="back" href="index.html">← Blog</a>
+  <h1>The semantic layer nobody agrees on — and what a property graph model can actually give it</h1>
+  <p class="lede">&quot;Semantic layer&quot; has come to mean three unrelated things: a domain model, an ontology, and a metrics layer. A single structural model can give you the first two, generated and in step. It will never give you the third, and it shouldn't try.</p>
+  <p class="post-meta"><time datetime="2026-09-17">17 September 2026</time> · 9 min read</p>
+</div>
+
+<hr class="rule">
+
+<div class="wrap">
+  <article class="post">
+<p>Every data team eventually has the same argument, and it never resolves cleanly: <em>what does &quot;Revenue&quot; mean?</em> Finance sums one set of tables. Sales sums another. The dashboard someone built two years ago sums a third. Everyone is technically correct, and everyone is talking about a different number.</p>
+<p>The industry's answer to this is &quot;the semantic layer&quot; — but the term has quietly come to mean three unrelated things, and conflating them is where most implementations go wrong.</p>
+<hr>
+<h2 id="three-layers-three-jobs">Three layers, three jobs<a class="anchor" href="#three-layers-three-jobs" aria-label="Link to this section">#</a></h2>
+<p><strong>A domain model</strong> is how one application sees the world. It's the classes, tables, and objects a specific piece of software needs to run — closed-world, tightly coupled to implementation, and deliberately narrow. It doesn't try to be true outside its own bounded context, and it shouldn't.</p>
+<p><strong>An ontology</strong> is a formal, open-world specification of what terms mean, precise enough that parties who've never met can agree on them and a reasoner can derive facts nobody stated explicitly. It's written in OWL, validated with SHACL, and its whole point is to survive contact with systems it wasn't designed for.</p>
+<p><strong>A semantic layer</strong>, in the sense the BI world means it — dbt's Semantic Layer, Cube, LookML, and now the vendor-neutral effort at Apache Ossie — is neither of those. It's a business-facing abstraction that maps physical fields to business terms and, more importantly, <strong>defines metrics</strong>: <code>Revenue = SUM(orders.amount)</code>, with a specific join path, a specific time grain, a specific filter for what counts. It has no reasoning, no open-world assumption, and usually no idea an ontology exists.</p>
+<p>All three get called &quot;semantic&quot; because all three sit between raw data and human meaning. But they answer different questions:</p>
+<div class="table-scroll">
+<table>
+<thead>
+<tr>
+<th>Layer</th>
+<th>Answers</th>
+<th>World</th>
+<th>Owned by</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Domain model</td>
+<td>What does my app need?</td>
+<td>Closed</td>
+<td>The application team</td>
+</tr>
+<tr>
+<td>Ontology</td>
+<td>What does this term mean, formally, to anyone?</td>
+<td>Open</td>
+<td>Whoever publishes the vocabulary</td>
+</tr>
+<tr>
+<td>Semantic layer</td>
+<td>What number do we report?</td>
+<td>Closed</td>
+<td>Analysts and the business</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>Building one when you need another is how you end up with an OWL ontology nobody queries, or a metrics layer that silently disagrees with the ontology sitting three systems over.</p>
+<hr>
+<h2 id="structure-vs-meaning-the-mapping-that-isn-t-a-metric">Structure vs. meaning: the mapping that isn't a metric<a class="anchor" href="#structure-vs-meaning-the-mapping-that-isn-t-a-metric" aria-label="Link to this section">#</a></h2>
+<p>Here's the distinction that matters most in practice, and it's easy to miss because both things get called &quot;mapping.&quot;</p>
+<p>If you have one property and another property and you draw an edge between them saying they correspond — <code>Customer.email</code> in System A <em>is</em> <code>Person.emailAddress</code> in System B — that's real, and it's a well-known problem with well-known tools. SSSOM formalizes exactly this: <code>skos:exactMatch</code>, <code>skos:closeMatch</code>, <code>skos:broadMatch</code>, with confidence and justification attached. R2RML does the relational-to-RDF version of the same thing. This is <strong>correspondence</strong> — a binary relation between two things that already exist. A graph edge is exactly the right shape for it.</p>
+<p>But</p>
+<pre><code>Revenue = SUM(orders.amount) - SUM(refunds.amount)
+          grouped by region, at monthly grain</code></pre>
+<p>is not a correspondence between two existing properties. It's a <strong>computation</strong> — a function over a set of rows that produces a value nothing in the source data directly contains. No edge can carry that, because an edge connects two fixed points and an aggregate isn't a point, it's an operation.</p>
+<p>This is exactly why Ossie's metrics are SQL-dialect expressions, not join predicates. The moment you need <code>SUM</code>, a filter, a time grain, or a ratio of two other metrics, you need something that holds several parts together as one addressable thing. That means it needs to be a <strong>node</strong>, not an edge — because you need to reference &quot;this metric&quot; from elsewhere as a single identity.</p>
+<p>Get this wrong and you build a semantic layer that can tell you two fields mean the same thing but can't tell you what Revenue is. That's most of the &quot;semantic layer&quot; projects that quietly stall.</p>
+<hr>
+<h2 id="where-structural-modeling-actually-earns-its-keep">Where structural modeling actually earns its keep<a class="anchor" href="#where-structural-modeling-actually-earns-its-keep" aria-label="Link to this section">#</a></h2>
+<p>This is where LPG Modeler becomes relevant — not because it <em>is</em> a semantic layer, but because it solves the problem underneath one honestly.</p>
+<p>A property graph schema usually lives in four places that drift independently: the DDL that created the tables, a constraint script someone ran last quarter, a diagram in a wiki that stopped being true, and an ontology a different team maintains. LPG Modeler collapses all four into one YAML model and projects it outward: DDL and constraints for LadybugDB, Neo4j, FalkorDB and Memgraph, SHACL shapes, an OWL ontology, and the GQL, PG-Schema and LinkML standards targets — all from the same type hierarchy, keys, and properties. The diagram is drawn from the model itself, with its coordinates kept in a sidecar file so rearranging boxes never shows up in the semantic diff.</p>
+<p>Abstract types and mixins are flattened before any generator sees the model, so a <code>Truck</code> that inherits from <code>Vehicle</code> and applies a <code>Timestamped</code> mixin produces the same concrete properties whether the target has inheritance (OWL) or none at all (LadybugDB). Nothing generates from a model with errors, and everything a target can't enforce is reported as a downgrade rather than silently dropped.</p>
+<p>What this buys you is <strong>structural honesty</strong>. The same model that defines your queryable schema also defines the formal ontology terms other systems can reference, and the SHACL shapes that constrain the data. They can't drift apart, because they're not separate artifacts — they're one artifact, projected many ways.</p>
+<p>But it's worth being precise about what kind of &quot;mapping&quot; this is. It's a structural, one-to-one projection — the same category as an ORM or R2RML — not a semantic layer in the metrics sense. <code>Person.email</code> means the identical thing in every target, just expressed in that target's syntax. Nothing is being resolved, arbitrated, or computed.</p>
+<p>That's a feature, not a gap: it's exactly what lets the tool guarantee deterministic, reviewable diffs. But it means the actual semantic-layer job — defining what Revenue <em>is</em>, reconciling Finance's definition with Sales's — still needs a layer on top.</p>
+<hr>
+<h2 id="a-minimal-ontology-for-the-part-that-was-missing">A minimal ontology for the part that was missing<a class="anchor" href="#a-minimal-ontology-for-the-part-that-was-missing" aria-label="Link to this section">#</a></h2>
+<p>If you want to close that gap without losing the structural guarantee, the model turns out to be small — five classes, not fifty:</p>
+<ul>
+<li><strong><code>Dataset</code></strong> and <strong><code>Field</code></strong> — the structural layer, already produced by anything like LPG Modeler.</li>
+<li><strong><code>Mapping</code></strong> — correspondence between two fields, with <code>mappingType</code> reusing SKOS's <code>exactMatch</code> / <code>closeMatch</code> / <code>broadMatch</code> / <code>narrowMatch</code> vocabulary rather than inventing a new one.</li>
+<li><strong><code>Metric</code></strong> — a named, computed value: <code>basedOn</code> a field, an <code>aggregateFn</code> (<code>SUM</code>, <code>COUNT</code>, <code>AVG</code>, …), zero or more <code>filteredBy</code> predicates, a <code>grain</code> field for the aggregation window, and — critically — <code>numerator</code> / <code>denominator</code> edges pointing to <em>other Metrics</em>, not fields.</li>
+<li><strong><code>Filter</code></strong> — the predicate a metric is evaluated under.</li>
+</ul>
+<p>That <code>numerator</code> / <code>denominator</code> detail is what makes composition work. <code>LTV = Revenue / CustomerCount</code> is two existing metric nodes related by a third, not a fresh expression written from scratch each time.</p>
+<pre><code>          (Metric: LTV)
+           /         \
+  numerator           denominator
+         /               \
+(Metric: Revenue)   (Metric: CustomerCount)
+   |  basedOn            |  basedOn
+(Field: orders.amount)  (Field: customers.id)
+   |  filteredBy
+(Filter: status = 'paid')</code></pre>
+<p>Deliberately absent: a <code>Dimension</code> class. A dimension isn't a different <em>kind</em> of thing — it's a field being used for grouping. Giving it its own class buys no new structure, just a sixth name to keep straight.</p>
+<p>The whole thing is ETL-shaped in its transform primitives — <code>Mapping</code> is a field-level transform, <code>Metric</code> is exactly a <code>GROUP BY</code> / <code>WHERE</code> / aggregate step — but it isn't ETL. Nothing moves. There's no schedule, no materialization, no lineage tracking, no state to manage.</p>
+<p>It's the &quot;T&quot; in ELT, decoupled entirely from the &quot;EL&quot;: a stateless definition layer that gets <em>compiled</em> into a query at read time. That's the same relationship <a href="rules-without-code.html">shacl2cypher</a> has to SHACL, or Ossie's <code>dialects.expression</code> has to SQL. The model says what a term means; something downstream turns that into a query against data that never left where it already lives.</p>
+<hr>
+<h2 id="why-the-separation-matters-more-than-the-convenience">Why the separation matters more than the convenience<a class="anchor" href="#why-the-separation-matters-more-than-the-convenience" aria-label="Link to this section">#</a></h2>
+<p>It would be tempting to fold <code>Metric</code> and <code>Mapping</code> straight into the LPG Modeler format — one file, one tool, done. I'd argue against it, for a reason that has nothing to do with elegance and everything to do with who edits the file and how often.</p>
+<p>A schema changes rarely and is reviewed by engineers who care whether a diff is structural. A metric definition changes constantly, is owned by analysts, and its correctness is a business-review problem, not a generator-capability problem. There's no equivalent of &quot;LadybugDB has no <code>NOT NULL</code>&quot; for &quot;this metric definition is wrong.&quot;</p>
+<p>Mixing the two into one file means every metric tweak forces a schema review cycle. And the thing that makes the structural model trustworthy — that every diff in it is a diff you can review by eye, in seconds — quietly stops being true.</p>
+<p>Better: keep the structural model exactly as disciplined as it is now, and treat the semantic layer's structural half as one more generated <em>target</em>, the same way LPG Modeler already treats LadybugDB, Neo4j, SHACL, and OWL as separate projections of one source. A projection into Ossie's <code>datasets</code> / <code>fields</code> / <code>relationships</code> shape would reuse the same flattening the tool already applies to inheritance and mixins.</p>
+<p>The metrics themselves live in their own file, hand-authored, referencing the generated names, and change on a completely different cadence from the schema. It's the same pattern the tool already uses to keep diagram layout out of the semantic diff, one layer further out.</p>
+<hr>
+<h2 id="the-point-of-separating-all-of-this">The point of separating all of this<a class="anchor" href="#the-point-of-separating-all-of-this" aria-label="Link to this section">#</a></h2>
+<p>None of this is really about tooling preference. It's about being honest with yourself when someone asks &quot;do we have a semantic layer?&quot; and the true answer is &quot;we have three things wearing the same name&quot;:</p>
+<ul>
+<li>a domain model that knows its own application,</li>
+<li>an ontology that knows how to mean something to strangers,</li>
+<li>and, if you're lucky, a metrics layer that knows what Revenue actually is this quarter.</li>
+</ul>
+<p>A property graph model can give you the first two for free, generated from a single reviewable source. It will never give you the third, because the third was never a structural fact to begin with. It was always a decision someone has to own.</p>
+<hr>
+<h2 id="where-to-go-next">Where to go next<a class="anchor" href="#where-to-go-next" aria-label="Link to this section">#</a></h2>
+<ul>
+<li><a href="../targets.html">Targets</a> — every projection of the model, and what each one can and cannot enforce.</li>
+<li><a href="rules-without-code.html">Rules without code</a> — SHACL compiled to Cypher with shacl2cypher: the read-time compilation this post leans on.</li>
+<li><a href="you-dont-have-to-choose.html">You don't have to choose</a> — why one model can serve both RDF and property graphs.</li>
+</ul>
+  </article>
+
+  <p class="post-source">
+    This post is <a href="https://github.com/Volland/lpg-modeler/blob/main/article/semantic-layer.md" rel="noopener"><code>article/semantic-layer.md</code></a>
+    in the repository, so a correction to the tool and a correction to the post travel together.
+  </p>
+
+  <div class="next">
+    <a href="index.html"><div class="k">All posts</div><div class="v">Everything written about the tool, longest first.</div></a>
+    <a href="../getting-started.html"><div class="k">Getting started</div><div class="v">Install, write your first model, open the canvas, generate.</div></a>
+  </div>
+</div>
+
+</main>
+
+<footer class="site">
+  <div class="wrap">
+    <span>LPG Modeler — MIT licensed</span>
+    <span class="spacer"><a href="../impressum.html">Impressum</a></span>
+    <span><a href="../datenschutz.html">Datenschutz</a></span>
+    <span><a href="../agb.html">AGB</a></span>
+    <span><a href="https://github.com/Volland/lpg-modeler">Source</a></span>
+    <span><a href="https://github.com/Volland/lpg-modeler/issues">Issues</a></span>
+  </div>
+</footer>
+
+</body>
+</html>

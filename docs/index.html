@@ -25,6 +25,7 @@
       <a href="model-format.html">Model format</a>
       <a href="targets.html">Targets</a>
       <a href="cli.html">CLI</a>
+      <a href="migrations.html">Migrations</a>
       <a href="architecture.html">Architecture</a>
       <a href="blog/index.html">Blog</a>
       <a href="https://github.com/Volland/lpg-modeler">GitHub</a>
@@ -114,7 +115,7 @@
 
 <section class="wrap">
   <h2>What you get</h2>
-  <p class="section-lede">Eight things the extension does that a diagram tool or a hand-written DDL file cannot.</p>
+  <p class="section-lede">Ten things the extension and its CLI do that a diagram tool or a hand-written DDL file cannot.</p>
 
   <div class="grid grid-2">
     <div class="card feature">
@@ -137,10 +138,23 @@
       flattened before any generator sees the model.</span>
     </div>
     <div class="card feature">
-      <span class="k">Four generators, one model</span>
-      <span class="v">LadybugDB node and relationship tables, Neo4j constraints and indexes,
-      SHACL node shapes, and an OWL ontology — all from the same type hierarchy, keys and
-      properties, with no second definition to keep in sync.</span>
+      <span class="k">Nine generators, one model</span>
+      <span class="v">LadybugDB tables, Neo4j, FalkorDB and Memgraph constraints, SHACL shapes,
+      an OWL ontology, and GQL, PG-Schema and LinkML — all from the same type hierarchy, keys
+      and properties, with no second definition to keep in sync.</span>
+    </div>
+    <div class="card feature">
+      <span class="k">Migrations that keep your data</span>
+      <span class="v">Commit a lockfile of what is deployed, and <code>lpg migrate</code> writes
+      the steps for LadybugDB, Neo4j, FalkorDB and Memgraph. Elements are matched by their ids,
+      so a rename stays a rename instead of a drop and an add, and anything that would discard
+      data is refused until you say so. <a href="migrations.html">How it works</a>.</span>
+    </div>
+    <div class="card feature">
+      <span class="k">Start from what you already have</span>
+      <span class="v">Import a SHACL shapes graph and its ontology, LadybugDB DDL, a LadybugDB
+      database, or a running Memgraph. What the source could not carry is reported, not
+      guessed, so the model you get says where it is incomplete.</span>
     </div>
     <div class="card feature">
       <span class="k">Loss is reported, never silent</span>
@@ -463,7 +477,7 @@ social:likes a owl:ObjectProperty ; rdfs:label "LIKES" .
     is open-world where a schema is closed-world. Each one is stated rather than absorbed.
   </p>
   <figure>
-    <img src="assets/diagrams/capabilities.svg" alt="A matrix of five model features against four targets, showing which are enforced natively, which are downgraded, and which are transformed.">
+    <img src="assets/diagrams/capabilities.svg" alt="A matrix of five model features against six targets — LadybugDB, Neo4j, FalkorDB, Memgraph, SHACL and OWL — showing which are enforced natively, which are downgraded, and which are transformed.">
     <figcaption>A required property that quietly vanishes is a data-integrity bug that surfaces in production. Here it surfaces in the Problems panel instead. See <a href="targets.html">Targets</a> for the full matrix.</figcaption>
   </figure>
 </section>

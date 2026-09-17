@@ -1,0 +1,42 @@
+namespace:
+  prefix: shop
+  iri: https://example.org/shop#
+
+enums:
+  PurchaseStatus:
+    values: [placed, shipped]
+
+nodes:
+  Customer:
+    key: [id]
+    props:
+      id: { type: string, required: true }
+      email: { type: string, required: true, unique: true }
+      name: { type: string }
+
+  Product:
+    key: [sku]
+    props:
+      sku: { type: string, required: true }
+      title: { type: string, required: true }
+      legacyCode: { type: string }
+      price: { type: float }
+
+  Purchase:
+    key: [ref]
+    props:
+      ref: { type: string, required: true }
+      status: { type: string, enum: PurchaseStatus }
+      placedAt: { type: datetime, required: true }
+
+edges:
+  PLACED:
+    from: Customer
+    to: Purchase
+    cardinality: one-to-many
+
+  CONTAINS:
+    from: Purchase
+    to: Product
+    props:
+      quantity: { type: int, required: true }

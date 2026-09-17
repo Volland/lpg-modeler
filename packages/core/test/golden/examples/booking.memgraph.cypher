@@ -19,7 +19,7 @@ CREATE CONSTRAINT ON (n:Booking) ASSERT n.ref IS UNIQUE;
 CREATE CONSTRAINT ON (n:Booking) ASSERT EXISTS (n.ref);
 CREATE INDEX ON :Booking(ref);
 CREATE CONSTRAINT ON (n:Booking) ASSERT n.ref IS TYPED STRING;
-// PARTIAL: 'status' must be an enum value; that it is a Status value is unenforced.
+// PARTIAL: 'status' must be an enum value; that it belongs to Status is unenforced.
 CREATE CONSTRAINT ON (n:Booking) ASSERT n.status IS TYPED ENUM;
 CREATE CONSTRAINT ON (n:Booking) ASSERT EXISTS (n.startDate);
 CREATE CONSTRAINT ON (n:Booking) ASSERT n.startDate IS TYPED DATE;

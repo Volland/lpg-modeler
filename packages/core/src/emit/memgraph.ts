@@ -121,7 +121,7 @@ function nodeObjects(node: NodeTypeIR, diags: Diagnostic[], out: MemgraphSchemaO
       downgrade(diags, 'memgraph', 'downgrade-enum-identity',
         `Property '${node.name}.${p.name}' is limited to enum '${p.enum}'. Memgraph can require that the value is an enum, but not that it is this one.`,
         p.loc)
-      note(`// PARTIAL: '${p.name}' must be an enum value; that it is a ${p.enum} value is unenforced.`)
+      note(`// PARTIAL: '${p.name}' must be an enum value; that it belongs to ${p.enum} is unenforced.`)
       constraint(`typed ${p.name} ENUM`, `${prop(p)} IS TYPED ENUM`)
     } else if (p.list) {
       downgrade(diags, 'memgraph', 'downgrade-list-element',
