@@ -1,0 +1,82 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1040 470" width="1040" height="470" font-family="ui-sans-serif, -apple-system, Segoe UI, Inter, Helvetica, Arial, sans-serif" role="img" aria-label="Two files on two cadences. The model changes rarely, is reviewed by engineers, and is projected into database DDL and constraints, SHACL, OWL, the standards targets, and a proposed Ossie datasets projection. Diagram layout is already kept in a sidecar. The metrics file changes weekly, is reviewed by the business, references the generated names, and is compiled into a query at read time against data that stays where it lives.">
+  <rect width="1040" height="470" rx="14" fill="#fcfbf9"/>
+  <defs>
+    <marker id="tg" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#8a94a6"/>
+    </marker>
+    <marker id="tp" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#7a4de0"/>
+    </marker>
+  </defs>
+
+  <text x="40" y="46" font-size="19" font-weight="700" fill="#101318">Two files, two cadences</text>
+  <text x="40" y="70" font-size="13.5" fill="#5b6472">The schema is projected. The metrics are authored on top of what it projects, and never edit it.</text>
+
+  <!-- column labels -->
+  <text x="40" y="106" font-size="11.5" font-weight="700" fill="#2f5fe0" letter-spacing="0.6">CHANGES RARELY · REVIEWED BY ENGINEERS</text>
+  <text x="700" y="106" font-size="11.5" font-weight="700" fill="#7a4de0" letter-spacing="0.6">CHANGES WEEKLY · REVIEWED BY THE BUSINESS</text>
+
+  <!-- branches from the model -->
+  <g stroke="#8a94a6" stroke-width="1.4" fill="none">
+    <path d="M210 190 H262"/>
+    <path d="M262 141 V351"/>
+  </g>
+  <g stroke="#8a94a6" stroke-width="1.4" fill="none" marker-end="url(#tg)">
+    <path d="M262 141 H298"/>
+    <path d="M262 193 H298"/>
+    <path d="M262 245 H298"/>
+    <path d="M262 297 H298"/>
+  </g>
+  <path d="M262 351 H298" stroke="#8a94a6" stroke-width="1.4" stroke-dasharray="5 4" fill="none" marker-end="url(#tg)"/>
+  <text x="236" y="182" font-family="ui-monospace, Menlo, monospace" font-size="10" fill="#8a94a6" text-anchor="middle">lpg emit</text>
+
+  <!-- the model -->
+  <rect x="40" y="130" width="170" height="120" rx="10" fill="#ffffff" stroke="#2f5fe0" stroke-width="1.6"/>
+  <text x="125" y="162" font-family="ui-monospace, Menlo, monospace" font-size="12" font-weight="700" fill="#2f5fe0" text-anchor="middle">shop.lpg.yaml</text>
+  <text x="125" y="190" font-size="12" fill="#5b6472" text-anchor="middle">types, keys, properties</text>
+  <text x="125" y="209" font-size="12" fill="#5b6472" text-anchor="middle">inheritance, mixins</text>
+  <text x="125" y="234" font-size="11" fill="#8a94a6" text-anchor="middle">diffs reviewable by eye</text>
+
+  <!-- the layout sidecar -->
+  <rect x="40" y="290" width="170" height="64" rx="10" fill="#f4f6fa" stroke="#dfe2e7" stroke-dasharray="5 4"/>
+  <text x="125" y="316" font-family="ui-monospace, Menlo, monospace" font-size="11.5" fill="#5b6472" text-anchor="middle">shop.layout.json</text>
+  <text x="125" y="337" font-size="11" fill="#8a94a6" text-anchor="middle">positions only</text>
+  <path d="M125 250 V288" stroke="#dfe2e7" stroke-width="1.4" fill="none"/>
+
+  <!-- projections -->
+  <g>
+    <rect x="300" y="122" width="360" height="38" rx="8" fill="#eef2fb" stroke="#c9d6f5"/>
+    <text x="316" y="146" font-size="12" fill="#101318" xml:space="preserve"><tspan font-weight="700">DDL + constraints</tspan><tspan fill="#5b6472"> · Neo4j, FalkorDB, Memgraph, LadybugDB</tspan></text>
+    <rect x="300" y="174" width="360" height="38" rx="8" fill="#eef2fb" stroke="#c9d6f5"/>
+    <text x="316" y="198" font-size="12" fill="#101318" xml:space="preserve"><tspan font-weight="700">SHACL shapes</tspan><tspan fill="#5b6472"> · what the data must satisfy</tspan></text>
+    <rect x="300" y="226" width="360" height="38" rx="8" fill="#eef2fb" stroke="#c9d6f5"/>
+    <text x="316" y="250" font-size="12" fill="#101318" xml:space="preserve"><tspan font-weight="700">OWL ontology</tspan><tspan fill="#5b6472"> · terms other systems reference</tspan></text>
+    <rect x="300" y="278" width="360" height="38" rx="8" fill="#eef2fb" stroke="#c9d6f5"/>
+    <text x="316" y="302" font-size="12" fill="#101318" xml:space="preserve"><tspan font-weight="700">Standards</tspan><tspan fill="#5b6472"> · GQL, PG-Schema, LinkML</tspan></text>
+    <rect x="300" y="332" width="360" height="38" rx="8" fill="#ffffff" stroke="#8a94a6" stroke-dasharray="5 4"/>
+    <text x="316" y="356" font-size="12" fill="#101318" xml:space="preserve"><tspan font-weight="700">Ossie datasets · fields</tspan><tspan fill="#8a94a6"> · proposed</tspan></text>
+  </g>
+
+  <!-- metrics file -->
+  <rect x="700" y="130" width="300" height="120" rx="10" fill="#ffffff" stroke="#7a4de0" stroke-width="1.6"/>
+  <text x="850" y="162" font-family="ui-monospace, Menlo, monospace" font-size="12" font-weight="700" fill="#7a4de0" text-anchor="middle">metrics.yaml</text>
+  <text x="850" y="190" font-size="12" fill="#5b6472" text-anchor="middle">Revenue, CustomerCount, LTV</text>
+  <text x="850" y="209" font-size="12" fill="#5b6472" text-anchor="middle">filters, grains, ratios</text>
+  <text x="850" y="234" font-size="11" fill="#8a94a6" text-anchor="middle">hand-authored by analysts</text>
+
+  <!-- references the generated names -->
+  <path d="M760 250 V351 H664" stroke="#7a4de0" stroke-width="1.5" fill="none" marker-end="url(#tp)"/>
+  <text x="768" y="300" font-size="11.5" fill="#7a4de0">references the</text>
+  <text x="768" y="316" font-size="11.5" fill="#7a4de0">generated names</text>
+
+  <!-- compiled at read time -->
+  <path d="M930 250 V298" stroke="#1d6b3a" stroke-width="1.5" fill="none" marker-end="url(#tg)"/>
+  <rect x="860" y="300" width="140" height="70" rx="10" fill="#eaf6ee" stroke="#b6dcc3"/>
+  <text x="930" y="326" font-size="12.5" font-weight="700" fill="#1d6b3a" text-anchor="middle">a query</text>
+  <text x="930" y="345" font-size="11" fill="#1d6b3a" text-anchor="middle">compiled at read time</text>
+  <text x="930" y="360" font-size="11" fill="#1d6b3a" text-anchor="middle">nothing moves</text>
+
+  <!-- footer -->
+  <path d="M40 404 H1000" stroke="#dfe2e7"/>
+  <text x="40" y="436" font-size="12.5" fill="#5b6472">A metric tweak never forces a schema review. A schema change never waits on a business sign-off.</text>
+</svg>

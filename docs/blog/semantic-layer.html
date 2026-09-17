@@ -8,7 +8,7 @@
 <meta property="og:title" content="The semantic layer nobody agrees on — and what a property graph model can actually give it">
 <meta property="og:description" content="&quot;Semantic layer&quot; has come to mean three unrelated things: a domain model, an ontology, and a metrics layer. A single structural model can give you the first two, generated and in step. It will never give you the third, and it shouldn't try.">
 <meta property="og:type" content="article">
-<meta property="og:image" content="https://www.lpg-modeler.com/assets/diagrams/pipeline.png">
+<meta property="og:image" content="https://www.lpg-modeler.com/assets/diagrams/three-layers.png">
 <link rel="icon" href="../assets/icon.png">
 <link rel="stylesheet" href="../assets/fonts.css">
 <link rel="stylesheet" href="../assets/site.css">
@@ -39,7 +39,7 @@
   <a class="back" href="index.html">← Blog</a>
   <h1>The semantic layer nobody agrees on — and what a property graph model can actually give it</h1>
   <p class="lede">&quot;Semantic layer&quot; has come to mean three unrelated things: a domain model, an ontology, and a metrics layer. A single structural model can give you the first two, generated and in step. It will never give you the third, and it shouldn't try.</p>
-  <p class="post-meta"><time datetime="2026-09-17">17 September 2026</time> · 9 min read</p>
+  <p class="post-meta"><time datetime="2026-09-17">17 September 2026</time> · 11 min read</p>
 </div>
 
 <hr class="rule">
@@ -53,39 +53,8 @@
 <p><strong>A domain model</strong> is how one application sees the world. It's the classes, tables, and objects a specific piece of software needs to run — closed-world, tightly coupled to implementation, and deliberately narrow. It doesn't try to be true outside its own bounded context, and it shouldn't.</p>
 <p><strong>An ontology</strong> is a formal, open-world specification of what terms mean, precise enough that parties who've never met can agree on them and a reasoner can derive facts nobody stated explicitly. It's written in OWL, validated with SHACL, and its whole point is to survive contact with systems it wasn't designed for.</p>
 <p><strong>A semantic layer</strong>, in the sense the BI world means it — dbt's Semantic Layer, Cube, LookML, and now the vendor-neutral effort at Apache Ossie — is neither of those. It's a business-facing abstraction that maps physical fields to business terms and, more importantly, <strong>defines metrics</strong>: <code>Revenue = SUM(orders.amount)</code>, with a specific join path, a specific time grain, a specific filter for what counts. It has no reasoning, no open-world assumption, and usually no idea an ontology exists.</p>
-<p>All three get called &quot;semantic&quot; because all three sit between raw data and human meaning. But they answer different questions:</p>
-<div class="table-scroll">
-<table>
-<thead>
-<tr>
-<th>Layer</th>
-<th>Answers</th>
-<th>World</th>
-<th>Owned by</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>Domain model</td>
-<td>What does my app need?</td>
-<td>Closed</td>
-<td>The application team</td>
-</tr>
-<tr>
-<td>Ontology</td>
-<td>What does this term mean, formally, to anyone?</td>
-<td>Open</td>
-<td>Whoever publishes the vocabulary</td>
-</tr>
-<tr>
-<td>Semantic layer</td>
-<td>What number do we report?</td>
-<td>Closed</td>
-<td>Analysts and the business</td>
-</tr>
-</tbody>
-</table>
-</div>
+<p>All three get called &quot;semantic&quot; because all three sit between raw data and human meaning. But they answer different questions, and are owned by different people:</p>
+<figure><img src="../assets/diagrams/three-layers.png" alt=""><figcaption>Three things wearing the same name: a domain model answers what one application needs, an ontology answers what a term means to anyone, and a semantic layer answers what number to report. One structural model can generate the first two; the third is decided and owned by people.</figcaption></figure>
 <p>Building one when you need another is how you end up with an OWL ontology nobody queries, or a metrics layer that silently disagrees with the ontology sitting three systems over.</p>
 <hr>
 <h2 id="structure-vs-meaning-the-mapping-that-isn-t-a-metric">Structure vs. meaning: the mapping that isn't a metric<a class="anchor" href="#structure-vs-meaning-the-mapping-that-isn-t-a-metric" aria-label="Link to this section">#</a></h2>
@@ -96,6 +65,7 @@
           grouped by region, at monthly grain</code></pre>
 <p>is not a correspondence between two existing properties. It's a <strong>computation</strong> — a function over a set of rows that produces a value nothing in the source data directly contains. No edge can carry that, because an edge connects two fixed points and an aggregate isn't a point, it's an operation.</p>
 <p>This is exactly why Ossie's metrics are SQL-dialect expressions, not join predicates. The moment you need <code>SUM</code>, a filter, a time grain, or a ratio of two other metrics, you need something that holds several parts together as one addressable thing. That means it needs to be a <strong>node</strong>, not an edge — because you need to reference &quot;this metric&quot; from elsewhere as a single identity.</p>
+<figure><img src="../assets/diagrams/correspondence-computation.png" alt=""><figcaption>Correspondence is an edge: Customer.email exactMatch Person.emailAddress, with a confidence. Computation is a node: Revenue sums orders.amount, filtered by status, at a monthly grain, and LTV points at it.</figcaption></figure>
 <p>Get this wrong and you build a semantic layer that can tell you two fields mean the same thing but can't tell you what Revenue is. That's most of the &quot;semantic layer&quot; projects that quietly stall.</p>
 <hr>
 <h2 id="where-structural-modeling-actually-earns-its-keep">Where structural modeling actually earns its keep<a class="anchor" href="#where-structural-modeling-actually-earns-its-keep" aria-label="Link to this section">#</a></h2>
@@ -115,16 +85,21 @@
 <li><strong><code>Filter</code></strong> — the predicate a metric is evaluated under.</li>
 </ul>
 <p>That <code>numerator</code> / <code>denominator</code> detail is what makes composition work. <code>LTV = Revenue / CustomerCount</code> is two existing metric nodes related by a third, not a fresh expression written from scratch each time.</p>
-<pre><code>          (Metric: LTV)
-           /         \
-  numerator           denominator
-         /               \
-(Metric: Revenue)   (Metric: CustomerCount)
-   |  basedOn            |  basedOn
-(Field: orders.amount)  (Field: customers.id)
-   |  filteredBy
-(Filter: status = 'paid')</code></pre>
+<figure><img src="../assets/diagrams/ltv-composition.png" alt=""><figcaption>LTV has Revenue as its numerator and CustomerCount as its denominator. Revenue is based on orders.amount, filtered by status, at a monthly grain on orders.placedAt; CustomerCount is based on customers.id.</figcaption></figure>
 <p>Deliberately absent: a <code>Dimension</code> class. A dimension isn't a different <em>kind</em> of thing — it's a field being used for grouping. Giving it its own class buys no new structure, just a sixth name to keep straight.</p>
+<h3 id="the-ontology-is-itself-a-model">The ontology is itself a model<a class="anchor" href="#the-ontology-is-itself-a-model" aria-label="Link to this section">#</a></h3>
+<p>Here's the part that's easy to get backwards. The <em>metrics</em> don't belong in a schema file — but the <em>vocabulary</em> they're written in does. <code>Metric</code>, <code>Filter</code> and <code>MAPS_TO</code> change about as often as any other schema, and deserve the same review. So the five-class ontology is an ordinary LPG Modeler model: <a href="models/semantic-layer.lpg.yaml"><code>semantic-layer.lpg.yaml</code></a>.</p>
+<figure><img src="../assets/diagrams/semantic-layer-model.png" alt=""><figcaption>The metrics ontology as a model: Dataset and Field form the structural layer; Metric and Filter the computed layer. MAPS_TO is a Field-to-Field edge carrying mappingType, confidence and justification. Metric is BASED_ON and has a GRAIN field, is FILTERED_BY filters, and points at other metrics as NUMERATOR and DENOMINATOR.</figcaption></figure>
+<p>Two choices in it are the argument of this post, stated as schema:</p>
+<ul>
+<li><strong><code>MAPS_TO</code> is an edge with properties</strong>, not a node. Correspondence is a relation between two fields that already exist, and its mapping type, confidence and justification ride on that relation. Only OWL, which has no edge properties, turns it into a class — <code>sem:MapsTo</code> — and the tool does that on its own.</li>
+<li><strong><code>Metric</code> is a node</strong>, because <code>NUMERATOR</code> and <code>DENOMINATOR</code> have to point at it. A computation you can't reference can't be composed.</li>
+</ul>
+<p>The shared <code>name</code> and <code>description</code> come from a <code>Named</code> mixin, and <code>mappingType</code>, <code>aggregateFn</code>, <code>grainUnit</code> and a filter's <code>operator</code> are enums, so the SKOS vocabulary is closed in the SHACL shapes rather than by convention.</p>
+<pre><code>npx lpg-modeler-cli check semantic-layer.lpg.yaml
+npx lpg-modeler-cli emit  semantic-layer.lpg.yaml --target owl --target shacl --target neo4j --out ./schema</code></pre>
+<p>The model checks clean. Emitting to LadybugDB reports what that engine can't hold — required properties, enum value sets, the minimum on <code>FIELD_OF</code> — as downgrades, and the SHACL shapes carry all of it.</p>
+<h3 id="nothing-moves">Nothing moves<a class="anchor" href="#nothing-moves" aria-label="Link to this section">#</a></h3>
 <p>The whole thing is ETL-shaped in its transform primitives — <code>Mapping</code> is a field-level transform, <code>Metric</code> is exactly a <code>GROUP BY</code> / <code>WHERE</code> / aggregate step — but it isn't ETL. Nothing moves. There's no schedule, no materialization, no lineage tracking, no state to manage.</p>
 <p>It's the &quot;T&quot; in ELT, decoupled entirely from the &quot;EL&quot;: a stateless definition layer that gets <em>compiled</em> into a query at read time. That's the same relationship <a href="rules-without-code.html">shacl2cypher</a> has to SHACL, or Ossie's <code>dialects.expression</code> has to SQL. The model says what a term means; something downstream turns that into a query against data that never left where it already lives.</p>
 <hr>
@@ -133,6 +108,7 @@
 <p>A schema changes rarely and is reviewed by engineers who care whether a diff is structural. A metric definition changes constantly, is owned by analysts, and its correctness is a business-review problem, not a generator-capability problem. There's no equivalent of &quot;LadybugDB has no <code>NOT NULL</code>&quot; for &quot;this metric definition is wrong.&quot;</p>
 <p>Mixing the two into one file means every metric tweak forces a schema review cycle. And the thing that makes the structural model trustworthy — that every diff in it is a diff you can review by eye, in seconds — quietly stops being true.</p>
 <p>Better: keep the structural model exactly as disciplined as it is now, and treat the semantic layer's structural half as one more generated <em>target</em>, the same way LPG Modeler already treats LadybugDB, Neo4j, SHACL, and OWL as separate projections of one source. A projection into Ossie's <code>datasets</code> / <code>fields</code> / <code>relationships</code> shape would reuse the same flattening the tool already applies to inheritance and mixins.</p>
+<figure><img src="../assets/diagrams/two-cadences.png" alt=""><figcaption>Two files on two cadences. The model changes rarely, is reviewed by engineers, and is projected into DDL and constraints, SHACL, OWL, the standards targets and a proposed Ossie projection; layout already lives in a sidecar. The metrics file changes weekly, is reviewed by the business, references the generated names, and compiles to a query at read time.</figcaption></figure>
 <p>The metrics themselves live in their own file, hand-authored, referencing the generated names, and change on a completely different cadence from the schema. It's the same pattern the tool already uses to keep diagram layout out of the semantic diff, one layer further out.</p>
 <hr>
 <h2 id="the-point-of-separating-all-of-this">The point of separating all of this<a class="anchor" href="#the-point-of-separating-all-of-this" aria-label="Link to this section">#</a></h2>
@@ -146,6 +122,7 @@
 <hr>
 <h2 id="where-to-go-next">Where to go next<a class="anchor" href="#where-to-go-next" aria-label="Link to this section">#</a></h2>
 <ul>
+<li><a href="models/semantic-layer.lpg.yaml"><code>semantic-layer.lpg.yaml</code></a> — the metrics ontology from this post, ready to open in the canvas or emit.</li>
 <li><a href="../targets.html">Targets</a> — every projection of the model, and what each one can and cannot enforce.</li>
 <li><a href="rules-without-code.html">Rules without code</a> — SHACL compiled to Cypher with shacl2cypher: the read-time compilation this post leans on.</li>
 <li><a href="you-dont-have-to-choose.html">You don't have to choose</a> — why one model can serve both RDF and property graphs.</li>

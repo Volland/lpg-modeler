@@ -18,13 +18,9 @@ The industry's answer to this is "the semantic layer" — but the term has quiet
 
 **A semantic layer**, in the sense the BI world means it — dbt's Semantic Layer, Cube, LookML, and now the vendor-neutral effort at Apache Ossie — is neither of those. It's a business-facing abstraction that maps physical fields to business terms and, more importantly, **defines metrics**: `Revenue = SUM(orders.amount)`, with a specific join path, a specific time grain, a specific filter for what counts. It has no reasoning, no open-world assumption, and usually no idea an ontology exists.
 
-All three get called "semantic" because all three sit between raw data and human meaning. But they answer different questions:
+All three get called "semantic" because all three sit between raw data and human meaning. But they answer different questions, and are owned by different people:
 
-| Layer | Answers | World | Owned by |
-| --- | --- | --- | --- |
-| Domain model | What does my app need? | Closed | The application team |
-| Ontology | What does this term mean, formally, to anyone? | Open | Whoever publishes the vocabulary |
-| Semantic layer | What number do we report? | Closed | Analysts and the business |
+![Three things wearing the same name: a domain model answers what one application needs, an ontology answers what a term means to anyone, and a semantic layer answers what number to report. One structural model can generate the first two; the third is decided and owned by people.](../docs/assets/diagrams/three-layers.png)
 
 Building one when you need another is how you end up with an OWL ontology nobody queries, or a metrics layer that silently disagrees with the ontology sitting three systems over.
 
@@ -46,6 +42,8 @@ Revenue = SUM(orders.amount) - SUM(refunds.amount)
 is not a correspondence between two existing properties. It's a **computation** — a function over a set of rows that produces a value nothing in the source data directly contains. No edge can carry that, because an edge connects two fixed points and an aggregate isn't a point, it's an operation.
 
 This is exactly why Ossie's metrics are SQL-dialect expressions, not join predicates. The moment you need `SUM`, a filter, a time grain, or a ratio of two other metrics, you need something that holds several parts together as one addressable thing. That means it needs to be a **node**, not an edge — because you need to reference "this metric" from elsewhere as a single identity.
+
+![Correspondence is an edge: Customer.email exactMatch Person.emailAddress, with a confidence. Computation is a node: Revenue sums orders.amount, filtered by status, at a monthly grain, and LTV points at it.](../docs/assets/diagrams/correspondence-computation.png)
 
 Get this wrong and you build a semantic layer that can tell you two fields mean the same thing but can't tell you what Revenue is. That's most of the "semantic layer" projects that quietly stall.
 
@@ -78,19 +76,31 @@ If you want to close that gap without losing the structural guarantee, the model
 
 That `numerator` / `denominator` detail is what makes composition work. `LTV = Revenue / CustomerCount` is two existing metric nodes related by a third, not a fresh expression written from scratch each time.
 
-```
-          (Metric: LTV)
-           /         \
-  numerator           denominator
-         /               \
-(Metric: Revenue)   (Metric: CustomerCount)
-   |  basedOn            |  basedOn
-(Field: orders.amount)  (Field: customers.id)
-   |  filteredBy
-(Filter: status = 'paid')
-```
+![LTV has Revenue as its numerator and CustomerCount as its denominator. Revenue is based on orders.amount, filtered by status, at a monthly grain on orders.placedAt; CustomerCount is based on customers.id.](../docs/assets/diagrams/ltv-composition.png)
 
 Deliberately absent: a `Dimension` class. A dimension isn't a different *kind* of thing — it's a field being used for grouping. Giving it its own class buys no new structure, just a sixth name to keep straight.
+
+### The ontology is itself a model
+
+Here's the part that's easy to get backwards. The *metrics* don't belong in a schema file — but the *vocabulary* they're written in does. `Metric`, `Filter` and `MAPS_TO` change about as often as any other schema, and deserve the same review. So the five-class ontology is an ordinary LPG Modeler model: [`semantic-layer.lpg.yaml`](semantic-layer.lpg.yaml).
+
+![The metrics ontology as a model: Dataset and Field form the structural layer; Metric and Filter the computed layer. MAPS_TO is a Field-to-Field edge carrying mappingType, confidence and justification. Metric is BASED_ON and has a GRAIN field, is FILTERED_BY filters, and points at other metrics as NUMERATOR and DENOMINATOR.](../docs/assets/diagrams/semantic-layer-model.png)
+
+Two choices in it are the argument of this post, stated as schema:
+
+- **`MAPS_TO` is an edge with properties**, not a node. Correspondence is a relation between two fields that already exist, and its mapping type, confidence and justification ride on that relation. Only OWL, which has no edge properties, turns it into a class — `sem:MapsTo` — and the tool does that on its own.
+- **`Metric` is a node**, because `NUMERATOR` and `DENOMINATOR` have to point at it. A computation you can't reference can't be composed.
+
+The shared `name` and `description` come from a `Named` mixin, and `mappingType`, `aggregateFn`, `grainUnit` and a filter's `operator` are enums, so the SKOS vocabulary is closed in the SHACL shapes rather than by convention.
+
+```bash
+npx lpg-modeler-cli check semantic-layer.lpg.yaml
+npx lpg-modeler-cli emit  semantic-layer.lpg.yaml --target owl --target shacl --target neo4j --out ./schema
+```
+
+The model checks clean. Emitting to LadybugDB reports what that engine can't hold — required properties, enum value sets, the minimum on `FIELD_OF` — as downgrades, and the SHACL shapes carry all of it.
+
+### Nothing moves
 
 The whole thing is ETL-shaped in its transform primitives — `Mapping` is a field-level transform, `Metric` is exactly a `GROUP BY` / `WHERE` / aggregate step — but it isn't ETL. Nothing moves. There's no schedule, no materialization, no lineage tracking, no state to manage.
 
@@ -107,6 +117,8 @@ A schema changes rarely and is reviewed by engineers who care whether a diff is 
 Mixing the two into one file means every metric tweak forces a schema review cycle. And the thing that makes the structural model trustworthy — that every diff in it is a diff you can review by eye, in seconds — quietly stops being true.
 
 Better: keep the structural model exactly as disciplined as it is now, and treat the semantic layer's structural half as one more generated *target*, the same way LPG Modeler already treats LadybugDB, Neo4j, SHACL, and OWL as separate projections of one source. A projection into Ossie's `datasets` / `fields` / `relationships` shape would reuse the same flattening the tool already applies to inheritance and mixins.
+
+![Two files on two cadences. The model changes rarely, is reviewed by engineers, and is projected into DDL and constraints, SHACL, OWL, the standards targets and a proposed Ossie projection; layout already lives in a sidecar. The metrics file changes weekly, is reviewed by the business, references the generated names, and compiles to a query at read time.](../docs/assets/diagrams/two-cadences.png)
 
 The metrics themselves live in their own file, hand-authored, referencing the generated names, and change on a completely different cadence from the schema. It's the same pattern the tool already uses to keep diagram layout out of the semantic diff, one layer further out.
 
@@ -126,6 +138,7 @@ A property graph model can give you the first two for free, generated from a sin
 
 ## Where to go next
 
+- [`semantic-layer.lpg.yaml`](semantic-layer.lpg.yaml) — the metrics ontology from this post, ready to open in the canvas or emit.
 - [Targets](../docs/targets.html) — every projection of the model, and what each one can and cannot enforce.
 - [Rules without code](rules-without-code.md) — SHACL compiled to Cypher with shacl2cypher: the read-time compilation this post leans on.
 - [You don't have to choose](you-dont-have-to-choose.md) — why one model can serve both RDF and property graphs.

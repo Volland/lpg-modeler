@@ -17,7 +17,8 @@ published post and the tool it describes move together.
 | [`renames-are-not-deletes.md`](renames-are-not-deletes.md) | Hands-on long-read on migrations: element ids instead of structural diffs, the lockfile, change classes and the destructive gate, worked end to end against Memgraph with `lpg lock`, `diff`, `migrate` and `apply`, and what LadybugDB, FalkorDB and Memgraph each taught the planners. |
 | [`renames-shop.lpg.yaml`](renames-shop.lpg.yaml) | The model `renames-are-not-deletes.md` is built around, written without ids so the article's first step can add them. |
 | [`renames-shop.seed.cypher`](renames-shop.seed.cypher) | The data that article loads before migrating. Linked by absolute GitHub URL, because the blog generator copies only `.lpg.yaml` files to the site. |
-| [`semantic-layer.md`](semantic-layer.md) | Essay separating domain model, ontology and metrics layer: correspondence versus computation, what one structural model can generate for the first two, and a five-class metrics ontology kept out of the schema file. |
+| [`semantic-layer.md`](semantic-layer.md) | Essay separating domain model, ontology and metrics layer: correspondence versus computation, what one structural model can generate for the first two, and a small metrics ontology — itself a model — kept apart from the metric definitions. |
+| [`semantic-layer.lpg.yaml`](semantic-layer.lpg.yaml) | The metrics ontology `semantic-layer.md` presents as a model: `MAPS_TO` as an edge with properties, `Metric` as a node that other metrics point at. |
 | [`posts.json`](posts.json) | Publication manifest for the site's blog: which files are published, under which slug, and on which date. A file reaches the site only by being named here. |
 
 A short-form companion compresses the long read rather than restating it loosely: every claim in it
@@ -61,6 +62,11 @@ do not resolve relative paths — substitute the absolute forms below, or upload
 | `../docs/assets/diagrams/two-layers.png` | `https://raw.githubusercontent.com/Volland/lpg-modeler/main/docs/assets/diagrams/two-layers.png` |
 | `../docs/assets/diagrams/agent-commerce.png` | `https://raw.githubusercontent.com/Volland/lpg-modeler/main/docs/assets/diagrams/agent-commerce.png` |
 | `../docs/assets/diagrams/rule-coverage.png` | `https://raw.githubusercontent.com/Volland/lpg-modeler/main/docs/assets/diagrams/rule-coverage.png` |
+| `../docs/assets/diagrams/three-layers.png` | `https://raw.githubusercontent.com/Volland/lpg-modeler/main/docs/assets/diagrams/three-layers.png` |
+| `../docs/assets/diagrams/correspondence-computation.png` | `https://raw.githubusercontent.com/Volland/lpg-modeler/main/docs/assets/diagrams/correspondence-computation.png` |
+| `../docs/assets/diagrams/ltv-composition.png` | `https://raw.githubusercontent.com/Volland/lpg-modeler/main/docs/assets/diagrams/ltv-composition.png` |
+| `../docs/assets/diagrams/semantic-layer-model.png` | `https://raw.githubusercontent.com/Volland/lpg-modeler/main/docs/assets/diagrams/semantic-layer-model.png` |
+| `../docs/assets/diagrams/two-cadences.png` | `https://raw.githubusercontent.com/Volland/lpg-modeler/main/docs/assets/diagrams/two-cadences.png` |
 
 `frames-and-slots.md` reuses `pipeline.png` and `inspector.png` from the same set and adds no
 images of its own, so it needs no upload folder. `concept-graphs.md` reuses `pipeline.png`,
@@ -90,6 +96,12 @@ names are numbered in that order:
 | 4 | `you-dont-have-to-choose-images/04-mixin.png` | `docs/assets/screenshots/mixin.png` |
 | 5 | `you-dont-have-to-choose-images/05-capabilities.png` | `docs/assets/diagrams/capabilities.png` |
 | 6 | `you-dont-have-to-choose-images/06-reification.png` | `docs/assets/diagrams/reification.png` |
+
+`semantic-layer.md` adds five diagrams of its own, on the same terms: `three-layers`,
+`correspondence-computation`, `ltv-composition`, `semantic-layer-model` (a drawing of
+`semantic-layer.lpg.yaml`, so an edit to that model means redrawing it) and `two-cadences`. Its
+upload set is `semantic-layer-images/01-three-layers.png` through `05-two-cadences.png`, in the
+order the post uses them.
 
 These are copies for publishing, not sources. The markdown still points at `../docs/assets/`, so
 regenerating a diagram or recapturing a screenshot updates the article — but leaves the upload

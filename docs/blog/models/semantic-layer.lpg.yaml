@@ -1,0 +1,140 @@
+# The metrics ontology: the part of a semantic layer a structural model does not give you.
+#
+# This file is the vocabulary a metrics layer is written in, not the metrics themselves.
+# A vocabulary is structural — it changes rarely and is reviewed like a schema — so it
+# belongs in a model. The Revenue and LTV definitions written in it do not.
+#
+#   npx lpg-modeler-cli check article/semantic-layer.lpg.yaml
+#   npx lpg-modeler-cli emit  article/semantic-layer.lpg.yaml \
+#       --target owl --target shacl --target neo4j --out ./schema
+#
+# Correspondence is an edge, computation is a node:
+#   - MAPS_TO carries a mapping type and a confidence, and stays an edge in the graph.
+#     OWL has no edge properties, so it becomes a MapsTo class there — the same fact,
+#     reified only where the target needs it.
+#   - Metric is a node, because other metrics have to point at it.
+lpg: "1.0"
+namespace:
+  prefix: sem
+  iri: https://example.org/vocab/semantic-layer#
+
+enums:
+  # SKOS mapping properties, reused rather than reinvented.
+  MappingType:
+    id: x_maptype
+    values: [exactMatch, closeMatch, broadMatch, narrowMatch, relatedMatch]
+
+  AggregateFn:
+    id: x_agg
+    values: [sum, count, countDistinct, avg, min, max]
+
+  Operator:
+    id: x_op
+    values: [eq, ne, lt, lte, gt, gte, in, notIn]
+
+  TimeUnit:
+    id: x_unit
+    values: [day, week, month, quarter, year]
+
+mixins:
+  # Everything a human looks up by name, and reads a sentence about.
+  Named:
+    id: m_named
+    props:
+      name:        { id: p_name, type: string, required: true, minLength: 1, maxLength: 120 }
+      description: { id: p_desc, type: string, maxLength: 2000 }
+
+nodes:
+  # ---------------------------------------------------------------------------
+  # The structural layer. Anything that projects a schema outward produces these.
+  # ---------------------------------------------------------------------------
+  Dataset:
+    id: n_dataset
+    key: [id]
+    mixins: [Named]
+    props:
+      id:     { id: p_ds_id, type: string, required: true }
+      system: { id: p_ds_system, type: string, required: true }
+
+  Field:
+    id: n_field
+    key: [id]
+    mixins: [Named]
+    props:
+      id:       { id: p_field_id, type: string, required: true }
+      dataType: { id: p_field_type, type: string, required: true }
+
+  # ---------------------------------------------------------------------------
+  # The computed layer. A metric is a thing, with an identity other metrics use.
+  # ---------------------------------------------------------------------------
+  Metric:
+    id: n_metric
+    key: [id]
+    mixins: [Named]
+    props:
+      id:          { id: p_metric_id, type: string, required: true, pattern: "^[a-z][a-z0-9_]*$" }
+      aggregateFn: { id: p_metric_fn, type: string, enum: AggregateFn }
+      grainUnit:   { id: p_metric_unit, type: string, enum: TimeUnit }
+      owner:       { id: p_metric_owner, type: string, required: true }
+
+  Filter:
+    id: n_filter
+    key: [id]
+    props:
+      id:       { id: p_filter_id, type: string, required: true }
+      operator: { id: p_filter_op, type: string, required: true, enum: Operator }
+      value:    { id: p_filter_value, type: string, required: true }
+
+edges:
+  FIELD_OF:
+    id: e_field_of
+    from: Field
+    to: Dataset
+    cardinality: { to: "1" }
+
+  # Correspondence: two fields that already exist, and how closely they agree.
+  MAPS_TO:
+    id: e_maps_to
+    from: Field
+    to: Field
+    props:
+      mappingType:   { id: p_map_type, type: string, required: true, enum: MappingType }
+      confidence:    { id: p_map_conf, type: float, min: 0, max: 1 }
+      justification: { id: p_map_just, type: string }
+
+  BASED_ON:
+    id: e_based_on
+    from: Metric
+    to: Field
+    cardinality: { to: "0..1" }
+
+  FILTERED_BY:
+    id: e_filtered_by
+    from: Metric
+    to: Filter
+
+  # The time field the grain unit buckets.
+  GRAIN:
+    id: e_grain
+    from: Metric
+    to: Field
+    cardinality: { to: "0..1" }
+
+  # Composition: a ratio points at other metrics, never at fields.
+  NUMERATOR:
+    id: e_numerator
+    from: Metric
+    to: Metric
+    cardinality: { to: "0..1" }
+
+  DENOMINATOR:
+    id: e_denominator
+    from: Metric
+    to: Metric
+    cardinality: { to: "0..1" }
+
+  ON_FIELD:
+    id: e_on_field
+    from: Filter
+    to: Field
+    cardinality: { to: "1" }

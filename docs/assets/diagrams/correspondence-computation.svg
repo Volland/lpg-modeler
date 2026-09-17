@@ -45,11 +45,11 @@
     <path d="M850 210 L884 184"/>
   </g>
   <path d="M912 276 L852 250" stroke="#7a4de0" stroke-width="1.4" fill="none" marker-end="url(#cp)"/>
-  <g font-family="ui-monospace, Menlo, monospace" font-size="10" fill="#5b6472">
-    <text x="712" y="186">BASED_ON</text>
-    <text x="712" y="282">GRAIN</text>
-    <text x="838" y="186" text-anchor="end">FILTERED_BY</text>
-    <text x="892" y="252" fill="#7a4de0">NUMERATOR</text>
+  <g font-family="ui-monospace, Menlo, monospace" font-size="10" fill="#5b6472" text-anchor="middle">
+    <text x="610" y="202">BASED_ON</text>
+    <text x="610" y="266">GRAIN</text>
+    <text x="926" y="202">FILTERED_BY</text>
+    <text x="926" y="266" fill="#7a4de0">NUMERATOR</text>
   </g>
 
   <rect x="552" y="146" width="116" height="38" rx="8" fill="#ffffff" stroke="#2f5fe0" stroke-width="1.3"/>
