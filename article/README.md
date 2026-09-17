@@ -18,6 +18,7 @@ published post and the tool it describes move together.
 | [`renames-shop.lpg.yaml`](renames-shop.lpg.yaml) | The model `renames-are-not-deletes.md` is built around, written without ids so the article's first step can add them. |
 | [`renames-shop.seed.cypher`](renames-shop.seed.cypher) | The data that article loads before migrating. Linked by absolute GitHub URL, because the blog generator copies only `.lpg.yaml` files to the site. |
 | [`semantic-layer.md`](semantic-layer.md) | Essay separating domain model, ontology and metrics layer: correspondence versus computation, what one structural model can generate for the first two, and a small metrics ontology — itself a model — kept apart from the metric definitions. |
+| [`linkedin-semantic-layer.md`](linkedin-semantic-layer.md) | Feed-sized companion to `semantic-layer.md` — the post body to paste, its first comment, hashtags, and which image to attach. |
 | [`semantic-layer.lpg.yaml`](semantic-layer.lpg.yaml) | The metrics ontology `semantic-layer.md` presents as a model: `MAPS_TO` as an edge with properties, `Metric` as a node that other metrics point at. |
 | [`posts.json`](posts.json) | Publication manifest for the site's blog: which files are published, under which slug, and on which date. A file reaches the site only by being named here. |
 
