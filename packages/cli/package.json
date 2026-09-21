@@ -3,7 +3,7 @@
   "version": "0.15.0",
   "type": "commonjs",
   "bin": {
-    "lpg": "./dist/cli.js"
+    "lpg": "dist/cli.js"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json && node scripts/bundle.mjs",
@@ -14,7 +14,7 @@
   "homepage": "https://volland.github.io/lpg-modeler/",
   "repository": {
     "type": "git",
-    "url": "https://github.com/Volland/lpg-modeler.git",
+    "url": "git+https://github.com/Volland/lpg-modeler.git",
     "directory": "packages/cli"
   },
   "bugs": {
