@@ -4,6 +4,12 @@ All notable changes to LPG Modeler are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.15.0] — 2026-09-21
+
+No change to the extension itself. This version matches the command-line release, which can
+now read a running Neo4j or FalkorDB back into a model and apply a generated script to
+Neo4j, FalkorDB or a LadybugDB database, as well as to Memgraph.
+
 ## [0.14.0] — 2026-09-16
 
 ### Added
