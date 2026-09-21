@@ -111,12 +111,22 @@ engine's runtime, which the CLI does not bundle:
 npx -p lpg-modeler-cli -p @ladybugdb/core@0.19.1 lpg import graph.lbdb --out domain.lpg.yaml
 ```
 
-Or read a running Memgraph, and apply a reviewed script back to it. Both need the Bolt driver:
+Or read a running database, and apply a reviewed script back to it. Every database target can
+now be read and deployed to: LadybugDB by path, Memgraph and Neo4j over Bolt, FalkorDB over
+Redis. Which engine a `bolt://` URI is comes from the instance, not the URI — Memgraph answers
+Neo4j's own `SHOW CONSTRAINTS` with an empty list rather than an error, so guessing would
+report an empty schema and no failure:
 
 ```bash
 npx -p lpg-modeler-cli -p neo4j-driver@6.2.0 lpg import bolt://localhost:7687 --out domain.lpg.yaml
 npx -p lpg-modeler-cli -p neo4j-driver@6.2.0 lpg apply domain.memgraph.cypher --target memgraph --uri bolt://localhost:7687
+npx -p lpg-modeler-cli -p neo4j-driver@6.2.0 lpg apply domain.neo4j.cypher --target neo4j --uri bolt://localhost:7687
+npx -p lpg-modeler-cli -p redis@6.2.1 lpg import redis://localhost:6379 --out domain.lpg.yaml
+npx -p lpg-modeler-cli -p @ladybugdb/core@0.19.1 lpg apply domain.ladybug.cypher --target ladybug --database graph.lbdb
 ```
+
+Each connecting command loads its own driver — `neo4j-driver`, `redis` or `@ladybugdb/core` —
+as an optional peer, so a CI run that only checks and generates downloads none of them.
 
 Browse them with commentary: **https://volland.github.io/lpg-modeler/examples.html**
 

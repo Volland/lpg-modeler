@@ -49,3 +49,61 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: npx vitest run packages/core/test/memgraph.live.test.ts packages/core/test/memgraph.migrate.live.test.ts packages/cli/test/cli.test.ts
+
+  # The Neo4j suites need a running instance, which the default job has none of: they skip
+  # there. A service container would do, but the instance is started in a step for the same
+  # reason Memgraph's is -- one recipe to read. See lat.md/emitters#Verification.
+  neo4j:
+    runs-on: ubuntu-latest
+    env:
+      LPG_NEO4J_URI: bolt://localhost:7687
+      LPG_NEO4J_PASSWORD: lpgtest123
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Start Neo4j 5 Community
+        run: |
+          docker run -d --name neo4j -p 7687:7687 -e NEO4J_AUTH=neo4j/lpgtest123 neo4j:5-community
+          for i in $(seq 1 45); do
+            if docker logs neo4j 2>&1 | grep -q 'Started.'; then exit 0; fi
+            sleep 2
+          done
+          docker logs neo4j
+          exit 1
+
+      - run: npm ci
+      - run: npm run build
+      - run: npx vitest run packages/core/test/neo4j.live.test.ts packages/cli/test/cli.test.ts
+
+  # The FalkorDB suites need a running instance, which the default job has none of: they
+  # skip there. See lat.md/emitters#Verification.
+  falkordb:
+    runs-on: ubuntu-latest
+    env:
+      LPG_FALKORDB_URI: redis://localhost:6379
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Start FalkorDB 4.20.4
+        run: |
+          docker run -d --name falkordb -p 6379:6379 falkordb/falkordb:v4.20.4
+          for i in $(seq 1 30); do
+            if docker exec falkordb redis-cli PING >/dev/null 2>&1; then exit 0; fi
+            sleep 2
+          done
+          docker logs falkordb
+          exit 1
+
+      - run: npm ci
+      - run: npm run build
+      - run: npx vitest run packages/core/test/falkordb-import.test.ts packages/cli/test/cli.test.ts

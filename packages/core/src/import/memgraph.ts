@@ -3,6 +3,7 @@ import {
   type Diagnostic, type EdgeTypeIR, type EnumIR, type NodeTypeIR, type PropertyIR, type ScalarType,
 } from '../ir'
 import { deriveId } from '../ids'
+import { inferHierarchy, nearestCommon, specific } from './labels'
 import type { ImportResult } from './rdf'
 
 /**
@@ -158,44 +159,10 @@ function fromObserved(type: string): { type?: ScalarType; list?: boolean; enum?:
 }
 
 /**
- * Label X is an ancestor of Y when every observed label set holding Y also holds X, and
- * some set holds X without Y. A label is abstract when no set is exactly it plus its
- * ancestors. Every inference is reported, because co-occurrence is evidence, not a
- * declaration. See lat.md/importers#Reading a Memgraph Instance.
+ * The hierarchy a set of labels implies is read the same way here and for a Neo4j
+ * instance, so the reading lives in one place: see lat.md/importers#Inferring a
+ * Hierarchy from Labels.
  */
-function inferHierarchy(sets: string[][], labels: string[], diagnostics: Diagnostic[]) {
-  const ancestors = new Map<string, string[]>()
-  for (const y of labels) {
-    const withY = sets.filter((s) => s.includes(y))
-    if (withY.length === 0) { ancestors.set(y, []); continue }
-    ancestors.set(y, labels.filter((x) => x !== y
-      && withY.every((s) => s.includes(x))
-      && sets.some((s) => s.includes(x) && !s.includes(y))))
-  }
-  const parent = new Map<string, string>()
-  for (const [y, xs] of ancestors) {
-    // The nearest ancestor is the one with the most ancestors of its own.
-    const nearest = [...xs].sort((a, b) => (ancestors.get(b)!.length - ancestors.get(a)!.length) || a.localeCompare(b))[0]
-    if (nearest) parent.set(y, nearest)
-  }
-  const abstract = new Set(labels.filter((x) => {
-    const own = new Set([x, ...ancestors.get(x)!])
-    return sets.some((s) => s.includes(x)) && !sets.some((s) => s.length === own.size && s.every((l) => own.has(l)))
-  }))
-  for (const [child, p] of [...parent].sort()) {
-    diagnostics.push(info('import-hierarchy',
-      `'${child}' is read as extending '${p}': every node labelled ${child} is also labelled ${p}, and some ${p} nodes are not ${child}.`))
-  }
-  for (const x of [...abstract].sort()) {
-    diagnostics.push(info('import-abstract',
-      `'${x}' is read as abstract: no node carries it without a more specific label.`))
-  }
-  return { parent, abstract, ancestors }
-}
-
-/** The most specific labels of a set: those that are no other label's ancestor in it. */
-const specific = (set: string[], ancestors: Map<string, string[]>): string[] =>
-  set.filter((l) => !set.some((o) => o !== l && (ancestors.get(o) ?? []).includes(l)))
 
 export function memgraphCatalogToModel(catalog: MemgraphCatalog, file: string): ImportResult {
   const diagnostics: Diagnostic[] = []
@@ -301,17 +268,13 @@ export function memgraphCatalogToModel(catalog: MemgraphCatalog, file: string): 
   }
 
   const edges: EdgeTypeIR[] = []
-  const nearestCommon = (names: string[]): string | undefined => {
-    const chain = (l: string) => [l, ...[...(ancestors.get(l) ?? [])].sort((a, b) => ancestors.get(b)!.length - ancestors.get(a)!.length)]
-    return chain(names[0]!).find((c) => names.every((n) => chain(n).includes(c)))
-  }
   const edgeTypes = [...new Set((catalog.structure?.edges ?? []).map((e) => e.type))].sort()
   for (const type of edgeTypes) {
     const seen = catalog.structure!.edges.filter((e) => e.type === type)
     const froms = [...new Set(seen.flatMap((e) => specific(e.from, ancestors)))]
     const tos = [...new Set(seen.flatMap((e) => specific(e.to, ancestors)))]
-    const from = froms.length > 0 ? nearestCommon(froms) : undefined
-    const to = tos.length > 0 ? nearestCommon(tos) : undefined
+    const from = froms.length > 0 ? nearestCommon(froms, ancestors) : undefined
+    const to = tos.length > 0 ? nearestCommon(tos, ancestors) : undefined
     if (!from || !to) {
       diagnostics.push(warn('import-endpoints',
         `Edge type '${type}' joins labels (${froms.join(', ')}) to (${tos.join(', ')}) with no common type on ${!from ? 'the start' : 'the end'}; it was not imported.`))

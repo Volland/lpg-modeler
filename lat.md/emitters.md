@@ -56,6 +56,18 @@ Neo4j is schema-optional: there is no table DDL, only constraints and indexes. M
 
 The emitter is edition-aware. Existence and node-key constraints require Enterprise, so under a Community configuration they are reported as downgrades and emitted as comments rather than silently dropped.
 
+Each constraint is named, and the names are not decoration: a key emits `<type>_key` on Enterprise and `<type>_key_unique` on Community, which is what lets [[importers#Reading a Neo4j Instance|an import]] tell a key apart from another unique property on an edition that cannot declare one.
+
+### Measured Constraint Support
+
+What Neo4j Community does was measured against 5.26.30 in a container, not taken from documentation, and both the emitter's edition split and `apply` rest on exactly these findings.
+
+Refused, each saying it requires Enterprise: `IS NODE KEY`, `IS REL KEY`, node and relationship `IS NOT NULL`, and the `IS :: <TYPE>` property-type constraint. Accepted: node uniqueness, composite uniqueness, relationship uniqueness, and a range index.
+
+Three findings shape how a script may be run. Two statements in one query are refused (`Expected exactly one statement per query`); a schema change and a write in one explicit transaction are refused (`ForbiddenDueToTransactionType`); and a trailing `;` on a single statement is accepted. One auto-commit statement at a time is therefore the only correct way to apply a script, which is what [[architecture#Distribution|apply]] does.
+
+Two more shape what an import may claim. A uniqueness constraint that stored data violates is refused and not created, so a constraint that exists is one being enforced. And uniqueness ignores a node that lacks the property altogether — a null key inserts happily — which is why a key needs presence as well, and why Community cannot enforce one.
+
 ## FalkorDB Target
 
 FalkorDB is schema-optional and multi-label, so like Neo4j it carries a hierarchy as labels rather than as tables. What it does not share is the edition split.
@@ -69,6 +81,16 @@ A unique constraint requires its exact-match index to already exist, so the inde
 Two operational facts are stated in the artifact rather than assumed away. Enforcement is asynchronous — the command returns `PENDING`, and a constraint that existing data violates ends `FAILED` and is never enforced — and there is no `IF NOT EXISTS` for either an index or a constraint, so a second run reports each as already existing.
 
 A map cannot be stored as a property value, so a [[metamodel#Composite Types|composite]] has nowhere to go and is reported, exactly as on [[emitters#Neo4j Target|Neo4j]]. An array can be stored, so a list is native.
+
+### Reading the Script Back
+
+The artifact stays a shell script, and `apply` reads it rather than running it: [[packages/core/src/emit/falkordb.script.ts#readFalkorScript]] turns each `$REDIS_CLI` line into the argument vector it invokes, substituting the graph key.
+
+The choice of a `.sh` file was about what a *file* can carry — two protocols and a downgrade note in one artifact — and that is unchanged. It never followed that the tool must hand the file to a shell: a client that can send an arbitrary Redis command can send both halves, and the lines are a small fixed set of shapes this tool wrote itself.
+
+So the reader is exact for those shapes and refuses everything else, naming the line and its number. A line carrying a pipe, a redirect, a second command or a variable the preamble did not set is refused rather than interpreted, because sending its words as one command would run something other than what the line says. A general shell reader would be a shell, with the failure modes of one, applied to a file a user may have edited; running `sh` remains what a user may do themselves, and the script says so.
+
+Because a constraint is created asynchronously, sending every command successfully is not the same as the schema being in force. `apply` therefore reads the constraints back afterwards and fails if any settled `FAILED` — see [[importers#Reading a FalkorDB Instance#A constraint that is not enforcing anything]].
 
 ### Measured DROP Syntax
 

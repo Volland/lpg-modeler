@@ -153,6 +153,47 @@ context: |
     DROP removes only one, and a composite CREATE fails if any property is indexed.
   - `GRAPH.CONSTRAINT LIST` is rejected; use `CALL db.constraints()`.
 
+  Verified against Neo4j 5.26.30 Community (Podman) for live import and apply:
+
+  - Refused, each naming Enterprise: IS NODE KEY, IS REL KEY, node and relationship
+    IS NOT NULL, and the IS :: <TYPE> property type constraint. Accepted: node
+    uniqueness, composite uniqueness, relationship uniqueness, range index.
+  - A create repeats silently only with IF NOT EXISTS; without it,
+    EquivalentSchemaRuleAlreadyExists. DROP ... IF EXISTS on something absent is silent.
+  - A uniqueness constraint the stored data violates is refused and NOT created.
+    Uniqueness ignores a node lacking the property, so a null key inserts happily.
+  - Two statements in one query are refused ("Expected exactly one statement per
+    query"); a schema change and a write in one explicit transaction are refused
+    (ForbiddenDueToTransactionType); a trailing `;` on one statement is accepted.
+  - SHOW CONSTRAINTS yields name, type, entityType, labelsOrTypes, properties,
+    ownedIndex, propertyType. SHOW INDEXES also reports LOOKUP indexes (one per entity,
+    on every database) and constraint-owned indexes via owningConstraint.
+  - db.schema.nodeTypeProperties() gives label sets with observed types and a `mandatory`
+    flag that is an observation, not a declaration. relTypeProperties() gives a
+    relationship's properties but never its endpoints; only db.schema.visualization()
+    does, and it names one pair per label rather than per label set.
+  - dbms.components() reports the edition. Memgraph answers it with a `Memgraph` row AND
+    a `Neo4j Kernel` row, and accepts Neo4j's SHOW CONSTRAINTS with an EMPTY LIST rather
+    than an error -- so a Bolt engine must be identified positively, Memgraph first.
+
+  Verified against FalkorDB 4.20.4 (Podman) for live import and apply:
+
+  - GRAPH.QUERY against an unknown graph key CREATES that key and answers as if the
+    graph were empty. GRAPH.RO_QUERY refuses it ("Invalid graph operation on empty
+    key") and refuses any write ("graph.RO_QUERY is to be executed only on read-only
+    queries"), so every schema read goes through GRAPH.RO_QUERY.
+  - A constraint create replies PENDING; one the stored data violates settles FAILED
+    and never enforces anything. Repeating a create replies "Constraint already exists".
+  - db.constraints() yields type, label, properties, entitytype, status;
+    db.indexes() yields label, properties, types, entitytype, status. A list inside a
+    column comes back as text: "[Person, Party]", "[email]", "[]".
+  - A label's indexed properties are reported in the order they were indexed, so the
+    key's index -- which the generator writes first -- comes first.
+  - Labels, properties and endpoints have no catalogue: labels(n), typeOf() and a
+    MATCH over relationships are the only sources, so they are sampled with a bound.
+  - Enforcement messages: "unique constraint violation on node of type Person",
+    "mandatory constraint violation: node with label Person missing property email".
+
   Verified against Memgraph 3.13.1 Community (Podman) for the Memgraph target:
 
   - Node constraints `ASSERT n.p IS UNIQUE` (composite too), `ASSERT EXISTS (n.p)`,

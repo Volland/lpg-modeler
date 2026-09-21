@@ -4,6 +4,48 @@ All notable changes to LPG Modeler are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **Import from a running Neo4j.** `lpg import bolt://host:7687` reads `SHOW CONSTRAINTS`,
+  `SHOW INDEXES` and the `db.schema` procedures in read sessions. A key comes from a node key
+  constraint, or — on Community, which cannot declare one — is recovered from a uniqueness
+  constraint and reported. Labels, properties, observed types, the hierarchy and edge endpoints
+  come from the schema procedures, and every inference is reported. What Neo4j does not hold —
+  cardinality, value bounds, named constraints, enums, mixins, integer widths — is reported as
+  lost.
+
+- **`lpg apply --target neo4j`.** Runs a generated schema or migration against a running Neo4j,
+  one statement per transaction, stopping at the first refusal and saying what had been applied.
+  An Enterprise script against a Community instance is refused before anything runs, naming the
+  constraints that cannot exist there. The password comes from `NEO4J_PASSWORD`.
+
+- **Which engine a Bolt URI is comes from the instance, not the URI.** Memgraph accepts Neo4j's
+  `SHOW CONSTRAINTS` and answers it with an empty list rather than an error, so an instance read
+  as the wrong engine would report a schema with nothing in it and no failure at all. Both
+  engines are identified from `CALL dbms.components()`; `--from memgraph` or `--from neo4j`
+  overrides, and an engine that names itself neither is refused rather than guessed at.
+
+- **`lpg apply --target ladybug`.** Runs a generated schema or migration against a LadybugDB
+  database, one statement at a time, stopping at the first the engine refuses and saying how
+  many had been applied. The database is named by `--database <path>` rather than a URI,
+  because it is embedded; a path holding none is created, and `--no-create` refuses instead.
+  This is the only command that opens a LadybugDB database for writing — an import still opens
+  read-only.
+
+- **Import from a running FalkorDB, and `lpg apply --target falkordb`.** `lpg import
+  redis://host:6379 --graph-key <key>` reads constraints and indexes, and samples labels,
+  properties and endpoints, every read through `GRAPH.RO_QUERY` — which the server refuses to
+  write through, and which refuses a graph key that does not exist, where a plain `GRAPH.QUERY`
+  would create it. A constraint reported `FAILED` or `PENDING` is not read as part of the
+  schema, because it is not enforcing anything. `apply` reads a generated script's
+  `$REDIS_CLI` lines back into Redis commands rather than running a shell, refuses any line it
+  did not generate, and afterwards reports any constraint that settled `FAILED`.
+
+  FalkorDB import and `apply` need a Redis client, a third optional peer dependency of the CLI:
+  `npm install redis@6.2.1`. Everything else runs without it.
+
 ## [0.14.0] — 2026-09-16
 
 ### Added

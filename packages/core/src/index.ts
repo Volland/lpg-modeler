@@ -22,12 +22,21 @@ export * from './emit/reify'
 export {
   importModel, importerNames, registerImporter, detectFormat, resolveFormat,
   type ImportInput, type ImportResult, type Importer, type TextImportInput, type CatalogImportInput,
-  type MemgraphImportInput,
+  type MemgraphImportInput, type Neo4jImportInput, type FalkorImportInput,
 } from './import/index'
 export {
   readMemgraphSchema, memgraphCatalogToModel, importMemgraph,
   type MemgraphCatalog, type MemgraphSession,
 } from './import/memgraph'
+export {
+  readNeo4jSchema, neo4jCatalogToModel, importNeo4j, identifyBoltEngine,
+  type Neo4jCatalog, type Neo4jSession, type Neo4jConstraint,
+} from './import/neo4j'
+export {
+  readFalkorSchema, falkorCatalogToModel, importFalkor, parseList, SAMPLE_LIMIT,
+  type FalkorCatalog, type FalkorClient, type FalkorConstraint,
+} from './import/falkordb'
+export { readFalkorScript, type FalkorCommand, type FalkorScriptRead } from './emit/falkordb.script'
 export { importRdf } from './import/rdf'
 export {
   importLadybug, parseLadybugDdl, readLadybugCatalog, catalogToModel,

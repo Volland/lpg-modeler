@@ -2,14 +2,21 @@ import { err, info, type Diagnostic, type ModelIR, type NodeTypeIR } from '../ir
 import { importRdf, type ImportResult, type TextImportInput } from './rdf'
 import { importLadybug, type CatalogImportInput } from './ladybug'
 import { importMemgraph, type MemgraphImportInput } from './memgraph'
+import { importNeo4j, type Neo4jImportInput } from './neo4j'
+import { importFalkor, type FalkorImportInput } from './falkordb'
 
 /**
- * A file read as text, or a LadybugDB database whose catalog the caller has already
- * read -- `core` never opens a database itself. See lat.md/importers#Reading a LadybugDB Database.
+ * A file read as text, or a database or instance whose catalog the caller has already
+ * read -- `core` opens neither a database nor a connection itself.
+ * See lat.md/importers#Reading a LadybugDB Database.
  */
-export type ImportInput = TextImportInput | CatalogImportInput | MemgraphImportInput
+export type ImportInput =
+  TextImportInput | CatalogImportInput | MemgraphImportInput | Neo4jImportInput | FalkorImportInput
 
-export type { ImportResult, TextImportInput, CatalogImportInput, MemgraphImportInput }
+export type {
+  ImportResult, TextImportInput, CatalogImportInput, MemgraphImportInput, Neo4jImportInput,
+  FalkorImportInput,
+}
 
 const texts = (inputs: ImportInput[]): TextImportInput[] =>
   inputs.filter((i): i is TextImportInput => 'text' in i)
@@ -29,9 +36,11 @@ interface Registration {
 
 const REGISTRY = new Map<string, Registration>([
   ['rdf', { importer: (i) => importRdf(texts(i)), extensions: ['.ttl', '.owl', '.shacl', '.n3'] }],
-  ['ladybug', { importer: (i) => importLadybug(i.filter((x): x is TextImportInput | CatalogImportInput => !('memgraphCatalog' in x))), extensions: ['.cypher', '.ddl'] }],
+  ['ladybug', { importer: (i) => importLadybug(i.filter((x): x is TextImportInput | CatalogImportInput => 'text' in x || 'ladybugCatalog' in x)), extensions: ['.cypher', '.ddl'] }],
   // A running instance, read by the caller: it has no file extension to answer to.
   ['memgraph', { importer: (i) => importMemgraph(i.filter((x): x is MemgraphImportInput => 'memgraphCatalog' in x)), extensions: [] }],
+  ['neo4j', { importer: (i) => importNeo4j(i.filter((x): x is Neo4jImportInput => 'neo4jCatalog' in x)), extensions: [] }],
+  ['falkordb', { importer: (i) => importFalkor(i.filter((x): x is FalkorImportInput => 'falkorCatalog' in x)), extensions: [] }],
 ])
 
 export function registerImporter(name: string, reg: Registration): void {
@@ -64,6 +73,8 @@ export function resolveFormat(name: string): string | undefined {
 export function detectFormat(input: ImportInput): string | undefined {
   if ('ladybugCatalog' in input) return 'ladybug'
   if ('memgraphCatalog' in input) return 'memgraph'
+  if ('neo4jCatalog' in input) return 'neo4j'
+  if ('falkorCatalog' in input) return 'falkordb'
   const lower = input.path.toLowerCase()
   for (const [name, reg] of REGISTRY) {
     if (reg.extensions.some((e) => lower.endsWith(e))) return name
@@ -87,7 +98,9 @@ export function importModel(inputs: ImportInput[], format?: string): ImportResul
     // A catalog was already read from a database, so no format named for files applies to it.
     const kind = 'ladybugCatalog' in input ? 'ladybug'
       : 'memgraphCatalog' in input ? 'memgraph'
-        : format ? resolveFormat(format) : detectFormat(input)
+        : 'neo4jCatalog' in input ? 'neo4j'
+        : 'falkorCatalog' in input ? 'falkordb'
+          : format ? resolveFormat(format) : detectFormat(input)
     if (!kind) {
       diagnostics.push(info('import-unknown-format',
         `Could not tell what '${input.path}' is from its name or its first lines. Name the format explicitly to read it.`))
@@ -101,14 +114,21 @@ export function importModel(inputs: ImportInput[], format?: string): ImportResul
   const rdfInputs = groups.get('rdf') ?? []
   const ddlInputs = groups.get('ladybug') ?? []
   const memgraphInputs = (groups.get('memgraph') ?? []) as MemgraphImportInput[]
+  const neo4jInputs = (groups.get('neo4j') ?? []) as Neo4jImportInput[]
+  const falkorInputs = (groups.get('falkordb') ?? []) as FalkorImportInput[]
 
-  // A running Memgraph is a whole schema on its own; nothing merges it with files yet.
-  if (memgraphInputs.length > 0) {
+  // A running instance is a whole schema on its own; nothing merges one with files yet.
+  for (const [name, live, read] of [
+    ['A Memgraph', memgraphInputs, () => importMemgraph(memgraphInputs)],
+    ['A Neo4j', neo4jInputs, () => importNeo4j(neo4jInputs)],
+    ['A FalkorDB', falkorInputs, () => importFalkor(falkorInputs)],
+  ] as const) {
+    if (live.length === 0) continue
     if (rdfInputs.length > 0 || ddlInputs.length > 0) {
       diagnostics.push(err('import-mixed-sources',
-        'A Memgraph instance is imported on its own. Import it separately from RDF or LadybugDB sources.'))
+        `${name} instance is imported on its own. Import it separately from RDF or LadybugDB sources.`))
     }
-    const out = importMemgraph(memgraphInputs)
+    const out = read()
     return { model: out.model, diagnostics: [...diagnostics, ...out.diagnostics] }
   }
 

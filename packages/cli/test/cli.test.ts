@@ -1,12 +1,20 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterAll } from 'vitest'
 import { spawnSync } from 'node:child_process'
-import { copyFileSync, existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { chmodSync, copyFileSync, existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 
 import {
   MEMGRAPH_URI, reset, run as runHarness, schemaState, useMemgraph,
 } from '../../core/test/memgraph-harness'
+import {
+  NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD, closeDriver as closeNeo4j, reset as resetNeo4j,
+  run as runNeo4j, schemaState as neo4jSchemaState,
+} from '../../core/test/neo4j-harness'
+import {
+  FALKORDB_URI, GRAPH_KEY, closeClient as closeFalkor, query as falkorQuery,
+  reset as resetFalkor, schemaState as falkorSchemaState, send as falkorSend,
+} from '../../core/test/falkordb-harness'
 import { pair } from '../../core/test/migrate-pairs'
 
 const CLI = resolve(__dirname, '..', 'dist', 'cli.js')
@@ -380,10 +388,32 @@ describe('lpg apply, without a server', () => {
     expect(r.stderr).toContain('apply-not-generated')
   })
 
-  it('names memgraph as the only target it can apply to', () => {
-    const r = run(['apply', emitted(dir(), 'ladybug'), '--target', 'ladybug', '--dry-run'])
+  it('names the targets it can apply to when given one it cannot', () => {
+    const r = run(['apply', emitted(dir(), 'shacl'), '--target', 'shacl', '--dry-run'])
     expect(r.status).toBe(1)
-    expect(r.stderr).toMatch(/apply-unsupported: .*memgraph/)
+    expect(r.stderr).toMatch(/apply-unsupported: .*memgraph, neo4j, ladybug and falkordb/)
+  })
+
+  it('reads a header that names the engine after the target', () => {
+    // `Target: ladybug (LadybugDB).` and `Target: falkordb (FalkorDB).` carry a
+    // parenthetical the memgraph and neo4j headers do not.
+    const d = dir()
+    for (const target of ['ladybug', 'falkordb']) {
+      const r = run(['apply', emitted(d, target), '--target', 'memgraph', '--dry-run'])
+      expect(r.status, target).toBe(1)
+      expect(r.stderr, target).toContain(`was generated for ${target}, not memgraph`)
+    }
+  })
+
+  it('applies a neo4j script through the same checks', () => {
+    const d = dir()
+    const script = emitted(d, 'neo4j')
+    const dry = run(['apply', script, '--target', 'neo4j', '--dry-run'])
+    expect(dry.status).toBe(0)
+    expect(dry.stdout).toMatch(/^\[1\/\d+\] CREATE CONSTRAINT /)
+    const mismatch = run(['apply', script, '--target', 'memgraph', '--dry-run'])
+    expect(mismatch.status).toBe(1)
+    expect(mismatch.stderr).toContain('apply-target-mismatch')
   })
 
   it('refuses a script with destructive statements unless permitted', () => {
@@ -404,7 +434,58 @@ describe('lpg apply, without a server', () => {
   it('reports an instance it cannot reach, naming the URI', () => {
     const r = run(['apply', emitted(dir(), 'memgraph'), '--target', 'memgraph', '--uri', 'bolt://127.0.0.1:1'])
     expect(r.status).toBe(1)
-    expect(r.stderr).toContain('cannot connect to Memgraph at bolt://127.0.0.1:1')
+    expect(r.stderr).toContain('cannot connect to memgraph at bolt://127.0.0.1:1')
+  })
+
+  // @lat: [[emitters#FalkorDB Target#Reading the Script Back]]
+  it('prints the commands a falkordb script invokes, without connecting', () => {
+    const r = run(['apply', emitted(dir(), 'falkordb'), '--target', 'falkordb', '--dry-run'])
+    expect(r.status).toBe(0)
+    const lines = r.stdout.trim().split('\n')
+    expect(lines[0]).toMatch(/^\[1\/\d+\] GRAPH\.QUERY social CREATE INDEX FOR \(n:Car\) ON \(n\.vin\)$/)
+    // The shell wrapper is gone: no variables, no redis-cli, only commands.
+    expect(r.stdout).not.toContain('$REDIS_CLI')
+    expect(r.stdout).not.toContain('$GRAPH_KEY')
+  })
+
+  // @lat: [[emitters#FalkorDB Target#Reading the Script Back]]
+  it('refuses a falkordb script line it did not generate, without connecting', () => {
+    const d = dir()
+    const script = join(d, 'edited.falkordb.sh')
+    writeFileSync(script, readFileSync(emitted(d, 'falkordb'), 'utf8')
+      .replace(/^(\$REDIS_CLI GRAPH\.QUERY.*)$/m, '$1 | tee /tmp/leak.txt'))
+    const r = run(['apply', script, '--target', 'falkordb', '--dry-run'])
+    expect(r.status).toBe(1)
+    expect(r.stderr).toContain('apply-unreadable-line')
+    expect(r.stderr).toMatch(/edited\.falkordb\.sh:\d+/)
+  })
+
+  it('reports a FalkorDB instance it cannot reach, naming the URI', () => {
+    const r = run(['apply', emitted(dir(), 'falkordb'), '--target', 'falkordb', '--uri', 'redis://127.0.0.1:1'])
+    expect(r.status).toBe(1)
+    expect(r.stderr).toContain('cannot connect to FalkorDB at redis://127.0.0.1:1')
+  })
+
+  it('tells the user how to install the Redis client when it is missing', () => {
+    const d = mkdtempSync(join(tmpdir(), 'lpg-noredis-'))
+    const cli = join(d, 'cli.js')
+    copyFileSync(CLI, cli)
+    for (const args of [
+      ['import', 'redis://127.0.0.1:1'],
+      ['apply', emitted(dir(), 'falkordb'), '--target', 'falkordb', '--uri', 'redis://127.0.0.1:1'],
+    ]) {
+      const r = run(args, cli, d)
+      expect(r.status, args[0]).toBe(1)
+      expect(r.stderr, args[0]).toContain('npm install redis@')
+    }
+  })
+
+  // @lat: [[architecture#Distribution]]
+  it('refuses a ladybug apply with no database, and one with a URI', () => {
+    const script = emitted(dir(), 'ladybug')
+    // A path is required, and a URI is not a path: an embedded database has no server.
+    expect(run(['apply', script, '--target', 'ladybug']).status).toBe(2)
+    expect(run(['apply', script, '--target', 'ladybug', '--uri', 'bolt://localhost:7687']).status).toBe(2)
   })
 
   it('tells the user how to install the driver when it is missing', () => {
@@ -416,6 +497,181 @@ describe('lpg apply, without a server', () => {
       expect(r.status, args[0]).toBe(1)
       expect(r.stderr, args[0]).toContain('npm install neo4j-driver@6.2.0')
     }
+  })
+})
+
+// The LadybugDB runtime is a development dependency of the workspace, so these need no
+// container and no environment variable: the database is a directory in a temp folder.
+// @lat: [[architecture#Distribution]]
+describe('lpg apply against a LadybugDB database', () => {
+  const emitted = (d: string, model = 'social.lpg.yaml') => {
+    expect(run(['emit', join(FIXTURES, model), '--target', 'ladybug', '--out', d]).status).toBe(0)
+    return join(d, `${model.replace('.lpg.yaml', '')}.ladybug.cypher`)
+  }
+
+  it('creates the database, applies every statement, and reads back as the same model', () => {
+    const d = mkdtempSync(join(tmpdir(), 'lpg-lbug-'))
+    const db = join(d, 'social.lbdb')
+    const r = run(['apply', emitted(d), '--target', 'ladybug', '--database', db])
+    expect(r.status).toBe(0)
+    expect(r.stdout).toContain(`creating a LadybugDB database at ${db}`)
+    expect(r.stdout).toMatch(/applied \d+ statement\(s\)/)
+    expect(existsSync(db)).toBe(true)
+
+    const out = join(d, 'back.lpg.yaml')
+    expect(run(['import', db, '--out', out]).status).toBe(0)
+    const written = readFileSync(out, 'utf8')
+    for (const type of ['Car:', 'Company:', 'Person:']) expect(written).toContain(type)
+    expect(run(['check', out]).stdout).toContain('0 error(s)')
+  })
+
+  it('opens a database read-only to import it, and read-write only to apply', () => {
+    const d = mkdtempSync(join(tmpdir(), 'lpg-lbug-'))
+    const db = join(d, 'social.lbdb')
+    expect(run(['apply', emitted(d), '--target', 'ladybug', '--database', db]).status).toBe(0)
+
+    // Write-protected on disk: a read-write open fails here, a read-only one does not.
+    chmodSync(db, 0o555)
+    try {
+      expect(run(['import', db]).status).toBe(0)
+      const r = run(['apply', emitted(d), '--target', 'ladybug', '--database', db])
+      expect(r.status).toBe(1)
+    } finally {
+      chmodSync(db, 0o755)
+    }
+  })
+
+  it('prints the statements without touching the path on a dry run', () => {
+    const d = mkdtempSync(join(tmpdir(), 'lpg-lbug-'))
+    const db = join(d, 'never.lbdb')
+    const r = run(['apply', emitted(d), '--target', 'ladybug', '--database', db, '--dry-run'])
+    expect(r.status).toBe(0)
+    expect(r.stdout).toMatch(/^\[1\/\d+\] CREATE NODE TABLE/)
+    expect(existsSync(db)).toBe(false)
+  })
+
+  it('refuses a path holding no database when --no-create is given, creating nothing', () => {
+    const d = mkdtempSync(join(tmpdir(), 'lpg-lbug-'))
+    const db = join(d, 'absent.lbdb')
+    const r = run(['apply', emitted(d), '--target', 'ladybug', '--database', db, '--no-create'])
+    expect(r.status).toBe(1)
+    expect(r.stderr).toContain('apply-no-database')
+    expect(existsSync(db)).toBe(false)
+  })
+
+  it('stops at the first statement the engine refuses, saying what had been applied', () => {
+    const d = mkdtempSync(join(tmpdir(), 'lpg-lbug-'))
+    const db = join(d, 'partial.lbdb')
+    const script = join(d, 'broken.ladybug.cypher')
+    // The generator's own header, so the file is one apply accepts, with a third
+    // statement LadybugDB refuses: a rel table whose endpoint table does not exist.
+    writeFileSync(script, [
+      '// Generated by lpg-modeler. Target: ladybug (LadybugDB).',
+      '',
+      'CREATE NODE TABLE IF NOT EXISTS A (id STRING, PRIMARY KEY(id));',
+      'CREATE NODE TABLE IF NOT EXISTS B (id STRING, PRIMARY KEY(id));',
+      'CREATE REL TABLE IF NOT EXISTS R (FROM A TO Missing);',
+      'CREATE NODE TABLE IF NOT EXISTS C (id STRING, PRIMARY KEY(id));',
+      '',
+    ].join('\n'))
+    const r = run(['apply', script, '--target', 'ladybug', '--database', db])
+    expect(r.status).toBe(1)
+    expect(r.stderr).toMatch(/statement 3 of 4 failed:/)
+    expect(r.stderr).toContain('2 statement(s) had been applied')
+
+    // The two that ran are really there, and the fourth never ran.
+    const out = join(d, 'partial.lpg.yaml')
+    expect(run(['import', db, '--out', out]).status).toBe(0)
+    const written = readFileSync(out, 'utf8')
+    expect(written).toContain('A:')
+    expect(written).toContain('B:')
+    expect(written).not.toContain('C:')
+  })
+
+  it('applies a migration to a database built from the previous revision, keeping its rows', () => {
+    const d = mkdtempSync(join(tmpdir(), 'lpg-lbug-'))
+    const model = join(d, 'shop.lpg.yaml')
+    writeFileSync(model, readFileSync(join(FIXTURES, 'migrate', 'base.lpg.yaml'), 'utf8'))
+    expect(run(['emit', model, '--target', 'ladybug', '--out', d]).status).toBe(0)
+    const db = join(d, 'shop.lbdb')
+    expect(run(['apply', join(d, 'shop.ladybug.cypher'), '--target', 'ladybug', '--database', db]).status).toBe(0)
+    expect(run(['lock', model]).status).toBe(0)
+
+    // A rename is migrated as a rename, so the rows survive it.
+    writeFileSync(model, pair('rename-property').edit(readFileSync(model, 'utf8')))
+    expect(run(['migrate', model, '--target', 'ladybug']).status).toBe(0)
+    const script = join(d, 'migrations', 'shop.0002.ladybug.cypher')
+    const r = run(['apply', script, '--target', 'ladybug', '--database', db])
+    expect(r.status).toBe(0)
+
+    const out = join(d, 'after.lpg.yaml')
+    expect(run(['import', db, '--out', out]).status).toBe(0)
+    expect(readFileSync(out, 'utf8')).toContain('mail')
+  })
+})
+
+// @lat: [[importers#Reading a FalkorDB Instance]]
+describe.runIf(FALKORDB_URI).sequential('lpg apply and import against a running falkordb', () => {
+  const emitted = (d: string) => {
+    expect(run(['emit', join(FIXTURES, 'social.lpg.yaml'), '--target', 'falkordb', '--out', d]).status).toBe(0)
+    return join(d, 'social.falkordb.sh')
+  }
+  const apply = (script: string, ...extra: string[]) =>
+    run(['apply', script, '--target', 'falkordb', '--uri', FALKORDB_URI!, '--graph-key', GRAPH_KEY, ...extra])
+
+  beforeEach(resetFalkor)
+  afterAll(closeFalkor)
+
+  it('sends every command of a generated script to an empty graph', async () => {
+    const d = mkdtempSync(join(tmpdir(), 'lpg-fk-'))
+    const r = apply(emitted(d))
+    expect(r.status).toBe(0)
+    expect(r.stdout).toMatch(/sent \d+ command\(s\)/)
+    const state = await falkorSchemaState()
+    expect(state.constraints.some((c) => c.includes('UNIQUE') && c.includes('Person'))).toBe(true)
+    expect(state.indexes.length).toBeGreaterThan(0)
+  })
+
+  it('reports a constraint that settled FAILED because the stored data defeats it', async () => {
+    const d = mkdtempSync(join(tmpdir(), 'lpg-fk-'))
+    // Two cars sharing a vin: the unique constraint on it can never be enforced.
+    await falkorQuery("CREATE (:Car {vin: 'v'}), (:Car {vin: 'v'})")
+    const r = apply(emitted(d))
+    expect(r.status).toBe(1)
+    expect(r.stderr).toContain('apply-constraint-failed')
+    expect(r.stderr).toMatch(/FAILED/)
+  })
+
+  it('imports the graph back to a model file that checks clean', async () => {
+    const d = mkdtempSync(join(tmpdir(), 'lpg-fk-'))
+    expect(apply(emitted(d)).status).toBe(0)
+    await falkorQuery("CREATE (:Person:Party {id: 'p', email: 'e', createdAt: 1})-[:OWNS]->(:Car {vin: 'v', seats: 4}), (:Company:Party {id: 'c', createdAt: 2})")
+    const out = join(d, 'imported.lpg.yaml')
+    const r = run(['import', FALKORDB_URI!, '--graph-key', GRAPH_KEY, '--out', out])
+    expect(r.status).toBe(0)
+    const written = readFileSync(out, 'utf8')
+    expect(written).toContain('extends: Party')
+    expect(written).toContain('key: [id]')
+    expect(run(['check', out]).stdout).toContain('0 error(s)')
+  })
+
+  it('refuses a graph key the server does not hold, and creates no graph', async () => {
+    const r = run(['import', FALKORDB_URI!, '--graph-key', 'lpg_no_such_graph'])
+    expect(r.status).toBe(1)
+    expect(r.stderr).toContain('import-no-graph')
+    const listed = await falkorSend(['GRAPH.LIST'])
+    expect((listed as string[]).map(String)).not.toContain('lpg_no_such_graph')
+  })
+
+  it('refuses a script line it did not generate, sending nothing', () => {
+    const d = mkdtempSync(join(tmpdir(), 'lpg-fk-'))
+    const script = join(d, 'edited.falkordb.sh')
+    writeFileSync(script, readFileSync(emitted(d), 'utf8')
+      .replace(/^(\$REDIS_CLI GRAPH\.QUERY.*)$/m, '$1 | tee /tmp/leak.txt'))
+    const r = apply(script)
+    expect(r.status).toBe(1)
+    expect(r.stderr).toContain('apply-unreadable-line')
+    expect(r.stderr).toContain('tee')
   })
 })
 
@@ -457,5 +713,118 @@ describe.runIf(MEMGRAPH_URI).sequential('lpg apply and import against a running 
     const written = readFileSync(out, 'utf8')
     expect(written).toContain('extends: Party')
     expect(run(['check', out]).stdout).toContain('0 error(s)')
+  })
+
+  // A Memgraph answers Neo4j's own `SHOW CONSTRAINTS` with an empty list rather than an
+  // error, so being read as a Neo4j would look like an instance with no schema at all.
+  // @lat: [[importers#Telling Two Bolt Engines Apart]]
+  it('is identified as memgraph from what it calls itself, not from the URI', async () => {
+    const d = mkdtempSync(join(tmpdir(), 'lpg-probe-'))
+    expect(run(['emit', join(FIXTURES, 'social.lpg.yaml'), '--target', 'memgraph', '--out', d]).status).toBe(0)
+    expect(run(['apply', join(d, 'social.memgraph.cypher'), '--target', 'memgraph', '--uri', MEMGRAPH_URI!]).status).toBe(0)
+    const out = join(d, 'probed.lpg.yaml')
+    const r = run(['import', MEMGRAPH_URI!, '--out', out])
+    expect(r.status).toBe(0)
+    expect(r.stderr).toContain('A Memgraph schema holds no edge constraints')
+    expect(r.stderr).not.toContain('A Neo4j schema')
+    expect(readFileSync(out, 'utf8')).toContain('Car')
+  })
+})
+
+// @lat: [[importers#Reading a Neo4j Instance]]
+describe.runIf(NEO4J_URI).sequential('lpg apply and import against a running neo4j', () => {
+  const env = { ...process.env, NEO4J_PASSWORD: NEO4J_PASSWORD }
+  const runWithPassword = (args: string[]) => {
+    const r = spawnSync('node', [CLI, ...args, '--user', NEO4J_USER], { encoding: 'utf8', env })
+    return { status: r.status ?? 1, stdout: r.stdout ?? '', stderr: r.stderr ?? '' }
+  }
+  const emitted = (d: string) => {
+    expect(run(['emit', join(FIXTURES, 'social.lpg.yaml'), '--target', 'neo4j', '--out', d]).status).toBe(0)
+    return join(d, 'social.neo4j.cypher')
+  }
+
+  beforeEach(resetNeo4j)
+  afterAll(closeNeo4j)
+
+  it('applies a generated schema to a fresh instance, and again with no effect', async () => {
+    const d = mkdtempSync(join(tmpdir(), 'lpg-n4j-'))
+    const r = runWithPassword(['apply', emitted(d), '--target', 'neo4j', '--uri', NEO4J_URI!])
+    expect(r.status).toBe(0)
+    expect(r.stdout).toMatch(/applied \d+ statement\(s\)/)
+    const after = await neo4jSchemaState()
+    expect(after.constraints.some((c) => c.includes('Person') && c.includes('id'))).toBe(true)
+
+    // Every statement the generator writes carries IF NOT EXISTS.
+    expect(runWithPassword(['apply', emitted(d), '--target', 'neo4j', '--uri', NEO4J_URI!]).status).toBe(0)
+    expect(await neo4jSchemaState()).toEqual(after)
+  })
+
+  it('stops at a constraint the stored data violates, saying what had been applied', async () => {
+    const d = mkdtempSync(join(tmpdir(), 'lpg-n4j-'))
+    await runNeo4j("CREATE (:Car {vin: 'v'}), (:Car {vin: 'v'})")
+    const r = runWithPassword(['apply', emitted(d), '--target', 'neo4j', '--uri', NEO4J_URI!])
+    expect(r.status).toBe(1)
+    expect(r.stderr).toMatch(/statement 1 of \d+ failed:/)
+    expect(r.stderr).toContain('0 statement(s) had been applied')
+    expect((await neo4jSchemaState()).constraints).toEqual([])
+  })
+
+  it('refuses an enterprise script against a Community instance before applying anything', async () => {
+    const d = mkdtempSync(join(tmpdir(), 'lpg-n4j-'))
+    expect(run(['emit', join(FIXTURES, 'social.lpg.yaml'), '--target', 'neo4j',
+      '--edition', 'enterprise', '--out', d]).status).toBe(0)
+    const r = runWithPassword(['apply', join(d, 'social.neo4j.cypher'), '--target', 'neo4j', '--uri', NEO4J_URI!])
+    expect(r.status).toBe(1)
+    expect(r.stderr).toContain('apply-edition')
+    expect(r.stderr).toContain('require Neo4j Enterprise')
+    expect((await neo4jSchemaState()).constraints).toEqual([])
+  })
+
+  it('imports the instance to a model file that checks clean', async () => {
+    const d = mkdtempSync(join(tmpdir(), 'lpg-n4j-'))
+    expect(runWithPassword(['apply', emitted(d), '--target', 'neo4j', '--uri', NEO4J_URI!]).status).toBe(0)
+    await runNeo4j("CREATE (:Person:Party {id: 'p', email: 'e', createdAt: datetime()})-[:OWNS {since: date('2020-01-01')}]->(:Car {vin: 'v', seats: 4}), (:Company:Party {id: 'c'})")
+    const out = join(d, 'imported.lpg.yaml')
+    const r = runWithPassword(['import', NEO4J_URI!, '--out', out])
+    expect(r.status).toBe(0)
+    const written = readFileSync(out, 'utf8')
+    expect(written).toContain('extends: Party')
+    expect(run(['check', out]).stdout).toContain('0 error(s)')
+  })
+
+  // @lat: [[importers#Telling Two Bolt Engines Apart]]
+  it('is identified as neo4j from what it calls itself, not from the URI', () => {
+    const d = mkdtempSync(join(tmpdir(), 'lpg-n4j-'))
+    expect(runWithPassword(['apply', emitted(d), '--target', 'neo4j', '--uri', NEO4J_URI!]).status).toBe(0)
+    const r = runWithPassword(['import', NEO4J_URI!, '--out', join(d, 'probed.lpg.yaml')])
+    expect(r.status).toBe(0)
+    expect(r.stderr).toContain('A Neo4j schema holds no cardinality')
+    expect(r.stderr).not.toContain('A Memgraph schema')
+  })
+
+  // @lat: [[importers#Telling Two Bolt Engines Apart]]
+  it('lets --from name the engine instead of asking the instance', () => {
+    const d = mkdtempSync(join(tmpdir(), 'lpg-n4j-'))
+    expect(runWithPassword(['apply', emitted(d), '--target', 'neo4j', '--uri', NEO4J_URI!]).status).toBe(0)
+    const r = runWithPassword(['import', NEO4J_URI!, '--from', 'neo4j', '--out', join(d, 'named.lpg.yaml')])
+    expect(r.status).toBe(0)
+    expect(r.stderr).toContain('A Neo4j schema holds no cardinality')
+
+    // The password follows the engine that was named, so naming the wrong one does not
+    // silently borrow the other's credentials.
+    const unauthorized = runWithPassword(['import', NEO4J_URI!, '--from', 'memgraph', '--out', join(d, 'wrong.lpg.yaml')])
+    expect(unauthorized.status).toBe(1)
+    expect(unauthorized.stderr).toContain('cannot connect to memgraph')
+
+    // Given the credentials, naming the wrong engine asks for a schema this instance
+    // does not have: Neo4j refuses Memgraph's syntax outright, which is reported rather
+    // than producing a model. The reverse is the dangerous direction, and is why the
+    // probe exists: a Memgraph answers Neo4j's SHOW CONSTRAINTS with an empty list.
+    const wrong = spawnSync('node', [CLI, 'import', NEO4J_URI!, '--from', 'memgraph',
+      '--out', join(d, 'wrong.lpg.yaml'), '--user', NEO4J_USER],
+    { encoding: 'utf8', env: { ...process.env, MEMGRAPH_PASSWORD: NEO4J_PASSWORD } })
+    expect(wrong.status).toBe(1)
+    expect(wrong.stderr).toContain('import-catalog')
+    expect(existsSync(join(d, 'wrong.lpg.yaml'))).toBe(false)
   })
 })

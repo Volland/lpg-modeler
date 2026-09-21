@@ -19,7 +19,7 @@ await build({
   platform: 'node',
   target: 'node18',
   format: 'cjs',
-  external: ['@ladybugdb/core', 'neo4j-driver'],
+  external: ['@ladybugdb/core', 'neo4j-driver', 'redis'],
   logLevel: 'warning',
 })
 console.log('cli bundled')

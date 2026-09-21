@@ -120,6 +120,64 @@ A hierarchy is read from labels that occur together, conservatively. Label X is 
 
 An edge seen between several label pairs collapses to the nearest type both ends descend from, as a LadybugDB endpoint set does. A property observed with more than one value type takes the commonest, and says so. What no Memgraph schema holds — edge constraints, cardinality, value bounds, mixins, widths — is reported as lost.
 
+## Inferring a Hierarchy from Labels
+
+Two engines store a hierarchy as labels, and the reading that recovers it from them is one reading, held in [[packages/core/src/import/labels.ts#inferHierarchy]] rather than written twice.
+
+Label X is an ancestor of Y when every observed label set holding Y also holds X, and some set holds X without Y. A label is abstract when no set is exactly it plus its ancestors. Neither is a declaration — an engine that stores labels stores no subtyping — so every inference is reported, in the voice of [[importers#Un-flattening Inheritance]].
+
+The sets themselves come from different places: Memgraph reports them in `SHOW SCHEMA INFO`, Neo4j in `db.schema.nodeTypeProperties()`. What each importer does with the result differs too, and stays with the importer. Sharing the rule rather than the whole reader is what keeps the two engines from drifting apart on the one question they answer the same way.
+
+## Telling Two Bolt Engines Apart
+
+A `bolt://` URI names a protocol, not a product, and two of the engines this tool reads answer on it. Which one is at the other end is asked of the instance, never inferred from the URI.
+
+Trying one engine's syntax and falling back would be worse than useless here. Measured: Memgraph accepts Neo4j's `SHOW CONSTRAINTS` and answers it with an empty list rather than an error. A Memgraph read as a Neo4j therefore fails at nothing — it reports an instance whose schema is empty, and the user gets a model with no keys in it and no reason given. That is the silent wrong answer the [[emitters#Capability Matrix]] exists to prevent, arriving through the front door.
+
+So the identification is positive, from `CALL dbms.components()`. Memgraph is checked for first, because it answers with a `Memgraph` row **and** a `Neo4j Kernel` row of its own; a `Neo4j Kernel` row means Neo4j only when no `Memgraph` row accompanies it. An instance that names neither is `import-unknown-engine` and nothing is read, because the alternative is guessing at a schema language. `--from memgraph` or `--from neo4j` overrides the probe, for an engine this tool has not met.
+
+The password follows the engine rather than the connection: `MEMGRAPH_PASSWORD` or `NEO4J_PASSWORD`, so two instances can be addressed from one shell without either being handed the other's credentials.
+
+## Reading a Neo4j Instance
+
+A running Neo4j is read over Bolt, in read sessions, through `SHOW CONSTRAINTS`, `SHOW INDEXES`, `db.schema.nodeTypeProperties()`, `db.schema.relTypeProperties()` and `db.schema.visualization()`.
+
+As with Memgraph, `core` never loads the driver: [[packages/core/src/import/neo4j.ts#readNeo4jSchema]] reads through a session the command line opens, and [[packages/core/src/import/neo4j.ts#neo4jCatalogToModel]] builds the model. Constraints are declarations and outrank anything observed.
+
+A key is a node key constraint where one exists. On Community none can — measured, `Node Key constraint requires Neo4j Enterprise Edition` — so the key is recovered from a uniqueness constraint instead, and the recovery is always reported. Three things rank the candidates: a constraint whose every property also has an existence constraint, then one named as [[emitters#Neo4j Target|the generator names a key]], then the smallest. The middle rule is the Neo4j counterpart of the index Memgraph's generator writes to mark its key: a Neo4j constraint carries a name, which is part of the schema and readable, so the generator's own name is an assertion rather than a convention — and it is ranked below real evidence, so a foreign database is not read through this tool's naming habits.
+
+What a Community instance cannot enforce, it is not credited with. It holds no existence constraint, so no property is read as required except the parts of a key, and `import-edition` says so rather than letting the reader assume the schema was simply undemanding. The `mandatory` flag `db.schema.nodeTypeProperties()` reports is an observation over stored data — with one node stored, every property it has looks mandatory — so it contributes nothing.
+
+Indexes are read for what they say about a key, not as a feature of their own, which the metamodel has no place for. Two kinds are skipped: a `LOOKUP` index, which every database carries per entity and which says nothing about any model, and an index a constraint owns, which is the constraint rather than an index beside it.
+
+Endpoints have no other source than `db.schema.visualization()`, and it names one pair per label rather than per label set: a `:Person:Party` node at one end of one relationship is reported as both `Person` and `Party`. Each end is therefore narrowed to its most specific labels before the sightings are collapsed to the nearest type they all descend from — [[importers#Reading Edges]] applied to a cross-product instead of a flat shape. Collapsing without narrowing would read every edge as declared on the abstract parent.
+
+What no Neo4j schema holds — cardinality, value bounds, named constraints, enums, mixins, integer widths, open and closed types — is reported as lost.
+
+## Reading a FalkorDB Instance
+
+A running FalkorDB is read over the Redis protocol through `CALL db.constraints()` and `CALL db.indexes()`, and — because nothing else has a catalogue there — through bounded sampling queries for labels, properties and endpoints.
+
+As with the other engines, `core` never loads a client: [[packages/core/src/import/falkordb.ts#readFalkorSchema]] reads through one the command line connected, and [[packages/core/src/import/falkordb.ts#falkorCatalogToModel]] builds the model.
+
+Every read is a `GRAPH.RO_QUERY`. That is not a preference but the safety property: the server refuses to run a write through it, so an import cannot change a graph even by mistake. It also refuses a graph key that does not exist, which matters more than it sounds — measured, a plain `GRAPH.QUERY` against an unknown key **creates that key**, so a mistyped graph name would leave an empty graph behind on the user's server and hand back a model with nothing in it, from the one command that promises not to write.
+
+The key is read as the generator writes one: a `UNIQUE` constraint whose every property also carries `MANDATORY`. Where several qualify, the one indexed earliest wins, because FalkorDB keeps a label's indexed properties in the order they were indexed and [[emitters#FalkorDB Target|the generator indexes the key first]]. That is creation order rather than a declaration, so the choice is reported.
+
+### A constraint that is not enforcing anything
+
+A constraint reported `FAILED` or `PENDING` contributes nothing to the model, and is reported with its status.
+
+Enforcement here is asynchronous: the create returns `PENDING`, and one the stored data violates settles `FAILED` and never enforces anything. Reading such a constraint would put a key in the model that the database is not keeping — the [[emitters#Capability Matrix|capability rule]] pointed inbound, where the loss is not a target's inability but a constraint that merely looks present.
+
+### What a sample is not
+
+Label sets, property types and endpoints come from queries bounded at a thousand nodes and a thousand relationships, and what the bound cut off is reported.
+
+A schema read should not scan a production graph, and a sample is evidence rather than a declaration: a type or an endpoint pair beyond the bound is simply not in the model, and saying so is the difference between an incomplete model and a wrong one. The hierarchy those sets support is reported as an inference exactly as [[importers#Inferring a Hierarchy from Labels|a Memgraph or Neo4j import's]] is.
+
+What no FalkorDB schema holds — enums, cardinality, value bounds, named constraints, mixins, integer widths, open and closed types — is reported as lost.
+
 ## Combining Sources
 
 RDF and DDL are complementary, so an import given both uses each for what only it has. RDF is the base, because it alone carries the hierarchy.

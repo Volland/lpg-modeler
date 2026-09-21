@@ -16,6 +16,7 @@
     "eslint": "^8.57.1",
     "markdown-it": "^14.1.0",
     "neo4j-driver": "^6.2.0",
+    "redis": "^6.2.1",
     "typescript": "^5.6.3",
     "vitest": "^2.1.3"
   },

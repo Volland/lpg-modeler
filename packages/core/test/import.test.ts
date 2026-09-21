@@ -201,7 +201,7 @@ describe('combining RDF with DDL', () => {
 // @lat: [[importers#Importers]]
 describe('the importer registry', () => {
   it('lists the sources it knows', () => {
-    expect(importerNames()).toEqual(['ladybug', 'memgraph', 'rdf'])
+    expect(importerNames()).toEqual(['falkordb', 'ladybug', 'memgraph', 'neo4j', 'rdf'])
   })
 
   it('tells Turtle from DDL by extension, then by content', () => {

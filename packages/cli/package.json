@@ -29,6 +29,7 @@
     "neo4j",
     "memgraph",
     "cypher",
+    "falkordb",
     "ladybugdb",
     "kuzu",
     "gql",
@@ -51,13 +52,17 @@
   ],
   "peerDependencies": {
     "@ladybugdb/core": "0.19.1",
-    "neo4j-driver": "^6.2.0"
+    "neo4j-driver": "^6.2.0",
+    "redis": "^6.2.1"
   },
   "peerDependenciesMeta": {
     "@ladybugdb/core": {
       "optional": true
     },
     "neo4j-driver": {
+      "optional": true
+    },
+    "redis": {
       "optional": true
     }
   },

@@ -180,7 +180,23 @@ The CLI ships to npm the same way, as a single self-contained package, so `core`
 
 One dependency is deliberately left out of that bundle. Importing a LadybugDB database needs `@ladybugdb/core`, which carries a native binding per platform that a bundle cannot inline. It is an optional peer dependency rather than a dependency, because the runtime and its platform binary come to roughly 38 MB, and every CI run that only checks and emits would otherwise download them. The command line loads it only when a database is imported, looking beside itself and then in the working directory, and says how to install it when it finds neither — see [[importers#Reading a LadybugDB Database]].
 
-The Bolt driver, `neo4j-driver`, is kept out the same way, for size rather than a native binding: only reading a Memgraph instance and `lpg apply` use it. `apply` is the one command that writes to a database. It takes a generated script rather than a model, so what runs is exactly what was reviewed; it refuses a script for another target or one marked destructive, runs each statement in its own transaction, and stops at the first failure saying what had already been applied. `emit` and `migrate` still never connect. Only Memgraph is wired to it.
+The Bolt driver, `neo4j-driver`, is kept out the same way, for size rather than a native binding: only reading a Memgraph or Neo4j instance and `lpg apply` use it. A Redis client is the third such peer, for FalkorDB, and follows the same rule: loaded beside the command line and then from the working directory, with an install hint naming the version when it is found in neither. `apply` is the one command that writes to a database. It takes a generated script rather than a model, so what runs is exactly what was reviewed; it refuses a script for another target or one marked destructive, runs each statement in its own transaction, and stops at the first failure saying what had already been applied. `emit` and `migrate` still never connect.
+
+Both Bolt engines are wired to it, and which one is at a URI is asked of the instance rather than assumed — see [[importers#Telling Two Bolt Engines Apart]]. A script may also be refused for a reason the statements themselves cannot show: an Enterprise-only constraint against a Community instance fails at the first such statement, and the edition is readable before any of them runs, so the whole class is named up front and nothing is applied. A header may name the engine after the target, as `ladybug (LadybugDB)` does, so the check reads a parenthetical rather than rejecting the line.
+
+### Applying to an embedded database
+
+A LadybugDB database is named by `--database <path>` rather than by a URI, because it is embedded: there is no server to connect to, nothing to authenticate to, and no connection that could be refused.
+
+Overloading `--uri` with a `file://` form would make the two look alike where they are not. The path takes the shapes an [[importers#Reading a LadybugDB Database|import]] already recognises as a database — a directory, or a `.lbdb`, `.lbug` or `.kuzu` file — so one idea of what a database is serves both commands.
+
+This is also the only command that opens one for writing. Importing opens read-only and says so, which is what makes it safe against a database in use; read-only is therefore a per-command decision rather than a constant, while the bounded buffer pool and maximum size stay, since they exist to stop the defaults reserving 8 TiB of address space per open.
+
+A path holding no database is created rather than refused, because a schema script against a fresh database is the common case, and the run says which path it made. `--no-create` inverts that for a deployment where applying to the wrong path is the greater risk. Creating a database discards nothing, so it sits outside the [[emitters#Migrations#Destructive Gate|destructive gate]] rather than inside it.
+
+One statement at a time is kept here too. LadybugDB auto-commits its DDL, so it is not the correctness requirement it is on Neo4j; it is what makes the partial-application report true, which is the whole reason the command exists rather than a shell loop. What the engine refuses — no column retype, no dropping a primary key column, no dropping a node table a rel table still references — reaches the user as the engine words it, positioned. See [[emitters#Ladybug Target#Measured ALTER Support]].
+
+The runtime is checked before the path, because without it no path could be opened and a missing-file message would send the user after the wrong problem.
 
 ### Documentation site
 
