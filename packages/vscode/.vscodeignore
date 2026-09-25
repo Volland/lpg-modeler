@@ -10,6 +10,7 @@ out/**/*.map
 out/**/*.d.ts
 out/protocol.*
 out/intents.*
+out/theme.*
 out/webview/**
 
 # Repository noise. Agent tooling drops state directories here; they are gitignored,
