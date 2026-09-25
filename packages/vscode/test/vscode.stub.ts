@@ -37,6 +37,7 @@ export class Range {
 
 export enum DiagnosticSeverity { Error = 0, Warning = 1, Information = 2, Hint = 3 }
 export enum ViewColumn { One = 1, Beside = -2 }
+export enum ConfigurationTarget { Global = 1, Workspace = 2, WorkspaceFolder = 3 }
 
 export class Diagnostic {
   source?: string
@@ -84,6 +85,9 @@ export const harness = {
   infos: [] as string[],
   openedEditors: [] as string[],
   panels: [] as FakePanel[],
+  /** User settings by full key (`lpg.canvas.theme`); `update` writes here. */
+  config: new Map<string, unknown>(),
+  configListeners: [] as ((e: { affectsConfiguration(section: string): boolean }) => unknown)[],
   workspaceRoot: undefined as string | undefined,
   reset(root: string) {
     this.commands.clear()
@@ -99,6 +103,8 @@ export const harness = {
     this.infos = []
     this.openedEditors = []
     this.panels = []
+    this.config.clear()
+    this.configListeners = []
     this.workspaceRoot = root
     window.activeTextEditor = undefined
     workspace.textDocuments = []
@@ -231,7 +237,25 @@ export const workspace = {
     return true
   },
   findFiles: async (_glob: string, _exclude?: string) => harness.foundFiles,
-  getConfiguration: (_section?: string) => ({ get: <T>(_key: string, fallback: T) => fallback }),
+  getConfiguration: (section?: string) => {
+    const full = (key: string) => (section ? `${section}.${key}` : key)
+    return {
+      get: <T>(key: string, fallback: T): T =>
+        (harness.config.has(full(key)) ? harness.config.get(full(key)) as T : fallback),
+      /** Writing undefined removes the setting, as the real API does. */
+      update: async (key: string, value: unknown, _target?: ConfigurationTarget) => {
+        const k = full(key)
+        if (value === undefined) harness.config.delete(k)
+        else harness.config.set(k, value)
+        const event = { affectsConfiguration: (s: string) => k === s || k.startsWith(`${s}.`) }
+        await Promise.all(harness.configListeners.map((cb) => cb(event)))
+      },
+    }
+  },
+  onDidChangeConfiguration: (cb: (e: { affectsConfiguration(section: string): boolean }) => unknown) => {
+    harness.configListeners.push(cb)
+    return { dispose() {} }
+  },
   onDidChangeTextDocument: noop,
   onDidOpenTextDocument: noop,
   onDidSaveTextDocument: noop,

@@ -14,6 +14,7 @@ import {
 } from '@lpg/core'
 import type { HostMessage, Intent, Projection, ViewMessage, WireProperty } from './protocol'
 import { intentToEdits } from './intents'
+import { COLOR_TOKENS, isHexColor, isThemeName, resolveTheme, type ColorToken } from './theme'
 
 /** A constraint in one line, for the inspector list. */
 function summarise(a: Assertion): string {
@@ -137,6 +138,18 @@ class Canvas {
       void vscode.window.showErrorMessage(`Canvas action failed: ${detail}`)
     })
     return this.queue
+  }
+
+  /**
+   * Send the palette the settings describe. The canvas never styles itself ahead of the
+   * setting it reflects: a toolbar choice writes the setting, and the configuration event
+   * brings the palette back here. See lat.md/architecture#Rendering#Canvas Theme.
+   */
+  sendTheme(): void {
+    const config = vscode.workspace.getConfiguration('lpg')
+    const overrides: Partial<Record<ColorToken, unknown>> = {}
+    for (const token of COLOR_TOKENS) overrides[token] = config.get<string>(`canvas.colors.${token}`, '')
+    this.post({ type: 'theme', ...resolveTheme(config.get<string>('canvas.theme', 'auto'), overrides) })
   }
 
   private post(message: HostMessage): void {
@@ -299,8 +312,25 @@ class Canvas {
   private async onMessage(message: ViewMessage): Promise<void> {
     switch (message.type) {
       case 'ready':
+        this.sendTheme()
         await this.refresh()
         return
+
+      // A palette is the viewer's preference, not part of the model, so it goes to user
+      // settings and never to the model file or a sidecar.
+      case 'setTheme':
+        if (!isThemeName(message.theme)) return
+        await vscode.workspace.getConfiguration('lpg')
+          .update('canvas.theme', message.theme, vscode.ConfigurationTarget.Global)
+        return
+
+      case 'setColor': {
+        if (!(COLOR_TOKENS as readonly string[]).includes(message.token)) return
+        const value = isHexColor(message.value) ? message.value : undefined
+        await vscode.workspace.getConfiguration('lpg')
+          .update(`canvas.colors.${message.token}`, value, vscode.ConfigurationTarget.Global)
+        return
+      }
 
       case 'move': {
         // Position only: the model file must not change. lat.md/architecture#Views
@@ -675,6 +705,10 @@ function withModelSuffix(uri: vscode.Uri): vscode.Uri {
 
   // Typing in the model file re-renders the canvas: the file is the source of truth.
   context.subscriptions.push(
+    vscode.workspace.onDidChangeConfiguration((e) => {
+      if (!e.affectsConfiguration('lpg.canvas')) return
+      for (const canvas of canvases.values()) canvas.sendTheme()
+    }),
     vscode.workspace.onDidChangeTextDocument((e) => {
       if (!isModelFile(e.document)) return
       for (const canvas of canvases.values()) void canvas.refresh()

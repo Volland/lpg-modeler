@@ -129,6 +129,129 @@
           "type": "string",
           "default": "",
           "description": "FalkorDB: the Redis key the graph lives under. Empty means the model's own namespace prefix names it."
+        },
+        "lpg.canvas.theme": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "solarizedLight",
+            "solarizedDark",
+            "black",
+            "white"
+          ],
+          "enumItemLabels": [
+            "Follow VS Code",
+            "Solarized Light",
+            "Solarized Dark",
+            "Black",
+            "White"
+          ],
+          "enumDescriptions": [
+            "Follow the VS Code theme's background and text, with borders, boxes and edges derived from them for contrast.",
+            "Solarized Light, with text and accents darkened to meet WCAG contrast.",
+            "Solarized Dark, with text and accents lightened to meet WCAG contrast.",
+            "White on black, maximum contrast.",
+            "Black on white, maximum contrast; also suits screenshots for documents."
+          ],
+          "default": "auto",
+          "order": 0,
+          "markdownDescription": "Color theme of the model canvas. Also chosen from the **Theme** picker in the canvas toolbar. Any color can be overridden below."
+        },
+        "lpg.canvas.colors.background": {
+          "type": "string",
+          "default": "",
+          "pattern": "^$|^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$",
+          "patternErrorMessage": "A hex color such as #1a5e8f, or empty to use the theme's color.",
+          "order": 1,
+          "markdownDescription": "Canvas and panel background. A hex color such as `#1a5e8f`; empty uses the theme's color. Also set from **Colors…** in the canvas toolbar."
+        },
+        "lpg.canvas.colors.foreground": {
+          "type": "string",
+          "default": "",
+          "pattern": "^$|^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$",
+          "patternErrorMessage": "A hex color such as #1a5e8f, or empty to use the theme's color.",
+          "order": 2,
+          "markdownDescription": "Primary text: type names, property names. A hex color such as `#1a5e8f`; empty uses the theme's color. Also set from **Colors…** in the canvas toolbar."
+        },
+        "lpg.canvas.colors.muted": {
+          "type": "string",
+          "default": "",
+          "pattern": "^$|^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$",
+          "patternErrorMessage": "A hex color such as #1a5e8f, or empty to use the theme's color.",
+          "order": 3,
+          "markdownDescription": "Secondary text: property types, badges, hints. A hex color such as `#1a5e8f`; empty uses the theme's color. Also set from **Colors…** in the canvas toolbar."
+        },
+        "lpg.canvas.colors.border": {
+          "type": "string",
+          "default": "",
+          "pattern": "^$|^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$",
+          "patternErrorMessage": "A hex color such as #1a5e8f, or empty to use the theme's color.",
+          "order": 4,
+          "markdownDescription": "Borders of type boxes, separators and controls. A hex color such as `#1a5e8f`; empty uses the theme's color. Also set from **Colors…** in the canvas toolbar."
+        },
+        "lpg.canvas.colors.accent": {
+          "type": "string",
+          "default": "",
+          "pattern": "^$|^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$",
+          "patternErrorMessage": "A hex color such as #1a5e8f, or empty to use the theme's color.",
+          "order": 5,
+          "markdownDescription": "Accent: key, required and unique flags, links, the primary button. A hex color such as `#1a5e8f`; empty uses the theme's color. Also set from **Colors…** in the canvas toolbar."
+        },
+        "lpg.canvas.colors.box": {
+          "type": "string",
+          "default": "",
+          "pattern": "^$|^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$",
+          "patternErrorMessage": "A hex color such as #1a5e8f, or empty to use the theme's color.",
+          "order": 6,
+          "markdownDescription": "Fill of a type box. A hex color such as `#1a5e8f`; empty uses the theme's color. Also set from **Colors…** in the canvas toolbar."
+        },
+        "lpg.canvas.colors.boxHeader": {
+          "type": "string",
+          "default": "",
+          "pattern": "^$|^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$",
+          "patternErrorMessage": "A hex color such as #1a5e8f, or empty to use the theme's color.",
+          "order": 7,
+          "markdownDescription": "Title bar of a type box. A hex color such as `#1a5e8f`; empty uses the theme's color. Also set from **Colors…** in the canvas toolbar."
+        },
+        "lpg.canvas.colors.edge": {
+          "type": "string",
+          "default": "",
+          "pattern": "^$|^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$",
+          "patternErrorMessage": "A hex color such as #1a5e8f, or empty to use the theme's color.",
+          "order": 8,
+          "markdownDescription": "Edge lines between types. A hex color such as `#1a5e8f`; empty uses the theme's color. Also set from **Colors…** in the canvas toolbar."
+        },
+        "lpg.canvas.colors.grid": {
+          "type": "string",
+          "default": "",
+          "pattern": "^$|^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$",
+          "patternErrorMessage": "A hex color such as #1a5e8f, or empty to use the theme's color.",
+          "order": 9,
+          "markdownDescription": "Dots of the canvas grid. A hex color such as `#1a5e8f`; empty uses the theme's color. Also set from **Colors…** in the canvas toolbar."
+        },
+        "lpg.canvas.colors.nodeKind": {
+          "type": "string",
+          "default": "",
+          "pattern": "^$|^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$",
+          "patternErrorMessage": "A hex color such as #1a5e8f, or empty to use the theme's color.",
+          "order": 10,
+          "markdownDescription": "Inspector heading when a node type is selected. A hex color such as `#1a5e8f`; empty uses the theme's color. Also set from **Colors…** in the canvas toolbar."
+        },
+        "lpg.canvas.colors.edgeKind": {
+          "type": "string",
+          "default": "",
+          "pattern": "^$|^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$",
+          "patternErrorMessage": "A hex color such as #1a5e8f, or empty to use the theme's color.",
+          "order": 11,
+          "markdownDescription": "Inspector heading when an edge type is selected. A hex color such as `#1a5e8f`; empty uses the theme's color. Also set from **Colors…** in the canvas toolbar."
+        },
+        "lpg.canvas.colors.mixinKind": {
+          "type": "string",
+          "default": "",
+          "pattern": "^$|^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$",
+          "patternErrorMessage": "A hex color such as #1a5e8f, or empty to use the theme's color.",
+          "order": 12,
+          "markdownDescription": "Inspector heading when a mixin is selected. A hex color such as `#1a5e8f`; empty uses the theme's color. Also set from **Colors…** in the canvas toolbar."
         }
       }
     }

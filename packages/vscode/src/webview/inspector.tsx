@@ -449,6 +449,46 @@ function MixinInspector(
   )
 }
 
+/**
+ * The key, one checkbox per property the type has. Declared or inherited, since a key may
+ * name either; a list or composite property is shown but disabled, because validation
+ * rejects it as part of a key. Ticking several authors a composite key, written in the
+ * order the properties are listed. See lat.md/architecture#Editing Surface#Inspector.
+ */
+export function KeyList(
+  { node, emit }: { node: WireNode; emit: (i: Intent) => void },
+): React.ReactElement {
+  const key = node.props.filter((p) => p.isKey).map((p) => p.name)
+  const toggle = (name: string, on: boolean) => emit({
+    kind: 'setKey',
+    name: node.name,
+    key: node.props.map((p) => p.name).filter((n) => (n === name ? on : key.includes(n))),
+  })
+  return (
+    <>
+      <h3 className="insp-h">Key</h3>
+      {node.props.length === 0 && (
+        <div className="insp-empty">Add a property first: a key is made of properties.</div>
+      )}
+      {node.props.map((p) => {
+        const reason = p.list ? 'a list cannot identify one node'
+          : p.composite ? 'a composite value cannot be a key column' : undefined
+        return (
+          <label key={p.id} className="insp-key" title={reason}>
+            <input type="checkbox" checked={p.isKey} disabled={reason !== undefined}
+              onChange={(e) => toggle(p.name, e.target.checked)} />
+            <span>{p.name}</span>
+            {p.inheritedFrom && <span className="insp-inherited">↑{p.inheritedFrom}</span>}
+          </label>
+        )
+      })}
+      {node.props.length > 0 && key.length === 0 && !node.abstract && (
+        <div className="insp-msg">A concrete type needs a key. Tick one property, or several for a composite key.</div>
+      )}
+    </>
+  )
+}
+
 export function Inspector(
   { node, edge, mixin, nodes, edges, mixins, scalars, emit, ask, select }: {
     node: WireNode | undefined
@@ -503,6 +543,8 @@ export function Inspector(
       <h2 className="insp-title insp-title-node">{node.name}</h2>
 
       <NodeIdentity node={node} nodes={nodes} emit={emit} />
+
+      <KeyList node={node} emit={emit} />
 
       <MixinChecklist node={node} mixins={mixins} emit={emit} ask={ask} select={select} />
 

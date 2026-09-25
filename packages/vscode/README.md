@@ -240,6 +240,8 @@ print-safe palette for the capture.
 | Setting | Default | Effect |
 | --- | --- | --- |
 | `lpg.targets.neo4j.edition` | `community` | Community cannot enforce existence or node key constraints, so under it those are reported as downgrades and emitted as comments. Set to `enterprise` to emit them for real. |
+| `lpg.canvas.theme` | `auto` | Canvas colors: `auto` follows VS Code, with borders, boxes and edges derived for contrast; or `solarizedLight`, `solarizedDark`, `black`, `white`. Also chosen from **Theme** in the canvas toolbar. |
+| `lpg.canvas.colors.*` | empty | One hex color per canvas element — `background`, `foreground`, `muted`, `border`, `accent`, `box`, `boxHeader`, `edge`, `grid`, `nodeKind`, `edgeKind`, `mixinKind` — overriding the theme. Also set with color pickers from **Colors…** in the canvas toolbar. |
 
 ## Files
 

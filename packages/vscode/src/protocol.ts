@@ -1,5 +1,7 @@
 /** Messages between the extension host and the canvas webview. */
 
+import type { ColorToken, Palette, ThemeName } from './theme'
+
 export interface WireProperty {
   id: string
   name: string
@@ -147,6 +149,13 @@ export type HostMessage =
    * carrying the bytes. See lat.md/architecture#Rendering#Exporting the diagram.
    */
   | { type: 'exportRequest'; format: 'png' | 'svg' }
+  /**
+   * The palette from `lpg.canvas.theme` and `lpg.canvas.colors.*`, sent on `ready` and
+   * whenever those settings change. `colors` is complete for a preset and holds only the
+   * overrides under `auto`; `overridden` names the tokens a user set, which the colors
+   * dialog offers to reset. See lat.md/architecture#Rendering#Canvas Theme.
+   */
+  | { type: 'theme'; theme: ThemeName; colors: Partial<Palette>; overridden: ColorToken[] }
 
 /** What an intent addresses. A mixin holds properties the same way a type does. */
 export type OwnerKind = 'nodes' | 'edges' | 'mixins'
@@ -201,3 +210,10 @@ export type ViewMessage =
    * the host a data URL to save. See lat.md/architecture#Rendering#Exporting the diagram.
    */
   | { type: 'export'; format: 'png' | 'svg'; dataUrl: string }
+  /**
+   * The toolbar picker and the colors dialog write user settings through the host; the
+   * resulting configuration change sends the palette back as a `theme` message.
+   * `value` undefined clears the override. See lat.md/architecture#Rendering#Canvas Theme.
+   */
+  | { type: 'setTheme'; theme: ThemeName }
+  | { type: 'setColor'; token: ColorToken; value: string | undefined }

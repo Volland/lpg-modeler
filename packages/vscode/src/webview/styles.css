@@ -1,28 +1,71 @@
+/**
+ * The canvas palette. Every color below is one of twelve tokens or mixed from them; the
+ * stylesheet reads no VS Code color variable except in this block. The host sets a
+ * preset's tokens, or a user's overrides, as inline style on the document element --
+ * the element these are declared on -- so the mixes recompute from whatever
+ * `--fg`/`--bg` end up being. See lat.md/architecture#Rendering#Canvas Theme.
+ *
+ * `auto` takes only background and text from the editor theme and derives the rest.
+ * Borrowing `panel.border`, `editorWidget.background` or `focusBorder` was the original
+ * design, and in most themes those sit within a few percent of the editor background:
+ * boxes, borders and edges dissolved into the canvas under light and dark themes alike.
+ */
 :root {
-  --line: var(--vscode-panel-border, #444);
-  --fg: var(--vscode-foreground, #ccc);
   --bg: var(--vscode-editor-background, #1e1e1e);
-  --accent: var(--vscode-focusBorder, #007acc);
-  --muted: var(--vscode-descriptionForeground, #999);
-  /* React Flow's own edge-label and edge-stroke defaults track the OS light/dark
-     preference, not VS Code's theme -- a dark VS Code theme on a light-mode OS renders
-     the label in React Flow's light-mode black, unreadable against a dark canvas. */
+  --fg: var(--vscode-editor-foreground, var(--vscode-foreground, #d4d4d4));
+  --muted: color-mix(in srgb, var(--fg) 72%, var(--bg));
+  --line: color-mix(in srgb, var(--fg) 45%, var(--bg));
+  /* Designed by themes to be read as text, unlike focusBorder, a thin highlight. */
+  --accent: var(--vscode-textLink-foreground, #3794ff);
+  --box: color-mix(in srgb, var(--fg) 5%, var(--bg));
+  --box-head: color-mix(in srgb, var(--fg) 12%, var(--bg));
+  --edge: color-mix(in srgb, var(--fg) 65%, var(--bg));
+  --grid: color-mix(in srgb, var(--fg) 22%, var(--bg));
+  --kind-node: var(--vscode-charts-blue, #3794ff);
+  --kind-edge: var(--vscode-charts-orange, #d18616);
+  --kind-mixin: var(--vscode-charts-purple, #b180d7);
+
+  /* Controls and banners follow the palette rather than VS Code, so a preset recolors them. */
+  --control-bg: color-mix(in srgb, var(--fg) 10%, var(--bg));
+  --control-hover: color-mix(in srgb, var(--fg) 18%, var(--bg));
+  --input-bg: color-mix(in srgb, var(--fg) 4%, var(--bg));
+  --row-hover: color-mix(in srgb, var(--fg) 9%, var(--bg));
+  --danger: color-mix(in srgb, #e5484d 75%, var(--fg));
+  --banner-error: color-mix(in srgb, #e5484d 22%, var(--bg));
+  --banner-warn: color-mix(in srgb, #d99a00 24%, var(--bg));
+
+  /* React Flow's own defaults track the OS light/dark preference, not the palette -- a
+     dark VS Code theme on a light-mode OS renders its labels in light-mode black. Every
+     variable it draws with is pointed at a token so nothing keeps a library default. */
   --xy-edge-label-color: var(--fg);
-  --xy-edge-label-bg-color: var(--bg);
-  --xy-edge-stroke: var(--line);
-  --xy-edge-stroke-selected: var(--fg);
+  --xy-edge-label-background-color: var(--bg);
+  --xy-edge-stroke: var(--edge);
+  --xy-edge-stroke-width: 1.5;
+  --xy-edge-stroke-selected: var(--accent);
+  --xy-connectionline-stroke: var(--accent);
+  --xy-background-color: var(--bg);
+  --xy-background-pattern-color: var(--grid);
+  --xy-controls-button-background-color: var(--control-bg);
+  --xy-controls-button-background-color-hover: var(--control-hover);
+  --xy-controls-button-color: var(--fg);
+  --xy-controls-button-color-hover: var(--fg);
+  --xy-controls-button-border-color: var(--line);
+  --xy-controls-box-shadow: none;
+  --xy-handle-background-color: var(--accent);
+  --xy-handle-border-color: var(--bg);
+  --xy-selection-background-color: color-mix(in srgb, var(--accent) 12%, transparent);
+  --xy-selection-border: 1px dotted var(--accent);
 }
 
 /**
  * A print-safe palette the export path applies to `.react-flow__viewport` right before
  * rasterizing -- pinned rather than derived, because a print-friendly capture needs
- * guaranteed light/dark values, not "whatever the current VS Code theme happens to be."
- * Every other export color (edge stroke, edge label, flags, badges, mixin chips) already
- * routes through `--fg`/`--bg`/`--line`/`--muted`/`--accent`, so overriding just these
- * five, plus the two raw editor-background names the box and title bar read directly,
- * covers the whole diagram. Chosen for contrast against white after grayscale
- * conversion, not just for hue: `--accent` is a dark blue rather than a bright one, so
- * a black-and-white printout doesn't lose it to a same-lightness wash.
+ * guaranteed light/dark values, not "whatever the current palette happens to be." A
+ * mixed token is computed where it is declared, so overriding `--fg` here would not
+ * re-derive the box or edge colors: every token the diagram draws with is pinned.
+ * Chosen for contrast against white after grayscale conversion, not just for hue:
+ * `--accent` is a dark blue rather than a bright one, so a black-and-white printout
+ * doesn't lose it to a same-lightness wash.
  */
 .export-light {
   --bg: #fff;
@@ -30,12 +73,23 @@
   --line: #888;
   --muted: #595959;
   --accent: #0b5fa5;
-  --vscode-editor-background: #fff;
-  --vscode-editorWidget-background: #fff;
-  --vscode-titleBar-activeBackground: #f0f0f0;
+  --box: #fff;
+  --box-head: #f0f0f0;
+  --edge: #555;
+  --grid: #ddd;
+  --row-hover: transparent;
+  --control-bg: #f0f0f0;
+  --xy-edge-label-color: #1a1a1a;
+  --xy-edge-label-background-color: #fff;
+  --xy-edge-stroke: #555;
+  --xy-handle-background-color: #0b5fa5;
+  --xy-handle-border-color: #fff;
 }
 
 body { margin: 0; font-family: var(--vscode-font-family, sans-serif); color: var(--fg); background: var(--bg); }
+button, select, input { font-family: inherit; }
+.react-flow { background: var(--bg); }
+.react-flow__node.selected .erd { outline: 2px solid var(--accent); outline-offset: 1px; }
 .app { display: flex; flex-direction: column; height: 100vh; }
 .empty { padding: 24px; color: var(--muted); }
 
@@ -46,30 +100,33 @@ body { margin: 0; font-family: var(--vscode-font-family, sans-serif); color: var
 .toolbar .spacer { flex: 1; }
 .toolbar-sep { width: 1px; align-self: stretch; background: var(--line); }
 .toolbar-check { font-weight: 400; color: var(--muted); display: inline-flex; align-items: center; gap: 3px; }
-.toolbar button.primary { background: var(--vscode-button-background, #0e639c); color: var(--vscode-button-foreground, #fff); border-color: transparent; }
+.toolbar button.primary { background: var(--accent); color: var(--bg); border-color: transparent; font-weight: 600; }
 .toolbar button:disabled { opacity: 0.5; cursor: default; }
 .toolbar button, .toolbar select {
-  background: var(--vscode-button-secondaryBackground, #3a3d41);
-  color: var(--vscode-button-secondaryForeground, #ccc);
+  background: var(--control-bg);
+  color: var(--fg);
   border: 1px solid var(--line); border-radius: 3px; padding: 3px 8px; cursor: pointer; font-size: 12px;
 }
+.toolbar button:not(:disabled):hover { background: var(--control-hover); }
+.toolbar button.primary:not(:disabled):hover { background: var(--accent); filter: brightness(1.1); }
+.toolbar label { color: var(--fg); }
 
 .banner { padding: 5px 10px; font-size: 12px; border-bottom: 1px solid var(--line); }
-.banner.error { background: var(--vscode-inputValidation-errorBackground, #5a1d1d); }
-.banner.warn  { background: var(--vscode-inputValidation-warningBackground, #5a4d1d); }
+.banner.error { background: var(--banner-error); color: var(--fg); }
+.banner.warn  { background: var(--banner-warn); color: var(--fg); }
 
 .canvas { flex: 1; min-height: 0; }
 
 /* --- ERD node --- */
 .erd {
-  width: 240px; background: var(--vscode-editorWidget-background, #252526);
+  width: 240px; background: var(--box); color: var(--fg);
   border: 1px solid var(--line); border-radius: 4px; font-size: 11px; overflow: hidden;
 }
 .erd-abstract { border-style: dashed; opacity: 0.9; }
 .erd-title {
   display: flex; align-items: center; gap: 6px;
   padding: 5px 7px; border-bottom: 1px solid var(--line);
-  background: var(--vscode-titleBar-activeBackground, #2d2d2d); font-weight: 600;
+  background: var(--box-head); font-weight: 600;
 }
 .erd-name { cursor: pointer; background: none; border: none; color: inherit; font: inherit; font-weight: 600; padding: 0; text-align: left; }
 .erd-name:hover { text-decoration: underline; }
@@ -80,26 +137,31 @@ body { margin: 0; font-family: var(--vscode-font-family, sans-serif); color: var
 .erd-extends { font-size: 10px; color: var(--muted); font-weight: 400; }
 .erd-rows { display: flex; flex-direction: column; }
 .erd-row { display: flex; align-items: center; gap: 5px; padding: 2px 7px; height: 20px; }
-.erd-row:hover { background: var(--vscode-list-hoverBackground, #2a2d2e); }
-.erd-inherited { opacity: 0.65; font-style: italic; }
+.erd-row:hover { background: var(--row-hover); }
+/* Italic and muted rather than translucent: opacity took inherited rows below the floor. */
+.erd-inherited { font-style: italic; }
+.erd-inherited .erd-prop { color: var(--muted); }
 .erd-prop { flex: 1; }
 .erd-type { color: var(--muted); font-size: 10px; }
 .erd-flag { color: var(--accent); font-weight: 700; }
 .erd-from { color: var(--muted); font-size: 9px; }
 .erd-empty { padding: 4px 7px; color: var(--muted); font-style: italic; }
-.erd-key { background: none; border: none; cursor: pointer; padding: 0; font-size: 10px; }
-.erd-key.on { filter: none; }
+/* A bare button renders in the browser's default black, which is how the key toggle
+   went unseen on every dark theme. Every button here names its color. */
+.erd-key { background: none; border: none; cursor: pointer; padding: 0; font-size: 11px; width: 14px; color: var(--muted); }
+.erd-key:hover { color: var(--accent); }
+.erd-key.on { color: var(--accent); }
 .erd-x { background: none; border: none; color: var(--muted); cursor: pointer; padding: 0 2px; }
-.erd-x:hover { color: var(--vscode-errorForeground, #f48771); }
+.erd-x:hover { color: var(--danger); }
 .erd-add { width: 100%; background: none; border: none; border-top: 1px solid var(--line); color: var(--muted); cursor: pointer; padding: 3px; font-size: 10px; }
 .erd-add:hover { color: var(--fg); }
-.erd-handle { width: 7px; height: 7px; background: var(--accent); }
+.erd-handle { width: 8px; height: 8px; background: var(--accent); border: 1px solid var(--bg); }
 
 /* --- dialogs ---
    A VS Code webview is a sandboxed iframe: window.prompt and window.confirm return
    without showing anything, so every question the canvas asks is rendered here. */
 .modal { position: fixed; inset: 0; background: rgba(0,0,0,0.45); display: flex; align-items: center; justify-content: center; z-index: 20; }
-.modal-body { background: var(--vscode-editorWidget-background, #252526); border: 1px solid var(--line); border-radius: 4px; padding: 14px; min-width: 320px; max-width: 420px; font-size: 12px; }
+.modal-body { background: var(--bg); color: var(--fg); border: 1px solid var(--line); border-radius: 4px; padding: 14px; min-width: 320px; max-width: 420px; font-size: 12px; }
 .modal-title { font-weight: 600; margin-bottom: 10px; }
 .modal-text { color: var(--muted); margin: 0 0 10px; line-height: 1.45; }
 .modal-row { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; }
@@ -107,10 +169,10 @@ body { margin: 0; font-family: var(--vscode-font-family, sans-serif); color: var
 .modal-arrow { color: var(--muted); }
 .modal-row input { flex: 1; min-width: 0; }
 .modal-actions { display: flex; gap: 6px; justify-content: flex-end; margin-top: 4px; }
-.modal-body input, .modal-body select { background: var(--vscode-input-background, #3c3c3c); color: var(--vscode-input-foreground, #ccc); border: 1px solid var(--line); border-radius: 3px; padding: 4px 6px; }
-.modal-body button { background: var(--vscode-button-secondaryBackground, #3a3d41); color: var(--vscode-button-secondaryForeground, #ccc); border: 1px solid var(--line); border-radius: 3px; padding: 4px 12px; cursor: pointer; font-size: 12px; }
-.modal-body button.primary { background: var(--vscode-button-background, #0e639c); color: var(--vscode-button-foreground, #fff); border-color: transparent; }
-.modal-body button.danger { background: var(--vscode-inputValidation-errorBackground, #5a1d1d); color: var(--fg); }
+.modal-body input, .modal-body select { background: var(--input-bg); color: var(--fg); border: 1px solid var(--line); border-radius: 3px; padding: 4px 6px; }
+.modal-body button { background: var(--control-bg); color: var(--fg); border: 1px solid var(--line); border-radius: 3px; padding: 4px 12px; cursor: pointer; font-size: 12px; }
+.modal-body button.primary { background: var(--accent); color: var(--bg); border-color: transparent; font-weight: 600; }
+.modal-body button.danger { background: var(--banner-error); color: var(--fg); border-color: var(--danger); }
 .modal-body button:disabled { opacity: 0.5; cursor: default; }
 
 /* Open types and enum-constrained properties, added with the constraint work. */
@@ -121,12 +183,12 @@ body { margin: 0; font-family: var(--vscode-font-family, sans-serif); color: var
 .workspace { display: flex; flex: 1; min-height: 0; }
 .workspace .canvas { flex: 1; min-width: 0; }
 .inspector { width: 260px; flex: none; overflow-y: auto; padding: 10px 12px;
-  border-left: 1px solid var(--line); background: var(--panel); font-size: 11px; }
+  border-left: 1px solid var(--line); background: var(--bg); color: var(--fg); font-size: 11px; }
 .insp-title { font-size: 13px; margin: 0 0 8px; }
 /* Same heading, three kinds of selection: color tells node/edge/mixin apart at a glance. */
-.insp-title-node { color: var(--vscode-charts-blue, #3794ff); }
-.insp-title-edge { color: var(--vscode-charts-orange, #d18616); }
-.insp-title-mixin { color: var(--vscode-charts-purple, #b180d7); }
+.insp-title-node { color: var(--kind-node); }
+.insp-title-edge { color: var(--kind-edge); }
+.insp-title-mixin { color: var(--kind-mixin); }
 .insp-h { font-size: 10px; text-transform: uppercase; color: var(--muted);
   margin: 14px 0 6px; letter-spacing: .04em; }
 .insp-empty { color: var(--muted); font-style: italic; }
@@ -153,14 +215,13 @@ body { margin: 0; font-family: var(--vscode-font-family, sans-serif); color: var
 /* Identity and endpoint editing, beside the constraints they belong with. */
 .insp-field { display: flex; align-items: center; gap: 6px; margin-bottom: 5px; }
 .insp-field > span { color: var(--muted); min-width: 54px; }
-.insp-input { flex: 1; min-width: 0; background: var(--vscode-input-background, #3c3c3c);
-  color: var(--vscode-input-foreground, #ccc); border: 1px solid var(--line);
+.insp-input { flex: 1; min-width: 0; background: var(--input-bg);
+  color: var(--fg); border: 1px solid var(--line);
   border-radius: 3px; padding: 3px 5px; font-size: 11px; }
 .insp-check { display: flex; align-items: center; gap: 6px; margin: 6px 0 2px; color: var(--muted); }
 .insp-danger { width: 100%; margin-top: 16px; background: none; color: var(--muted);
   border: 1px solid var(--line); border-radius: 3px; padding: 4px; cursor: pointer; font-size: 11px; }
-.insp-danger:hover { color: var(--vscode-errorForeground, #f48771);
-  border-color: var(--vscode-errorForeground, #f48771); }
+.insp-danger:hover { color: var(--danger); border-color: var(--danger); }
 
 /* Mixins read differently from inheritance: a bag of properties, not a supertype. */
 .erd-mixin { background: none; border: 1px solid var(--line); border-radius: 2px;
@@ -174,3 +235,25 @@ body { margin: 0; font-family: var(--vscode-font-family, sans-serif); color: var
 .insp-link:hover { text-decoration: underline; }
 .insp-edge { display: flex; align-items: center; gap: 6px; margin-bottom: 3px; }
 .insp-inherited { color: var(--muted); font-size: 9px; }
+
+/* Inspector controls not otherwise styled: a bare select or input takes the browser's
+   light-mode defaults, white on a dark palette. */
+.inspector select, .inspector input[type="text"], .inspector input:not([type]),
+.insp-add select, .insp-add input {
+  background: var(--input-bg); color: var(--fg); border: 1px solid var(--line);
+  border-radius: 3px; font-size: 11px; }
+.inspector button:not([class]) { background: var(--control-bg); color: var(--fg);
+  border: 1px solid var(--line); border-radius: 3px; cursor: pointer; font-size: 11px; }
+.inspector input[type="checkbox"], .toolbar input[type="checkbox"] { accent-color: var(--accent); }
+
+/* The key, chosen here as well as on the box: see lat.md/architecture#Editing Surface#Inspector. */
+.insp-key { display: flex; align-items: center; gap: 6px; margin: 2px 0; }
+.insp-key input:disabled + span { color: var(--muted); }
+
+/* --- theme and colors --- */
+.color-grid { display: grid; grid-template-columns: 1fr auto auto auto; align-items: center;
+  gap: 5px 8px; margin-bottom: 10px; }
+.color-grid input[type="color"] { width: 34px; height: 22px; padding: 0 2px; cursor: pointer; }
+.color-grid code { color: var(--muted); font-size: 11px; }
+.color-grid button.reset { padding: 1px 6px; font-size: 11px; }
+.color-overridden { font-weight: 600; }

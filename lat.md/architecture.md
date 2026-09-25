@@ -88,7 +88,13 @@ Bounds, patterns and [[metamodel#Named Constraints]] have no place on an ERD box
 
 A mixin is edited here too, selected from a chip on any type that applies it or from the panel's own list, and applied through a checkbox per mixin rather than a parent dropdown — the metamodel's distinction, made visible. The list is what the panel shows when nothing is selected, because a mixin no type applies has no box to be reached from.
 
-The panel heading is the same `<h2>` for a node, an edge and a mixin, so its color carries the only cue for which kind is selected: blue for a node type, orange for an edge type, purple for a mixin, matching no other accent used on the canvas.
+The panel heading is the same `<h2>` for a node, an edge and a mixin, so its color carries the only cue for which kind is selected: blue for a node type, orange for an edge type, purple for a mixin, matching no other accent used on the canvas. The three are theme tokens — see [[architecture#Rendering#Canvas Theme]].
+
+#### Choosing the key
+
+A node type's [[metamodel#Identity|key]] is a checkbox per property in the panel, declared or inherited, and ticking several authors a composite key in the order the properties are listed.
+
+The row toggle on the box sets a single-property key and nothing more, and for a long time it was the only way: a user who did not find it concluded that keys could only be typed into the file. The panel is where a user looks for what a type *is*, so the key belongs there beside its name and parent. A list or composite property is listed but disabled with the reason, because validation rejects it as part of a key and a checkbox that produces an error is worse than one that explains itself.
 
 ## Examples
 
@@ -136,9 +142,9 @@ The webview has no filesystem access, so it computes a tight crop with `getNodes
 
 `toSvg` wraps the captured HTML in a `<foreignObject>` rather than emitting pure vector paths — a real limitation of rasterizing a DOM-based canvas, and the reason [[architecture#Rendering|React Flow itself]] was chosen despite it. The file opens correctly in a browser or image viewer; it is not the kind of SVG a vector editor decomposes into shapes.
 
-Both formats depend on the same theme variables the rest of the canvas uses. React Flow's own edge-label and edge-stroke defaults track the OS light/dark preference rather than VS Code's theme, which goes unreadable exactly when those two disagree (a dark VS Code theme on a light-mode OS renders label text in React Flow's light-mode black); `--xy-edge-label-color`, `--xy-edge-label-bg-color`, `--xy-edge-stroke` and `--xy-edge-stroke-selected` are overridden in `styles.css` to the same `--fg`/`--bg`/`--line` the rest of the panel uses, so both the live canvas and an export are legible under whatever theme produced them.
+Both formats depend on the same theme variables the rest of the canvas uses. React Flow's own edge-label and edge-stroke defaults track the OS light/dark preference rather than VS Code's theme, which goes unreadable exactly when those two disagree (a dark VS Code theme on a light-mode OS renders label text in React Flow's light-mode black); every React Flow color variable is overridden in `styles.css` to a [[architecture#Rendering#Canvas Theme|theme token]], so both the live canvas and an export are legible under whatever theme produced them.
 
-The toolbar's "light" checkbox asks for a print-safe capture instead: white background, dark ink, no color-only cues. It adds an `.export-light` class to `.react-flow__viewport` for the duration of the capture and removes it once the data URL is sent, rather than switching the live canvas's theme — the class pins `--bg`, `--fg`, `--line`, `--muted`, `--accent` and the two raw editor-background names the box and title bar read directly, to fixed values chosen for contrast after grayscale conversion rather than for hue (`--accent` is a dark blue, not a bright one, so it doesn't wash out to the same lightness as the background on a black-and-white printout). Everything else the diagram draws already routes through those five variables, so nothing else needs to change for the export to come out print-safe.
+The toolbar's "light" checkbox asks for a print-safe capture instead: white background, dark ink, no color-only cues. It adds an `.export-light` class to `.react-flow__viewport` for the duration of the capture and removes it once the data URL is sent, rather than switching the live canvas's theme — the class pins every theme token to fixed values chosen for contrast after grayscale conversion rather than for hue (`--accent` is a dark blue, not a bright one, so it doesn't wash out to the same lightness as the background on a black-and-white printout). Everything the diagram draws routes through those tokens, so nothing else needs to change for the export to come out print-safe, whatever theme the live canvas uses.
 
 #### Entry points outside the canvas
 
@@ -149,6 +155,34 @@ The toolbar buttons only exist once the canvas is open, which makes an export so
 Only the webview can rasterize, so the host relays an `exportRequest` and the bytes come back over the existing `export` message. A request that arrives before the projection is laid out is held until there are boxes, plus a tick for React Flow to measure them: capturing immediately would write an empty picture, which is worse than a slow one. The panel is revealed without taking focus, because a command that writes a picture of a diagram nobody can see is hard to trust, and because a hidden webview is not a dependable thing to screenshot.
 
 The `light` checkbox stays the single place that preference lives — a command exports print-safe only when the canvas is set to. Duplicating it as a setting or a second pair of commands would give the same question two answers that can disagree.
+
+### Canvas Theme
+
+Every color the canvas draws is one of twelve tokens. `lpg.canvas.theme` picks a palette — `auto`, Solarized Light, Solarized Dark, Black or White — and `lpg.canvas.colors.*` overrides any one token.
+
+The tokens are background, text, secondary text, borders, accent, box fill, box header, edge lines, grid dots, and the three inspector headings. Controls, inputs, banners and every React Flow variable (edge stroke and label, zoom controls, handles, grid pattern) are pointed at them or mixed from them with `color-mix()`, so nothing on the canvas keeps a library or browser default. The palette module is [[packages/vscode/src/theme.ts#resolveTheme]]; it has no `vscode` import, so the host and the tests share it.
+
+#### Contrast floor
+
+`auto` takes only background and text from the editor theme and mixes every other token from those two; the built-in presets are tested against WCAG floors.
+
+The canvas originally borrowed `panel.border`, `editorWidget.background`, `focusBorder` and `descriptionForeground`. Themes design those for other surfaces, and in most of them they sit within a few percent of the editor background, so boxes, borders and edges dissolved into the canvas under light and dark themes alike. The key toggle was a button with no color at all, which renders in the browser's default black: invisible on every dark theme, and the reason a user reported not being able to find where a key is set. Mixing from foreground and background guarantees distance for any theme whose text is readable, which is the one thing every theme guarantees. Accent comes from `textLink.foreground`, which themes design to be read as text.
+
+The presets meet 7:1 for text, 4.5:1 for secondary and accent text on the canvas, box and header, and 3:1 for borders and edges. The Solarized presets keep Solarized's tones and hues but take text from the high-contrast end of the scale and shift the accents, because stock Solarized puts body text near 4.9:1 and blue near 3.3:1. A test reads the stylesheet and fails if any rule outside the palette block reads a VS Code color variable, so the original bug cannot come back one rule at a time.
+
+A mixed custom property is computed where it is declared. Overrides are therefore set on the document element, where the mixes are declared, so overriding text alone re-derives everything mixed from it; the print-safe `.export-light` class, applied to a descendant, pins every token for the same reason — see [[architecture#Rendering#Exporting the diagram]].
+
+#### Presets and overrides
+
+A preset fills all twelve tokens; `auto` fills only what the user overrode and leaves the rest to the stylesheet. A value that is not a hex color is dropped, so a half-typed setting never reaches CSS.
+
+Twelve flat string settings rather than one object setting: the Settings UI shows an object setting only as a link to `settings.json`, which is exactly the text editing the feature exists to spare. Each has a hex pattern, so the Settings UI validates as the user types.
+
+#### Settings as the store
+
+The palette is a viewer's preference, not part of the model, so it lives in user settings — never in the model file or a sidecar (see [[architecture#Source of Truth]]).
+
+The toolbar's theme picker and its colors dialog post `setTheme` and `setColor`; the host writes the user setting, and the configuration change sends the palette back to every open canvas. The canvas never styles itself ahead of the setting it claims to reflect, so the dialog, the Settings UI and the canvas cannot disagree. The palette is sent on `ready`, before the first projection, so a canvas never flashes the wrong colors. A color picker previews while it is dragged and writes once when it closes: its `input` event fires on every movement, and writing on it would rewrite the settings file dozens of times a second.
 
 ## Roadmap
 

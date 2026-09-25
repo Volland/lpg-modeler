@@ -4,6 +4,25 @@ All notable changes to LPG Modeler are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **Canvas themes.** Pick Solarized Light, Solarized Dark, Black or White from **Theme** in the
+  canvas toolbar, or keep following VS Code. Every canvas color can be changed with a color
+  picker from **Colors…**, and the choices are saved as ordinary settings
+  (`lpg.canvas.theme`, `lpg.canvas.colors.*`) that the Settings UI edits too.
+- **The key is chosen in the inspector.** A checkbox per property, so a composite key no
+  longer needs editing the file.
+
+### Fixed
+
+- **The canvas was hard to read under most themes, light or dark.** Borders, box fills and
+  edges were taken from VS Code colors that sit within a few percent of the editor
+  background. They are now derived from the theme's text and background, and every built-in
+  theme meets WCAG contrast. The key toggle on each property row was drawn in the browser's
+  default black and could not be seen on a dark theme; it now uses the theme's colors.
+
 ## [0.15.0] — 2026-09-21
 
 No change to the extension itself. This version matches the command-line release, which can

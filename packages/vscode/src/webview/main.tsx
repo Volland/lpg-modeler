@@ -15,6 +15,8 @@ import {
   ConfirmDialog, EdgeDialog, EdgeToNewNodeDialog, PromptDialog, PropertyDialog,
   type Dialog,
 } from './dialogs'
+import { ColorsDialog, applyTheme } from './theme'
+import { THEME_LABELS, THEME_NAMES, type ColorToken, type ThemeName } from '../theme'
 
 declare function acquireVsCodeApi(): { postMessage(m: ViewMessage): void }
 const vscode = acquireVsCodeApi()
@@ -90,6 +92,10 @@ function App(): React.ReactElement {
   const [dialog, setDialog] = React.useState<Dialog | undefined>()
   const [selected, setSelected] = React.useState<string | undefined>(undefined)
   const [lightExport, setLightExport] = React.useState(false)
+  const [theme, setTheme] = React.useState<ThemeName>('auto')
+  const [overridden, setOverridden] = React.useState<ColorToken[]>([])
+  const [themeRevision, setThemeRevision] = React.useState(0)
+  const [colorsOpen, setColorsOpen] = React.useState(false)
   const { fitView, getNodes } = useReactFlow()
   // Read inside the projection effect without making that effect depend on selection.
   const selectedRef = React.useRef<string | undefined>(undefined)
@@ -157,6 +163,15 @@ function App(): React.ReactElement {
       if (message.type === 'exportRequest') {
         // Counted, so asking for the same format twice runs twice.
         setPendingExport((n) => ({ format: message.format, seq: (n?.seq ?? 0) + 1 }))
+        return
+      }
+      if (message.type === 'theme') {
+        // Applied before the first projection arrives, so the canvas never flashes the
+        // wrong palette. See lat.md/architecture#Rendering#Canvas Theme.
+        applyTheme(message.colors)
+        setTheme(message.theme)
+        setOverridden(message.overridden)
+        setThemeRevision((n) => n + 1)
         return
       }
       if (message.type === 'invalid') { setNotice(message.message); return }
@@ -313,6 +328,15 @@ function App(): React.ReactElement {
         <button title="A named bag of properties types can apply"
           onClick={() => setDialog({ kind: 'newMixin' })}>+ mixin</button>
         <span className="spacer" />
+        <label title="Canvas color theme. Saved to your user settings as lpg.canvas.theme.">
+          Theme{' '}
+          <select value={theme}
+            onChange={(e) => post({ type: 'setTheme', theme: e.target.value as ThemeName })}>
+            {THEME_NAMES.map((t) => <option key={t} value={t}>{THEME_LABELS[t]}</option>)}
+          </select>
+        </label>
+        <button title="Choose any canvas color" onClick={() => setColorsOpen(true)}>Colors…</button>
+        <span className="toolbar-sep" />
         <label>
           Export{' '}
           <label className="toolbar-check"
@@ -475,6 +499,13 @@ function App(): React.ReactElement {
             })
             close()
           }} />
+      )}
+
+      {colorsOpen && (
+        <ColorsDialog
+          overridden={overridden} revision={themeRevision}
+          onSet={(token, value) => post({ type: 'setColor', token, value })}
+          onClose={() => setColorsOpen(false)} />
       )}
 
       <div className="workspace">
