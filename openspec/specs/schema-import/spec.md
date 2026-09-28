@@ -167,3 +167,113 @@ The memgraph import source SHALL report as a diagnostic whatever the instance ca
 
 - **WHEN** the URI cannot be reached or authentication fails
 - **THEN** the command exits non-zero, names the URI and the reason, and writes no model file
+
+### Requirement: Identifying the engine behind a Bolt URI
+
+`lpg import <bolt-uri>` SHALL ask the instance which engine it is before reading its schema, and SHALL NOT infer it from the URI. The engine SHALL be identified as memgraph when `CALL dbms.components()` returns a row named `Memgraph`, and as neo4j when it returns a row named `Neo4j Kernel` and no `Memgraph` row. `--from memgraph` or `--from neo4j` SHALL override the probe.
+
+#### Scenario: A Memgraph instance is not read as a Neo4j
+
+- **WHEN** a running Memgraph is imported from a `bolt://` URI with no `--from`
+- **THEN** it is read as a memgraph instance, because its components name Memgraph even though they also name a Neo4j kernel
+
+#### Scenario: A Neo4j instance is read as a Neo4j
+
+- **WHEN** a running Neo4j is imported from a `bolt://` URI with no `--from`
+- **THEN** it is read as a neo4j instance
+
+#### Scenario: An engine the tool has not met
+
+- **WHEN** a Bolt instance answers `CALL dbms.components()` with neither a Memgraph nor a Neo4j Kernel row
+- **THEN** an `import-unknown-engine` error names what the instance called itself, nothing is read, and the command exits non-zero
+
+### Requirement: Reading a running Neo4j instance
+
+`lpg import <bolt-uri>` against a Neo4j SHALL read its schema in read sessions only, leaving the instance unchanged. A uniqueness constraint SHALL make a property unique; a node key constraint SHALL make its properties the node type's key; an existence constraint SHALL make a property required. Where no key constraint exists, the key SHALL be recovered from a uniqueness constraint, preferring one whose properties carry an index, and the choice SHALL be reported. Labels, properties, observed property types, the label hierarchy and edge endpoints SHALL be read from the schema procedures. Every reading that is an inference rather than a declaration SHALL be reported.
+
+#### Scenario: A generated schema round-trips
+
+- **WHEN** the neo4j script generated for a model is applied to an empty instance, one node per concrete type and one relationship per edge type are written, and the instance is imported
+- **THEN** the model holds every node type with its key, its unique properties and its edge types, and the resulting file passes `lpg check`
+
+#### Scenario: Recovering a key without a key constraint
+
+- **WHEN** a Community instance carries a uniqueness constraint on `Person.id` and an index on those properties, and no node key constraint
+- **THEN** `id` is read as the key of `Person` and the recovery is reported
+
+#### Scenario: A property observed but not declared
+
+- **WHEN** a label carries a property that no constraint mentions
+- **THEN** the property is read with its observed type, and the import reports that it came from stored data rather than from a constraint
+
+#### Scenario: A Community instance is not credited with constraints it cannot hold
+
+- **WHEN** a Community instance is imported, where no existence constraint can exist
+- **THEN** no property is read as required except the parts of a key, whatever the stored data happens to carry, and the import says that the edition is why
+
+#### Scenario: Token lookup and constraint-owned indexes
+
+- **WHEN** an instance is imported whose indexes include the token lookup indexes present on every database and the index a uniqueness constraint owns
+- **THEN** neither appears in the model as an index of its own
+
+#### Scenario: What Neo4j cannot hold
+
+- **WHEN** any Neo4j instance is imported
+- **THEN** the import reports that cardinality, value bounds, named constraints, mixins, enums and integer widths are not recoverable from it
+
+### Requirement: Reading a running FalkorDB instance
+
+`lpg import redis://host:port` SHALL read a FalkorDB graph's schema from `CALL db.constraints()` and `CALL db.indexes()`, and its structure from bounded sampling queries. A `MANDATORY` constraint SHALL make a property required; a `UNIQUE` constraint SHALL make it unique; a `UNIQUE` constraint whose every property is also `MANDATORY` and indexed SHALL be read as the node type's key, and where several qualify the smallest SHALL be taken and the choice reported. A hierarchy inferred from sampled label sets, and edge endpoints from sampled relationships, SHALL each be reported as an inference.
+
+#### Scenario: A generated schema round-trips
+
+- **WHEN** the falkordb script generated for a model is applied to an empty graph, one node per concrete type and one relationship per edge type are written, and the graph is imported
+- **THEN** the model holds every node type with its key, its required and unique properties and its edge types, and the resulting file passes `lpg check`
+
+#### Scenario: What FalkorDB cannot hold
+
+- **WHEN** any FalkorDB graph is imported
+- **THEN** the import reports that enums, cardinality, value bounds, named constraints and mixins are not recoverable from it
+
+#### Scenario: A sample that was cut short
+
+- **WHEN** a graph holds more distinct label sets or relationship endpoint pairs than the sampling bound returns
+- **THEN** the import reports that the structure was read from a bounded sample, so a type or an endpoint pair may be missing
+
+### Requirement: A constraint that is not enforcing is not part of the schema
+
+An import SHALL read a constraint as part of the schema only when its status is operational. A constraint reported `FAILED` or `PENDING` SHALL NOT contribute a key, a required property or a unique property to the model, and SHALL be reported with its status.
+
+#### Scenario: A constraint the stored data defeated
+
+- **WHEN** a graph holds a `UNIQUE` constraint whose status is `FAILED` because two stored nodes share the value
+- **THEN** the property is not read as unique, the node type does not take it as a key, and an `import-constraint-failed` diagnostic names the constraint and its status
+
+#### Scenario: A constraint that has not settled
+
+- **WHEN** a graph holds a constraint whose status is still `PENDING`
+- **THEN** it does not contribute to the model and is reported as not yet enforcing
+
+### Requirement: Importing names the graph and never creates one
+
+An import SHALL read a graph only through read-only queries, which the server refuses to write through, and SHALL confirm that the graph key exists before querying it — because a writable query against an unknown key creates that key. When `--graph-key` is not given and the server holds exactly one graph, that graph SHALL be read; when it holds several, they SHALL be listed and nothing read.
+
+#### Scenario: A mistyped graph key
+
+- **WHEN** a graph key that the server does not hold is imported
+- **THEN** an `import-no-graph` error names the keys the server does hold, no graph is created, nothing is written, and the command exits non-zero
+
+#### Scenario: An import cannot write even by mistake
+
+- **WHEN** any graph is imported
+- **THEN** every command the import sends is a read-only query, which the server refuses to perform a write through
+
+#### Scenario: One graph needs no naming
+
+- **WHEN** an instance holding exactly one graph is imported with no `--graph-key`
+- **THEN** that graph is read and its key is reported
+
+#### Scenario: Several graphs
+
+- **WHEN** an instance holding more than one graph is imported with no `--graph-key`
+- **THEN** the graph keys are listed, nothing is read, and the command exits non-zero

@@ -95,6 +95,12 @@ context: |
   was deferred only because nothing could check its output; Memgraph Community runs in
   a container, and its suites run when LPG_MEMGRAPH_URI is set.
 
+  `lpg apply` and live import then widened past Memgraph (changes `add-ladybug-apply`,
+  `add-neo4j-live`, `add-falkordb-live`, archived 2026-09-28): apply reaches ladybug,
+  neo4j, memgraph and falkordb; import reads a running Neo4j and FalkorDB. A Bolt URI
+  is identified by engine, Memgraph first. Canvas themes (`add-canvas-themes`) keep
+  the palette in editor settings. None of the four amended a locked decision.
+
   Visual authoring, the layout sidecar, editable views, and the RDF targets moved
   from OUT to IN: shipping a compiler first would have left the tool unusable for
   its stated purpose until a second release.
