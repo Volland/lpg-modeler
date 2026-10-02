@@ -1,15 +1,15 @@
 import * as React from 'react'
 import { createRoot } from 'react-dom/client'
 import {
-  Background, Controls, ReactFlow, ReactFlowProvider, useReactFlow,
+  Background, ConnectionMode, Controls, ReactFlow, ReactFlowProvider, useReactFlow,
   getNodesBounds, getViewportForBounds,
   type Connection, type Edge, type FinalConnectionState, type Node,
   type NodeChange, applyNodeChanges,
 } from '@xyflow/react'
 import { toPng, toSvg } from 'html-to-image'
-import ELK from 'elkjs/lib/elk.bundled.js'
 import type { HostMessage, Intent, Projection, ViewMessage } from '../protocol'
-import { ErdNode, type ErdNodeData } from './nodes'
+import { EdgeBox, ErdNode, type EdgeBoxData, type ErdNodeData } from './nodes'
+import { EDGE_WIDTH, NODE_WIDTH, connectors, faceSides, place, type Extent } from './diagram'
 import { Inspector } from './inspector'
 import {
   ConfirmDialog, EdgeDialog, EdgeToNewNodeDialog, PromptDialog, PropertyDialog,
@@ -24,12 +24,7 @@ const post = (m: ViewMessage) => vscode.postMessage(m)
 const intent = (i: Intent) => post({ type: 'intent', intent: i })
 
 
-const elk = new ELK()
-const NODE_TYPES = { erd: ErdNode }
-
-const NODE_WIDTH = 240
-/** Height estimate so ELK reserves room for the property rows. */
-const heightOf = (propCount: number) => 56 + propCount * 22 + 26
+const NODE_TYPES = { erd: ErdNode, edge: EdgeBox }
 
 /**
  * How far out the canvas may zoom. React Flow's own floor is 0.5, which is nowhere near
@@ -41,48 +36,11 @@ const heightOf = (propCount: number) => 56 + propCount * 22 + 26
 const MIN_ZOOM = 0.05
 const FIT_VIEW = { padding: 0.15 }
 
-type Positions = Record<string, { x: number; y: number }>
-
-/**
- * Give every box a position. A diagram that has none is laid out wholesale by ELK; once
- * boxes are placed, a newly created type goes in a fresh column beside them rather than
- * triggering a relayout that would move everything the user had arranged.
- */
-async function place(p: Projection, existing: Positions): Promise<Positions> {
-  const missing = p.nodes.filter((n) => !existing[n.id])
-  if (missing.length === 0) return existing
-
-  const placed = p.nodes.map((n) => existing[n.id]).filter((pt): pt is { x: number; y: number } => Boolean(pt))
-  if (placed.length > 0) {
-    const x = Math.max(...placed.map((pt) => pt.x)) + NODE_WIDTH + 96
-    const top = Math.min(...placed.map((pt) => pt.y))
-    const out = { ...existing }
-    missing.forEach((n, i) => { out[n.id] = { x, y: top + i * (heightOf(n.props.length) + 48) } })
-    return out
-  }
-
-  const graph = {
-    id: 'root',
-    layoutOptions: {
-      'elk.algorithm': 'layered',
-      'elk.direction': 'RIGHT',
-      'elk.spacing.nodeNode': '48',
-      'elk.layered.spacing.nodeNodeBetweenLayers': '96',
-    },
-    children: p.nodes.map((n) => ({ id: n.id, width: NODE_WIDTH, height: heightOf(n.props.length) })),
-    edges: p.edges.map((e) => {
-      const from = p.nodes.find((n) => n.name === e.from)
-      const to = p.nodes.find((n) => n.name === e.to)
-      return from && to ? { id: e.id, sources: [from.id], targets: [to.id] } : undefined
-    }).filter((e): e is { id: string; sources: string[]; targets: string[] } => Boolean(e)),
-  }
-  const laid = await elk.layout(graph)
-  const out = { ...existing }
-  for (const child of laid.children ?? []) {
-    if (!out[child.id]) out[child.id] = { x: child.x ?? 0, y: child.y ?? 0 }
-  }
-  return out
-}
+/** Where each box on the canvas stands, for attaching connectors to facing sides. */
+const extents = (nodes: Node[]): Map<string, Extent> => new Map(nodes.map((n) => [n.id, {
+  x: n.position.x,
+  width: n.measured?.width ?? (n.type === 'edge' ? EDGE_WIDTH : NODE_WIDTH),
+}]))
 
 function App(): React.ReactElement {
   const [projection, setProjection] = React.useState<Projection | undefined>()
@@ -210,7 +168,7 @@ function App(): React.ReactElement {
           if (found) setSelected(found.id)
         },
       }
-      setNodes(projection.nodes.map((n): Node => ({
+      const typeBoxes = projection.nodes.map((n): Node => ({
         id: n.id,
         type: 'erd',
         position: positions[n.id] ?? { x: 0, y: 0 },
@@ -221,28 +179,45 @@ function App(): React.ReactElement {
           props: n.props, constraintCount: n.constraints.length + (n.hasRawShacl ? 1 : 0),
           ...handlers,
         } satisfies ErdNodeData as unknown as Record<string, unknown>,
-      })))
-      setEdges(projection.edges.map((e): Edge => {
-        const from = projection.nodes.find((n) => n.name === e.from)
-        const to = projection.nodes.find((n) => n.name === e.to)
-        // Multiplicity rides in the label rather than as endpoint markers: React Flow's
-        // default edge has one label, and a wrong-looking crow's foot is worse than a
-        // correct number. Editing happens in the inspector.
-        const props = e.props.length > 0 ? ` {${e.props.map((p) => p.name).join(', ')}}` : ''
-        const mult = e.cardinality.constrained
-          ? `  [${e.cardinality.from} → ${e.cardinality.to}]`
-          : ''
-        return {
+      }))
+      // An edge type is a box of its own, joined to its endpoints by two directed
+      // connectors. Multiplicity is a number on the box rather than endpoint markers: a
+      // wrong-looking crow's foot is worse than a correct number. Editing happens in the
+      // inspector. See lat.md/architecture#Rendering#Edge boxes.
+      const edgeHandlers = {
+        onAddProperty: (owner: string) => setDialog({ kind: 'addProperty', owner, ownerKind: 'edges' }),
+        onDeleteProperty: (owner: string, name: string) =>
+          intent({ kind: 'deleteProperty', owner, ownerKind: 'edges', name }),
+        onRenameProperty: (owner: string, name: string) =>
+          setDialog({ kind: 'renameProperty', owner, ownerKind: 'edges', name }),
+        onDelete: (name: string) => setDialog({ kind: 'confirmDeleteEdge', name }),
+      }
+      const drawn = connectors(projection)
+      const boxes = projection.edges.filter((e) => drawn.some((c) => c.target === e.id))
+      const all = [
+        ...typeBoxes,
+        ...boxes.map((e): Node => ({
           id: e.id,
-          source: from?.id ?? '',
-          target: to?.id ?? '',
-          label: `${e.name}${props}${mult}`,
-          labelStyle: { fontSize: 11 },
-          labelBgStyle: e.cardinality.constrained ? { fill: 'var(--bg)' } : undefined,
-          animated: false,
-          data: { edgeName: e.name },
-        }
-      }).filter((e) => e.source && e.target))
+          type: 'edge',
+          position: positions[e.id] ?? { x: 0, y: 0 },
+          selected: e.id === selectedRef.current,
+          data: {
+            name: e.name, from: e.from, to: e.to,
+            fromAbstract: projection.nodes.some((n) => n.abstract && n.name === e.from),
+            toAbstract: projection.nodes.some((n) => n.abstract && n.name === e.to),
+            ...(e.cardinality.constrained
+              ? { cardinality: { from: e.cardinality.from, to: e.cardinality.to } }
+              : {}),
+            props: e.props,
+            ...edgeHandlers,
+          } satisfies EdgeBoxData as unknown as Record<string, unknown>,
+        })),
+      ]
+      setNodes(all)
+      setEdges(faceSides(
+        drawn.map((c) => ({ ...c, selected: c.data?.edgeId === selectedRef.current })),
+        extents(all),
+      ))
     })()
     return () => { cancelled = true }
   }, [projection])
@@ -258,6 +233,12 @@ function App(): React.ReactElement {
     if (grew) window.setTimeout(() => void fitView({ duration: 200, ...FIT_VIEW }), 0)
   }, [nodes, fitView])
 
+  // A dragged box can end up on the other side of the box at a connector's far end, so the
+  // connectors re-attach to facing sides as it moves rather than running back through it.
+  React.useEffect(() => {
+    setEdges((current) => faceSides(current, extents(nodes)))
+  }, [nodes])
+
   const onNodesChange = React.useCallback((changes: NodeChange[]) => {
     setNodes((current) => applyNodeChanges(changes, current))
     for (const change of changes) {
@@ -269,7 +250,16 @@ function App(): React.ReactElement {
   }, [])
 
   const onNodeClick = React.useCallback((_: React.MouseEvent, n: Node) => setSelected(n.id), [])
-  const onEdgeClick = React.useCallback((_: React.MouseEvent, e: Edge) => setSelected(e.id), [])
+  // Either connector stands for the edge type, and both light up together: two halves
+  // highlighted separately would read as two relationships.
+  const onEdgeClick = React.useCallback((_: React.MouseEvent, e: Edge) =>
+    setSelected((e.data as { edgeId?: string } | undefined)?.edgeId ?? e.id), [])
+  React.useEffect(() => {
+    setEdges((current) => current.map((c) => {
+      const on = (c.data as { edgeId?: string } | undefined)?.edgeId === selected
+      return c.selected === on ? c : { ...c, selected: on }
+    }))
+  }, [selected])
   const onPaneClick = React.useCallback(() => setSelected(undefined), [])
 
   const onConnect = React.useCallback((c: Connection) => {
@@ -514,6 +504,9 @@ function App(): React.ReactElement {
           nodes={nodes}
           edges={edges}
           nodeTypes={NODE_TYPES}
+          // Every box has one handle per side, and a connection may start from either:
+          // the box it starts on is the from type. See lat.md/architecture#Rendering#Edge boxes.
+          connectionMode={ConnectionMode.Loose}
           onNodesChange={onNodesChange}
           onConnect={onConnect}
           onConnectEnd={onConnectEnd}

@@ -84,6 +84,11 @@
   --xy-edge-stroke: #555;
   --xy-handle-background-color: #0b5fa5;
   --xy-handle-border-color: #fff;
+  /* The kind marks are drawn on the boxes, not only in the inspector, so they are pinned
+     too. Shape and text tell the kinds apart on their own; these only reinforce it. */
+  --kind-node: #0b5fa5;
+  --kind-edge: #8a4b00;
+  --kind-mixin: #6b3fa0;
 }
 
 body { margin: 0; font-family: var(--vscode-font-family, sans-serif); color: var(--fg); background: var(--bg); }
@@ -122,7 +127,21 @@ button, select, input { font-family: inherit; }
   width: 240px; background: var(--box); color: var(--fg);
   border: 1px solid var(--line); border-radius: 4px; font-size: 11px; overflow: hidden;
 }
-.erd-abstract { border-style: dashed; opacity: 0.9; }
+.erd-node { border-top: 3px solid var(--kind-node); }
+/* Abstract node and edge types: four marks, none of them hue or opacity -- opacity took
+   their text below the theme's contrast floor. Dashed border, italic name (UML's own
+   convention), a «abstract» badge, and a hatched title bar. An edge box keeps its double
+   border's weight but dashes it. See lat.md/architecture#Rendering#Abstract types. */
+.erd-abstract { border-style: dashed; }
+.erd-edge.erd-abstract { border-style: dashed; border-width: 2px; }
+.erd-abstract .erd-name, .erd-abstract .erd-edge-name { font-style: italic; }
+.erd-abstract > .erd-title {
+  background: repeating-linear-gradient(135deg,
+    transparent 0 5px, color-mix(in srgb, var(--line) 35%, transparent) 5px 6px), var(--box-head);
+}
+.erd-badge.erd-abstract-badge { font-style: italic; text-transform: none; }
+.erd-end-abstract { font-style: italic; text-decoration: underline dotted; }
+.react-flow__edge.connector-abstract .react-flow__edge-path { stroke-dasharray: 6 4; }
 .erd-title {
   display: flex; align-items: center; gap: 6px;
   padding: 5px 7px; border-bottom: 1px solid var(--line);
@@ -156,6 +175,24 @@ button, select, input { font-family: inherit; }
 .erd-add { width: 100%; background: none; border: none; border-top: 1px solid var(--line); color: var(--muted); cursor: pointer; padding: 3px; font-size: 10px; }
 .erd-add:hover { color: var(--fg); }
 .erd-handle { width: 8px; height: 8px; background: var(--accent); border: 1px solid var(--bg); }
+/* The way back of a loop: an anchor below the side's handle, not a second dot to drag. */
+.erd-handle-lo { top: calc(50% + 16px); opacity: 0; pointer-events: none; }
+
+/* --- Edge box ---
+   An edge type drawn as a box between its two connectors. It differs from a node type
+   box in shape and text, not by color alone, so a grayscale printout still tells them
+   apart: rounded corners, a double border, an "edge" badge, and a From -> To line.
+   See lat.md/architecture#Rendering#Edge boxes. */
+.erd-edge { width: 200px; border: 3px double var(--kind-edge); border-radius: 14px; }
+.erd-edge .erd-title { padding-left: 10px; }
+.erd-edge .erd-handle { cursor: default; }
+.erd-kind-edge { color: var(--fg); border-color: var(--kind-edge); }
+.erd-edge-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.erd-ends {
+  display: flex; align-items: center; gap: 6px; padding: 2px 10px; height: 14px;
+  font-size: 10px; color: var(--muted); border-bottom: 1px solid var(--line);
+}
+.erd-card { color: var(--fg); margin-left: auto; }
 
 /* --- dialogs ---
    A VS Code webview is a sandboxed iframe: window.prompt and window.confirm return

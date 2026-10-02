@@ -118,7 +118,7 @@ Without it, a type created while a named view is on screen lands in the file and
 
 ## Rendering
 
-The canvas is built on React Flow with ELK for automatic layout. Custom React nodes render an ERD box with one row per property, and per-row handles let an edge attach to the exact property it references.
+The canvas is built on React Flow with ELK for automatic layout. Custom React nodes render an ERD box with one row per property for each node type and each edge type, joined by directed connectors — see [[architecture#Rendering#Edge boxes]].
 
 React Flow is DOM-based and degrades past a few hundred nodes, which is acceptable precisely because [[architecture#Views]] caps how much any one diagram shows. Note that `elkjs` is EPL-2.0 while React Flow and `dagre` are MIT.
 
@@ -132,7 +132,37 @@ An edge declared on an ancestor is drawn on the ancestor's box alone, and listed
 
 The diagram says where a thing is written: drawing `OWNS` again from every subtype of `Party` would suggest four declarations where the model has one, and on a hierarchy of any depth it multiplies the lines faster than it adds information. The reading a user actually needs — what can this type relate to — is a list rather than a picture, so the panel gives it, marked with the type each edge is declared on. What the [[emitters#Ladybug Target|targets]] do with the same fact is expansion, which is theirs to do and not the diagram's.
 
-A property row shows its type with a `[]` suffix when it is a [[metamodel#Lists|list]] and the [[metamodel#Enums|enum]] it is limited to; an open type carries a badge. An inherited property names its source with `↑` and a [[metamodel#Type Hierarchy#Mixins|mixin's]] with `◇`, because a supertype and a bag of properties are not the same claim about the type. [[metamodel#Cardinality]] rides in the edge label rather than as crow's-foot markers at each end: React Flow's default edge carries one label, and endpoint markers would need a custom edge whose geometry cannot be checked without looking at it. A number that is certainly right beats a marker that might be drawn wrong.
+A property row shows its type with a `[]` suffix when it is a [[metamodel#Lists|list]] and the [[metamodel#Enums|enum]] it is limited to; an open type carries a badge. An inherited property names its source with `↑` and a [[metamodel#Type Hierarchy#Mixins|mixin's]] with `◇`, because a supertype and a bag of properties are not the same claim about the type. [[metamodel#Cardinality]] is a number on the edge box rather than crow's-foot markers at each end: endpoint markers would need a custom edge whose geometry cannot be checked without looking at it. A number that is certainly right beats a marker that might be drawn wrong — see [[architecture#Rendering#Edge boxes]].
+
+### Edge boxes
+
+An edge type is a box of its own between two directed connectors: one runs from its from type's box into it, one from it into its to type's box, each ending in an arrowhead.
+
+A single line with a label said nothing about direction — `EMPLOYS` one way and the other looked the same until the line was selected — and packing the name, the properties and the cardinality into one label covered the line past two properties. An edge type with properties is a table in the database targets (a [[emitters#Ladybug Target|Ladybug]] rel table), and the box is that picture. The box carries its name, a `From → To` line, the cardinality when it constrains anything, and a row per property with the same add, rename and delete a node type's rows have; renaming the type itself happens in the [[architecture#Editing Surface#Inspector|inspector]].
+
+The box is a React Flow node whose id is the edge type's element id, so a position is saved and pruned exactly as a node type's is (see [[architecture#Source of Truth]]) and survives a rename. Both connectors carry the edge type's id: clicking either selects the edge type, and both light up together, because two halves highlighted separately would read as two relationships. The box's handles are anchors only; a connection dragged onto an edge box would be an edge on an edge, which the [[metamodel]] keeps out.
+
+Every box has one handle per side, and each connector attaches to the two sides that face each other, re-chosen while a box is dragged. Out on the right and in on the left, the old fixed sides, sent any connector whose target lay to the left back behind both boxes — and a type joined to itself always has one. A self-edge's two connectors would then share both sides and draw as one line with a head at each end, so the way back attaches just below each side's handle and the loop reads as two arrows. The canvas runs in React Flow's loose connection mode, so a connection can be dragged from either side and the box it starts on is the from type. Layout and connectors live in [[packages/vscode/src/webview/diagram.ts#place]] and [[packages/vscode/src/webview/diagram.ts#connectors]], a module without JSX or the webview API, so the tests load it directly.
+
+#### Placing an edge box
+
+A fresh diagram is laid out by ELK with every connector as an ELK edge, so the layered layout puts each edge box in the column between its endpoints and the diagram reads in the edges' direction.
+
+Once anything is placed, a box without a position goes at the midpoint of its endpoints' centres, a self-edge's box to the right of its type, and boxes landing on the same spot — two edge types between one pair, either way round — stack downwards. That is also how a diagram arranged before edge boxes existed gains them. A midpoint can overlap a box in a tight arrangement; relaying out once would move every box the user arranged instead, which the canvas never does.
+
+#### Telling the kinds apart
+
+An edge box differs from a node type box in shape and text, not by color alone: rounded corners, a double border, an `edge` badge and the `From → To` line.
+
+The kind colors that head the inspector also mark the boxes — a top rule on a node type box, the double border on an edge box — and every preset holds them at 3:1 against the box fill. Color only reinforces the difference: the print-safe export pins the kind colors like every other token (see [[architecture#Rendering#Exporting the diagram]]), and a grayscale printout still has the shapes and the words.
+
+### Abstract types
+
+An abstract node type, and an edge type reaching one at either end, carry four marks no concrete type has: a dashed border, an italic name, a `«abstract»` badge and a hatched title bar. An abstract edge type's connectors are dashed as well.
+
+An edge type is never declared abstract. It is drawn as abstract because an edge on an abstract type belongs to every concrete descendant and no database target stores it as written (see [[metamodel#Type Hierarchy]]) — the same claim `abstract` makes about a node type. The endpoints already say it, so a flag in the model would be a second answer that could disagree. The abstract end is italic in the box's `From → To` line, and the badge's tooltip names it. The rule is [[packages/vscode/src/webview/diagram.ts#isAbstractEdge]].
+
+The marks are border style, type style, text and texture, so none depends on hue and all survive the print-safe export. A dashed border alone was the original mark, at 90% opacity; the opacity took an abstract box's text below the [[architecture#Rendering#Canvas Theme#Contrast floor|contrast floor]], and a test now fails if an abstract rule reaches for it.
 
 ### Exporting the diagram
 

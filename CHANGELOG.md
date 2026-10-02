@@ -4,6 +4,27 @@ All notable changes to LPG Modeler are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- **Edge types are drawn as boxes, and their direction shows.** Each edge type is a box
+  of its own between two arrows: one from its from type into the box, one from the box
+  into its to type. The box shows the edge type's properties, which can be added, renamed
+  and deleted there, along with its endpoints (`Person → Company`) and its cardinality.
+  Edge boxes have rounded corners, a double border and an `edge` badge, so they stay
+  distinct from node types in a grayscale printout. Arrows attach to the sides of the
+  boxes that face each other, including while a box is dragged, and a type joined to
+  itself shows two arrows, into the box and back. A diagram arranged earlier keeps every
+  box where it was and gains its edge boxes between their endpoints.
+
+### Added
+
+- **Abstract types stand out.** An abstract node type has a dashed border, an italic name,
+  a `«abstract»` badge and a hatched title bar, and is no longer drawn faded. An edge type
+  that reaches an abstract node type is marked the same way, with dashed arrows, because
+  every database target realises it once per concrete subtype rather than as declared.
+
 ## [0.16.0] — 2026-09-25
 
 No change to the command line; it is released at the same version so a version number means

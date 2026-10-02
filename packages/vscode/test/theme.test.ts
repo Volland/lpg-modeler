@@ -48,6 +48,10 @@ describe('every built-in theme meets the contrast floor', () => {
       for (const heading of [p.nodeKind, p.edgeKind, p.mixinKind]) {
         expect(contrast(heading, p.background)).toBeGreaterThanOrEqual(4.5)
       }
+      // The node and edge kind colors also mark the boxes themselves.
+      for (const mark of [p.nodeKind, p.edgeKind]) {
+        expect(contrast(mark, p.box)).toBeGreaterThanOrEqual(3)
+      }
       expect(contrast(p.border, p.background)).toBeGreaterThanOrEqual(3)
       expect(contrast(p.border, p.box)).toBeGreaterThanOrEqual(3)
       expect(contrast(p.edge, p.background)).toBeGreaterThanOrEqual(3)
