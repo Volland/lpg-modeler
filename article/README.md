@@ -20,6 +20,7 @@ published post and the tool it describes move together.
 | [`semantic-layer.md`](semantic-layer.md) | Essay separating domain model, ontology and metrics layer: correspondence versus computation, what one structural model can generate for the first two, and a small metrics ontology — itself a model — kept apart from the metric definitions. |
 | [`linkedin-semantic-layer.md`](linkedin-semantic-layer.md) | Feed-sized companion to `semantic-layer.md` — the post body to paste, its first comment, hashtags, and which image to attach. |
 | [`semantic-layer.lpg.yaml`](semantic-layer.lpg.yaml) | The metrics ontology `semantic-layer.md` presents as a model: `MAPS_TO` as an edge with properties, `Metric` as a node that other metrics point at. |
+| [`model-after-deploy.md`](model-after-deploy.md) | Hands-on long-read on release 0.18: one fleet model typed into TypeScript, served to agents over MCP, audited for the rows an engine could not refuse, checked for drift, and used to lint query files — plus SQL import, the DuckDB SQL/PGQ target, and plugins. Built on the published `fleet` example. |
 | [`posts.json`](posts.json) | Publication manifest for the site's blog: which files are published, under which slug, and on which date. A file reaches the site only by being named here. |
 
 A short-form companion compresses the long read rather than restating it loosely: every claim in it

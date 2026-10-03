@@ -4,6 +4,22 @@ All notable changes to LPG Modeler are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.18.1] — 2026-10-03
+
+### Added
+
+- **A blog post on the 0.18 features**, "One model, used every day", worked through the
+  published `fleet` example with every output pasted from a real run.
+
+### Fixed
+
+- **`sqlpgq`: a bound at one on an edge that reaches an abstract endpoint is enforced.**
+  Every edge type with an abstract end was generated without its `UNIQUE`, so a truck
+  could be stationed at two depots although `STATIONED_AT` is many-to-one. The `UNIQUE`
+  is now written into each edge table, and the leak is reported only where it exists: when
+  the other end also has several concrete types. Found by running the fleet example's
+  artifact in DuckDB while writing the release article.
+
 ## [0.18.0] — 2026-10-03
 
 ### Added

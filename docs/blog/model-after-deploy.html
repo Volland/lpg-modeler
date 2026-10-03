@@ -1,0 +1,444 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>One model, used every day. Typed code, audited data, drift checks and linted queries from a graph schema. — LPG Modeler</title>
+<meta name="description" content="A model that is read only when the schema changes is documentation. LPG Modeler 0.18 makes it something your code, your CI, your queries and your agents consult on every run — worked through one fleet model, with every output pasted from a real run.">
+<meta property="og:title" content="One model, used every day. Typed code, audited data, drift checks and linted queries from a graph schema.">
+<meta property="og:description" content="A model that is read only when the schema changes is documentation. LPG Modeler 0.18 makes it something your code, your CI, your queries and your agents consult on every run — worked through one fleet model, with every output pasted from a real run.">
+<meta property="og:type" content="article">
+<meta property="og:image" content="https://www.lpg-modeler.com/assets/diagrams/pipeline.png">
+<link rel="icon" href="../assets/icon.png">
+<link rel="stylesheet" href="../assets/fonts.css">
+<link rel="stylesheet" href="../assets/site.css">
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="../index.html"><img src="../assets/icon.png" alt=""> LPG Modeler</a>
+    <nav class="links">
+      <a href="../index.html">Overview</a>
+      <a href="../getting-started.html">Getting started</a>
+      <a href="../examples.html">Examples</a>
+      <a href="../model-format.html">Model format</a>
+      <a href="../targets.html">Targets</a>
+      <a href="../cli.html">CLI</a>
+      <a href="../migrations.html">Migrations</a>
+      <a href="../architecture.html">Architecture</a>
+      <a href="../blog/index.html" aria-current="page">Blog</a>
+      <a href="https://github.com/Volland/lpg-modeler">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+
+<div class="wrap post-head">
+  <a class="back" href="index.html">← Blog</a>
+  <h1>One model, used every day. Typed code, audited data, drift checks and linted queries from a graph schema.</h1>
+  <p class="lede">A model that is read only when the schema changes is documentation. LPG Modeler 0.18 makes it something your code, your CI, your queries and your agents consult on every run — worked through one fleet model, with every output pasted from a real run.</p>
+  <p class="post-meta"><time datetime="2026-10-03">3 October 2026</time> · 22 min read</p>
+</div>
+
+<hr class="rule">
+
+<div class="wrap">
+  <article class="post">
+<p>For most of its life the model had one job at one moment. You changed the YAML, generated a schema, and ran it. After that the model went quiet. Your application code kept its own idea of what a <code>Truck</code> is, the database kept whatever it happened to enforce, and the queries in your repository kept naming properties that may or may not still exist. Nothing told you when those drifted from the model, because nothing was asking.</p>
+<p><strong>This article is about asking.</strong> The model already knows which properties are required, which are unique, which edge runs which way, and what each database cannot enforce. Release 0.18 adds the commands and targets that put those facts to work after the schema is deployed:</p>
+<ul>
+<li>a <strong>TypeScript</strong> target, so a renamed property breaks your build instead of a query;</li>
+<li>a <strong>schema card</strong> and a read-only <strong>MCP server</strong>, so an agent writes queries against the schema as it is;</li>
+<li><strong><code>lpg audit</code></strong>, which counts the rows a database could not refuse;</li>
+<li><strong><code>lpg drift</code></strong>, which says whether the database is still what the model says;</li>
+<li><strong><code>lpg lint-queries</code></strong>, which checks the names inside your query files;</li>
+<li><strong>SQL import</strong>, so a relational schema can be the starting point;</li>
+<li>a <strong>SQL/PGQ</strong> target for DuckDB, a relational engine that enforces nearly everything.</li>
+</ul>
+<p><em>(Everything below was run with LPG Modeler 0.18.1 against LadybugDB 0.19.1 and DuckDB 1.4.4 with its <code>duckpgq</code> extension. Every output block is pasted from those runs, with the absolute path trimmed from the front of file names. <code>lpg targets</code> lists thirteen targets.)</em></p>
+<hr>
+<h2 id="the-model">The model<a class="anchor" href="#the-model" aria-label="Link to this section">#</a></h2>
+<p>One model carries the whole article: a fleet of trucks, vans and trailers, stationed at depots and driven by drivers. Download <a href="../examples/fleet.lpg.yaml"><code>fleet.lpg.yaml</code></a>, which is also one of the site's examples, or read the part that matters here (ids and comments left out):</p>
+<pre><code>enums:
+  Fuel:
+    values: [diesel, electric, hydrogen]
+
+mixins:
+  Timestamped:
+    props:
+      createdAt: { type: zoneddatetime, required: true }
+  Located:
+    props:
+      latitude:  { type: float, min: -90,  max: 90 }
+      longitude: { type: float, min: -180, max: 180 }
+
+nodes:
+  Asset:
+    abstract: true
+    key: [assetTag]
+  Vehicle:
+    abstract: true
+    extends: Asset
+    props:
+      vin:  { type: string, required: true, unique: true }
+      fuel: { type: string, enum: Fuel }
+  Truck:
+    extends: Vehicle
+    mixins: [Timestamped, Located]
+    props:
+      axles: { type: int, min: 2, max: 6 }
+
+edges:
+  STATIONED_AT:
+    from: Asset
+    to: Depot
+    cardinality: { to: &quot;0..1&quot; }</code></pre>
+<p>A truck is a vehicle is an asset. It carries a timestamp and a position because it applies two mixins, not because those are kinds of thing it is. Every asset is stationed at no more than one depot, and the edge is declared once, on <code>Asset</code>.</p>
+<hr>
+<h2 id="1-your-application-code-typed-from-the-model">1. Your application code, typed from the model<a class="anchor" href="#1-your-application-code-typed-from-the-model" aria-label="Link to this section">#</a></h2>
+<p>Your service has a <code>Truck</code> type somewhere. It was written by hand, and nothing keeps it honest. The <code>typescript</code> target generates it:</p>
+<pre><code>$ lpg emit fleet.lpg.yaml --target typescript &gt; fleet.ts</code></pre>
+<pre><code>export interface Asset {
+  /** key */
+  assetTag: string
+}
+
+export interface Vehicle extends Asset {
+  /** unique */
+  vin: string
+  fuel?: Fuel
+}
+
+export interface Truck extends Vehicle, Timestamped, Located {
+  /** min 2; max 6 */
+  axles?: number
+  /** min 0 */
+  maxLoadKg?: number
+}</code></pre>
+<p>A parent and a mixin are both <code>extends</code>, and an interface declares only its own properties, so the file reads like the model and a change to <code>Timestamped</code> edits one interface. A required property is a plain member and an optional one is <code>?</code>, which makes requiredness the one constraint this target genuinely enforces: leave out <code>vin</code> and the build fails. Enums are enforced the same way, as a union.</p>
+<p>What a type system cannot say does not vanish. Uniqueness is the <code>/** unique */</code> comment, the bounds on <code>axles</code> are in the JSDoc, and everything else a query builder needs sits in a <code>SCHEMA</code> constant derived from the same model:</p>
+<pre><code>Truck: { labels: ['Truck', 'Vehicle', 'Asset'], key: ['assetTag'], abstract: false },
+STATIONED_AT: STATIONED_AT</code></pre>
+<p>The labels are the ones a multi-label engine gives a <code>Truck</code>, the key is the inherited one, and the cardinality is <code>many-to-one</code>, the name for a bound of <code>0..1</code> on the target end. Each thing the types cannot hold is also reported, at <code>info</code>, so the omission is visible rather than silent. The test suite type-checks this file for every fixture under <code>strict</code>, because a golden file alone would freeze a syntax error as faithfully as a working declaration.</p>
+<hr>
+<h2 id="2-the-same-model-for-agents">2. The same model, for agents<a class="anchor" href="#2-the-same-model-for-agents" aria-label="Link to this section">#</a></h2>
+<p>An agent that writes Cypher needs the schema in front of it. Pasting the YAML works, and it carries element ids and layout concerns a model of language has no use for. The <code>context</code> target emits the schema as a card, one line per element, the same bytes every time:</p>
+<pre><code>- **Asset** (abstract) key: assetTag — assetTag!: string
+- **Truck** &lt; Vehicle +Timestamped +Located key: assetTag (from Asset) — axles: int [2..6], maxLoadKg: int [0..]
+- **Vehicle** (abstract) &lt; Asset key: assetTag (from Asset) — vin!^: string, fuel: string =Fuel
+- **STATIONED_AT**: Asset → Depot, many-to-one</code></pre>
+<p>A card pasted into a prompt is a snapshot. <code>lpg mcp</code> serves the same facts as lookups an agent asks for at call time, over the Model Context Protocol on stdio, read-only:</p>
+<pre><code>$ lpg mcp fleet.lpg.yaml</code></pre>
+<p>I drove it with a scripted client: initialize, list the tools, then ask about a truck. The tools are <code>schema_card</code>, <code>list_types</code>, <code>describe_type</code> and <code>describe_edge</code>, and asking about <code>Truck</code> returns this, summarised:</p>
+<pre><code>tools: schema_card, list_types, describe_type, describe_edge
+Truck extends Vehicle; ancestors Vehicle, Asset; mixins Timestamped, Located; key assetTag
+properties: axles, maxLoadKg, createdAt (Timestamped), updatedAt (Timestamped),
+            latitude (Located), longitude (Located), vin (Vehicle), fuel (Vehicle), assetTag (Asset)
+outgoing:   STATIONED_AT -&gt; Depot  (declared on Asset),  TOWS -&gt; Trailer  (declared on Truck)
+incoming:   DRIVES from Driver     (declared on Vehicle)</code></pre>
+<p>The edges are the part an agent needs before writing a pattern. <code>STATIONED_AT</code> is declared on <code>Asset</code> and reaches <code>Truck</code> by inheritance, so the answer says where it is declared. The server holds no write tool, because an agent changes a model through a person and a diff, never through a socket. It re-reads the model on every call, so an edit on disk reaches the next question in the same session, and the test suite edits a model while a session is running to prove it.</p>
+<hr>
+<h2 id="3-what-each-engine-will-not-enforce">3. What each engine will not enforce<a class="anchor" href="#3-what-each-engine-will-not-enforce" aria-label="Link to this section">#</a></h2>
+<p>The part of the model that matters most after deployment is the part the engine ignores. The <code>docs</code> target writes one self-contained HTML page for the model, one section per type, and an enforcement matrix computed from the capability sets the generators already report their downgrades from. For the features this fleet uses, these are its cells:</p>
+<div class="table-scroll">
+<table>
+<thead>
+<tr>
+<th>Feature</th>
+<th>ladybug</th>
+<th>neo4j</th>
+<th>memgraph</th>
+<th>falkordb</th>
+<th>sqlpgq</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Required property (not the key)</td>
+<td>key only</td>
+<td>Enterprise only</td>
+<td>enforced</td>
+<td>enforced</td>
+<td>enforced</td>
+</tr>
+<tr>
+<td>Unique property (not the key)</td>
+<td>key only</td>
+<td>enforced</td>
+<td>enforced</td>
+<td>enforced</td>
+<td>enforced</td>
+</tr>
+<tr>
+<td>Value constraints</td>
+<td>reported, not carried</td>
+<td>reported, not carried</td>
+<td>reported, not carried</td>
+<td>reported, not carried</td>
+<td>enforced</td>
+</tr>
+<tr>
+<td>Cardinality</td>
+<td>upper bound of one</td>
+<td>reported, not carried</td>
+<td>reported, not carried</td>
+<td>reported, not carried</td>
+<td>upper bound of one</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>&quot;Reported, not carried&quot; means generation raises a diagnostic and writes a comment at the site. Nothing is dropped silently, and here is what that looks like for the one table this article uses next:</p>
+<pre><code>CREATE NODE TABLE IF NOT EXISTS Truck (
+  axles INT64,
+  maxLoadKg INT64,
+<span class="c-warn">  // UNENFORCED: 'createdAt' is required in the model; LadybugDB has no NOT NULL.</span>
+  createdAt TIMESTAMP_TZ,
+  updatedAt TIMESTAMP_TZ,
+  latitude DOUBLE,
+  longitude DOUBLE,
+<span class="c-warn">  // UNENFORCED: 'vin' is required in the model; LadybugDB has no NOT NULL.</span>
+<span class="c-warn">  // UNENFORCED: 'vin' is unique in the model; only the primary key is unique.</span>
+  vin STRING,
+<span class="c-warn">  // UNENFORCED: 'fuel' is limited to enum 'Fuel' in the model.</span>
+  fuel STRING,
+  assetTag STRING,
+  PRIMARY KEY(assetTag)
+);</code></pre>
+<p>LadybugDB takes <code>createdAt</code> and <code>vin</code> as written and enforces neither. The model says they are required, and the comment says the database will not. That is a fair trade, and it leaves a question: <strong>are those comments true of your data?</strong></p>
+<hr>
+<h2 id="4-counting-what-the-engine-could-not-refuse">4. Counting what the engine could not refuse<a class="anchor" href="#4-counting-what-the-engine-could-not-refuse" aria-label="Link to this section">#</a></h2>
+<p><code>lpg audit</code> turns each of those comments into a question. For every constraint the target leaves unenforced it generates a read-only query that counts violations, and it can run them. I applied the generated schema to a fresh LadybugDB, then wrote three trucks the way an application with a bug would:</p>
+<pre><code>$ lpg emit fleet.lpg.yaml --target ladybug --out .
+$ lpg apply fleet.ladybug.cypher --target ladybug --database fleet.lbdb
+applied 8 statement(s) to fresh.lbdb</code></pre>
+<pre><code>CREATE (:Truck {assetTag: 'T-1', vin: 'V1', fuel: 'diesel', axles: 4,
+                createdAt: '2026-01-01 00:00:00+00', latitude: 50.1});
+CREATE (:Truck {assetTag: 'T-2', vin: 'V1', fuel: 'coal', axles: 9, latitude: 95.0});
+CREATE (:Truck {assetTag: 'T-3', vin: 'V3', fuel: 'electric', axles: 3,
+                createdAt: '2026-01-02 00:00:00+00'});</code></pre>
+<p>The database accepted all three. <code>T-2</code> has nine axles, a latitude of 95, a fuel that is not in the enum, no <code>createdAt</code>, and the same <code>vin</code> as <code>T-1</code>. Now ask the model:</p>
+<pre><code>$ lpg audit fleet.lpg.yaml --target ladybug --database fleet.lbdb
+[1/21] Depot.latitude in -90..90: 0
+[2/21] Depot.longitude in -180..180: 0
+[3/21] Driver.name required: 0
+[4/21] Driver.createdAt required: 0
+[5/21] Driver.createdBy required: 0
+[6/21] Trailer.lengthM in 0..: 0
+[7/21] Trailer.createdAt required: 0
+[8/21] Trailer.createdBy required: 0
+[9/21] Truck.axles in 2..6: 1
+[10/21] Truck.maxLoadKg in 0..: 0
+[11/21] Truck.createdAt required: 1
+[12/21] Truck.latitude in -90..90: 1
+[13/21] Truck.longitude in -180..180: 0
+[14/21] Truck.vin required: 0
+[15/21] Truck.vin unique: 1
+[16/21] Truck.fuel in enum Fuel: 1
+[17/21] Van.cargoVolumeM3 in 0..: 0
+[18/21] Van.createdAt required: 0
+[19/21] Van.vin required: 0
+[20/21] Van.vin unique: 0
+[21/21] Van.fuel in enum Fuel: 0
+5 violation(s) found</code></pre>
+<p>Five checks found something, and the exit code is 1, so a pipeline can stop on it. The checks that read zero are as much the point: the audit says what it looked at. A constraint the database genuinely enforces is not audited, because the engine already refused those writes. The key is the example: a second <code>T-2</code> was rejected outright by LadybugDB with a duplicate primary key error, while a duplicate <code>vin</code> went through.</p>
+<p>Without a connection the same command writes the script for review, so it can be read, committed and scheduled like any other artifact. The database is opened read-only, and on the server engines every check runs through a read session or <code>GRAPH.RO_QUERY</code>. Audit cannot write anywhere, by construction.</p>
+<hr>
+<h2 id="5-is-the-database-still-what-the-model-says">5. Is the database still what the model says?<a class="anchor" href="#5-is-the-database-still-what-the-model-says" aria-label="Link to this section">#</a></h2>
+<p>A schema changed by hand on the server, or a deploy that never ran, shows up only when a query fails. <code>lpg drift</code> compares what a database holds with what the model requires of that target. First the clean case, against the database from the last section:</p>
+<pre><code>$ lpg drift fleet.lpg.yaml --database fleet.lbdb
+unexpected: column Truck.notes — the database holds it as STRING; the model does not declare it
+1 drift finding(s) against ladybug</code></pre>
+<p>Then two things that happen to real systems. Someone adds a column to <code>Truck</code> in a console, and the model gains a <code>capacity</code> on <code>Depot</code> that was never deployed:</p>
+<pre><code>$ lpg drift fleet-next.lpg.yaml --database fleet.lbdb
+missing: column Depot.capacity — the model declares it as INT64; the database has no such column
+unexpected: column Truck.notes — the database holds it as STRING; the model does not declare it
+2 drift finding(s) against ladybug</code></pre>
+<p>Both directions are named: <code>missing</code> is declared by the model and absent from the database, <code>unexpected</code> is the reverse. The exit code is 1, and <code>--json</code> prints the same findings for a machine:</p>
+<pre><code>{
+  &quot;target&quot;: &quot;ladybug&quot;,
+  &quot;findings&quot;: [
+    {
+      &quot;kind&quot;: &quot;missing&quot;,
+      &quot;object&quot;: &quot;column Depot.capacity&quot;,
+      &quot;detail&quot;: &quot;the model declares it as INT64; the database has no such column&quot;
+    },
+    {
+      &quot;kind&quot;: &quot;unexpected&quot;,
+      &quot;object&quot;: &quot;column Truck.notes&quot;,
+      &quot;detail&quot;: &quot;the database holds it as STRING; the model does not declare it&quot;
+    }
+  ]
+}</code></pre>
+<p>There is no database to reach when the question is about a committed script. <code>--script</code> compares the model with a generated DDL file, which is how a pull request can ask whether the checked-in schema is stale:</p>
+<pre><code>$ lpg drift fleet-next.lpg.yaml --script fleet.ladybug.cypher
+missing: column Depot.capacity — the model declares it as INT64; the database has no such column
+1 drift finding(s) against ladybug</code></pre>
+<p>Matching is structural. A live schema carries no element ids, and a Neo4j constraint's name is cosmetic, so objects are matched by what they are, never by what they are called: a constraint deployed by another tool under a name this one would not choose is not drift. What a target cannot store is out of scope by construction, so the value bounds on <code>axles</code> never show up as findings against an engine that has nowhere to keep them.</p>
+<hr>
+<h2 id="6-queries-are-claims-about-the-schema">6. Queries are claims about the schema<a class="anchor" href="#6-queries-are-claims-about-the-schema" aria-label="Link to this section">#</a></h2>
+<p>The queries in a repository are claims about the model: these labels exist, this edge runs this way, this property is a number. Nothing checks them, and a rename breaks them silently. Here is a query file with one correct query and six faulty ones:</p>
+<pre><code><span class="c-com">// Who drives a heavy truck, and what it tows.</span>
+MATCH (d:Driver)-[:DRIVES]-&gt;(t:Truck)-[:TOWS]-&gt;(r:Trailer)
+WHERE t.axles &gt;= 3
+RETURN d.name, r.lengthM;
+
+MATCH (d:Driver)-[:DRIVE]-&gt;(t:Truck) RETURN d.name, t.vin;
+
+MATCH (t:Truck) WHERE t.axels &gt; 4 RETURN t.assetTag;
+
+MATCH (d:Depot) WHERE d.code = 7 RETURN d.name;
+
+MATCH (v:Vehicle) WHERE v.fuel = 'petrol' RETURN v.vin;
+
+MATCH (d:Depot)-[:STATIONED_AT]-&gt;(t:Truck) RETURN t.assetTag;
+
+MATCH (a:Trailer)-[:TOWS]-&gt;(b:Truck) RETURN a.assetTag;</code></pre>
+<pre><code>$ lpg lint-queries fleet.lpg.yaml fleet.cypher
+fleet.cypher:6:20 error lint-unknown-edge: No edge type is called 'DRIVE'. Known: DRIVES, STATIONED_AT, TOWS.
+fleet.cypher:8:25 error lint-unknown-property: Truck has no property 'axels'.
+fleet.cypher:10:32 error lint-type-mismatch: Depot.code is string, and is compared with a number literal.
+fleet.cypher:12:34 error lint-enum-value: 'petrol' is not a value of enum Fuel (diesel, electric, hydrogen).
+fleet.cypher:14:16 error lint-edge-direction: STATIONED_AT is traversed against its direction: the model declares STATIONED_AT: Asset → Depot, and the other way round would fit (Depot) and (Truck).
+fleet.cypher:16:18 error lint-edge-direction: TOWS is traversed against its direction: the model declares TOWS: Truck → Trailer, and the other way round would fit (Trailer) and (Truck).
+6 finding(s) in 1 file(s)</code></pre>
+<p>The first query is silent. The other six are a misspelt relationship type, a misspelt property, a number compared with a string, a value the enum does not have, and two edges walked backwards. Each finding carries the line and column of the offending token, in the format editors and CI annotators already read.</p>
+<p>There is no Cypher grammar behind this. A lexer reads strings, comments, quoted names and numbers correctly, and pattern chains like <code>(d:Driver)-[:DRIVES]-&gt;(t:Truck)</code> are lifted out of the token stream. Everything else is passed over, and that is the design. A linter that cries wolf is worse than none, so what it cannot resolve it does not report: an unlabelled variable, a name rebound with <code>WITH ... AS</code>, a label expression like <code>:A|B</code>, a function call that looks like a pattern. A subtype's property read off a supertype-labelled node is a question of which instances are meant, so it is not a finding either. It lints query files only. Finding a query inside a TypeScript or Python source file is a parser's job for each language, and a wrong guess is worse than none.</p>
+<hr>
+<h2 id="7-starting-from-a-relational-schema">7. Starting from a relational schema<a class="anchor" href="#7-starting-from-a-relational-schema" aria-label="Link to this section">#</a></h2>
+<p>Not everyone starts from an empty file. Many teams already model graphs the way the introduction described: as foreign keys and join tables. <code>lpg import</code> now reads a <code>pg_dump --schema-only</code> dump. The two shapes that matter in the fixture I used are a join table and a unique foreign key:</p>
+<pre><code>-- Primary key is exactly the two foreign keys: an edge type, not a node type.
+CREATE TABLE order_line (
+    order_id bigint NOT NULL REFERENCES orders(id),
+    product_sku text NOT NULL REFERENCES product(sku),
+    quantity integer NOT NULL,
+    PRIMARY KEY (order_id, product_sku)
+);
+
+-- A unique foreign key: each person has at most one profile.
+CREATE TABLE profile (
+    id uuid PRIMARY KEY,
+    person_id uuid NOT NULL UNIQUE REFERENCES person(id),
+    bio text
+);</code></pre>
+<pre><code>$ lpg import shop.sql --out shop.lpg.yaml
+shop.lpg.yaml
+info import-fk-edge: Foreign key 'orders.buyer_id' is read as edge type 'BUYER: Orders → Person', and the column is dropped: the edge is where that fact now lives.
+info import-join-table: Table 'order_line' is read as edge type 'ORDER_LINE: Orders → Product': its primary key is exactly its two foreign keys. Its other columns are the edge's properties.
+info import-fk-edge: Foreign key 'profile.person_id' is read as edge type 'PERSON: Profile → Person', and the column is dropped: the edge is where that fact now lives.
+info import-skipped-statements: Statements outside the schema subset were not read: CREATE INDEX ×1, GRANT ALL ×1, SET STATEMENT_TIMEOUT ×1.</code></pre>
+<p>(Three more <code>info</code> lines, about a <code>point</code> column read as a string, a serial whose sequence is not carried, and table names read into model spelling, were left out here for space.) The result is a model that checks clean:</p>
+<pre><code>edges:
+  BUYER:
+    from: Orders
+    to: Person
+    cardinality: { from: &quot;*&quot;, to: &quot;1&quot; }
+  ORDER_LINE:
+    from: Orders
+    to: Product
+    props:
+      quantity: { type: INT32, required: true }
+  PERSON:
+    from: Profile
+    to: Person
+    cardinality: { from: &quot;0..1&quot;, to: &quot;1&quot; }</code></pre>
+<p>A <code>NOT NULL</code> foreign key became a target bound of exactly one, and a <code>UNIQUE</code> one bounded the other end at one. The join-table rule is exact on purpose: a table is an edge type only when its primary key is exactly its two foreign keys. A table with its own <code>id</code> and two foreign keys is a node type with two edges, because the failure modes are lopsided. A join table read as a node type is merely verbose; a node type read as an edge deletes a type a query may name. Every reading is reported as an inference, in the same voice as the hierarchy inferences the other importers make, and statements the reader does not understand are counted, never silently skipped.</p>
+<hr>
+<h2 id="8-a-relational-engine-as-a-graph-target">8. A relational engine, as a graph target<a class="anchor" href="#8-a-relational-engine-as-a-graph-target" aria-label="Link to this section">#</a></h2>
+<p>SQL:2023 added property graph queries, and DuckDB implements them in its <code>duckpgq</code> extension. The <code>sqlpgq</code> target generates ordinary tables that carry the constraints, plus a <code>CREATE PROPERTY GRAPH</code> over them. It is the odd one in the matrix in section 3, because underneath it is a relational engine, and a relational engine enforces nearly everything.</p>
+<pre><code>$ lpg emit fleet.lpg.yaml --target sqlpgq &gt; fleet.sql</code></pre>
+<pre><code>CREATE TABLE IF NOT EXISTS Truck (
+  axles BIGINT CHECK (axles &gt;= 2 AND axles &lt;= 6),
+  maxLoadKg BIGINT CHECK (maxLoadKg &gt;= 0),
+  createdAt TIMESTAMPTZ NOT NULL,
+  updatedAt TIMESTAMPTZ,
+  latitude DOUBLE CHECK (latitude &gt;= -90 AND latitude &lt;= 90),
+  longitude DOUBLE CHECK (longitude &gt;= -180 AND longitude &lt;= 180),
+  vin VARCHAR NOT NULL UNIQUE,
+  fuel Fuel,
+  assetTag VARCHAR NOT NULL,
+  PRIMARY KEY (assetTag)
+);
+
+CREATE TABLE IF NOT EXISTS STATIONED_AT_Truck_Depot (
+  src_assetTag VARCHAR NOT NULL,
+  dst_code VARCHAR NOT NULL,
+  FOREIGN KEY (src_assetTag) REFERENCES Truck (assetTag),
+  FOREIGN KEY (dst_code) REFERENCES Depot (code),
+  -- at most one target per source: enforced on write.
+  UNIQUE (src_assetTag)
+);</code></pre>
+<p>A required property is <code>NOT NULL</code> whether or not it is the key. A unique one is <code>UNIQUE</code>, the bounds are <code>CHECK</code>, the enum is a real type, and a bound at one on an edge is a <code>UNIQUE</code> on the other end's key columns. I applied the file to DuckDB and tried to break it:</p>
+<pre><code>ok       a valid truck
+refused  nine axles - Constraint Error: CHECK constraint failed on table Truck with expression CHECK(((axles &gt;= 2) AND (axles &lt;= 6)))
+refused  a fuel not in the enum - Conversion Error: Could not convert string 'coal' to UINT8
+refused  a duplicate vin - Constraint Error: Duplicate key &quot;vin: V1&quot; violates unique constraint.
+refused  no createdAt - Constraint Error: NOT NULL constraint failed: Truck.createdAt
+refused  latitude 95 - Constraint Error: CHECK constraint failed on table Truck with expression CHECK(((latitude &gt;= -90) AND (latitude &lt;= 90)))
+refused  a second depot for the same truck - Constraint Error: Duplicate key &quot;src_assetTag: T-1&quot; violates unique constraint.
+[ { assetTag: 'T-1', name: 'North' } ]</code></pre>
+<p>Every one of those is refused, including the second depot, which is the model's <code>0..1</code> doing exactly what it says. An enum violation surfaces as a conversion error rather than a constraint error, and that is the engine's wording, not mine.</p>
+<p>Two things in this target came from measuring rather than recalling, and the first one is a limit worth knowing about. <strong>DuckDB requires every label in a property graph to be unique.</strong> Label alternation like <code>[:A|B]</code> does not parse either. So an edge type that reaches an abstract endpoint cannot be one label over several tables the way it is a single relationship type on Neo4j. This is what the generator says about the fleet model:</p>
+<pre><code>warning [sqlpgq] downgrade-edge-expansion: Edge type 'STATIONED_AT' reaches an abstract endpoint, so it is 3 edge tables, each with its own label. A DuckDB property graph requires every label to be unique, so no single label 'STATIONED_AT' covers them.</code></pre>
+<p><code>STATIONED_AT</code> is three tables, one per concrete asset type, and a query names the one it means. The second finding is smaller and caught me out: a name is not safe bare because it is not reserved. <code>AT</code> is a keyword of a kind DuckDB calls <code>type_function</code>, and <code>CREATE TABLE AT</code> is a syntax error, while all 330 words it calls unreserved parse bare. So the generator quotes the 159 keywords that are not unreserved, and the test compares its list with the engine's own <code>duckdb_keywords()</code>, so a release that reserves another word fails there first.</p>
+<p>I owe a correction here. The first version of this target skipped the <code>UNIQUE</code> on every edge that reached an abstract endpoint, to be safe, and so a truck could be stationed at two depots. I found it by running this very section: the log above used to say <code>ok</code> against that insert. Each source type has exactly one <code>STATIONED_AT</code> table, so the <code>UNIQUE</code> inside it is the whole bound. The leak is real only when the <em>other</em> end also has several concrete types, because then a node has rows in several tables and no single table sees them all. The generator now writes the constraint in every table and reports the leak only where it exists. The fix is in 0.18.1.</p>
+<hr>
+<h2 id="9-plugins-and-a-page-you-can-try-first">9. Plugins, and a page you can try first<a class="anchor" href="#9-plugins-and-a-page-you-can-try-first" aria-label="Link to this section">#</a></h2>
+<p>Two smaller things. The first is the playground: a page on this site where you can edit a model and watch it validate and generate for every target, in the browser, with nothing installed. It is the same parser, validator and generators, bundled from the same code. The bundle is committed, a test rebuilds it and compares, and another runs it in an empty context and checks that it generates exactly what the command line generates for every published example and every target. It has no diagram and no database commands. Both of those stay with the extension and the command line.</p>
+<p><a href="../playground.html">Open the playground.</a></p>
+<p>The second is <code>--plugin</code>. Targets and sources sit behind a registry that the built-in ones use, and that registry is now open: <code>lpg --plugin ./my-target.js</code> loads a module that registers more. The contract is the capability set, the same typed declaration every built-in target publishes, and it is enforced at the door:</p>
+<pre><code>module.exports = function (api) {
+  api.registerTarget('mermaid', {
+    capabilities: { target: 'mermaid', multiLabel: true, inheritance: 'subclass' },
+    emit: () =&gt; ({ target: 'mermaid', extension: 'mmd', content: '', diagnostics: [] }),
+  })
+}</code></pre>
+<pre><code>$ lpg targets --plugin bad.cjs
+plugin bad.cjs could not be loaded: Target 'mermaid' declares an incomplete capability set; missing: requiredConstraint, uniqueConstraint, compositeKey, edgeProps, nestedEdges, valueConstraints, namedConstraints, rawPassthrough, listProps, compositeTypes, enums, openTypes, cardinality. The capability set is how a target says what it cannot express.</code></pre>
+<p>A target that does not say what it cannot express would break the rule the whole tool is built on, so it is refused. A plugin cannot replace a built-in, its diagnostics reach you in the same voice as a built-in's, and <code>lpg targets</code> marks it <code>(plugin)</code>. A plugin is code that runs with your privileges, so it is loaded only when you name it on the command line, never discovered, and there is no sandbox.</p>
+<hr>
+<h2 id="what-is-not-here">What is not here<a class="anchor" href="#what-is-not-here" aria-label="Link to this section">#</a></h2>
+<p>Honesty about limits is part of the design, so here is the list.</p>
+<ul>
+<li><strong>Data migrations.</strong> Schema migrations are done. Migrations that move data, such as splitting a property in two, need the author to say what maps to what, and that is a change to what the model file holds. It is specified, with its gate written down, and not built.</li>
+<li><strong>A concise DSL.</strong> The YAML stays the source of truth until enough people write models too large for it to be comfortable.</li>
+<li><strong>Audit and drift against the server engines, run live.</strong> They are written and unit-tested against hand-made catalogs, and the LadybugDB paths in this article ran for real. The suites that run them against live Memgraph, Neo4j and FalkorDB containers exist, but I have not run them yet.</li>
+<li><strong>The diagram.</strong> Query lint findings and drift findings are not drawn on the canvas yet.</li>
+</ul>
+<hr>
+<h2 id="try-it">Try it<a class="anchor" href="#try-it" aria-label="Link to this section">#</a></h2>
+<pre><code>npx lpg-modeler-cli targets
+npx lpg-modeler-cli check fleet.lpg.yaml
+npx lpg-modeler-cli audit fleet.lpg.yaml --target ladybug</code></pre>
+<p>Download <a href="../examples/fleet.lpg.yaml"><code>fleet.lpg.yaml</code></a>, run the three commands above, then change something the way the article did. Rename <code>axles</code>, apply the old schema, and run <code>lpg drift</code>. Add a query that uses the old name and run <code>lpg lint-queries</code>. Plant a row the engine accepts and run <code>lpg audit</code>. The model is the same file in every step, and each of those commands asks it something it already knows.</p>
+<p>Installing the extension, and everything else about getting started, is on the <a href="../getting-started.html">getting started</a> page.</p>
+  </article>
+
+  <p class="post-source">
+    This post is <a href="https://github.com/Volland/lpg-modeler/blob/main/article/model-after-deploy.md" rel="noopener"><code>article/model-after-deploy.md</code></a>
+    in the repository, so a correction to the tool and a correction to the post travel together.
+  </p>
+
+  <div class="next">
+    <a href="index.html"><div class="k">All posts</div><div class="v">Everything written about the tool, longest first.</div></a>
+    <a href="../getting-started.html"><div class="k">Getting started</div><div class="v">Install, write your first model, open the canvas, generate.</div></a>
+  </div>
+</div>
+
+</main>
+
+<footer class="site">
+  <div class="wrap">
+    <span>LPG Modeler — MIT licensed</span>
+    <span class="spacer"><a href="../impressum.html">Impressum</a></span>
+    <span><a href="../datenschutz.html">Datenschutz</a></span>
+    <span><a href="../agb.html">AGB</a></span>
+    <span><a href="https://github.com/Volland/lpg-modeler">Source</a></span>
+    <span><a href="https://github.com/Volland/lpg-modeler/issues">Issues</a></span>
+  </div>
+</footer>
+
+</body>
+</html>

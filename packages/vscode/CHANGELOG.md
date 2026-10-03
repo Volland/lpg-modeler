@@ -4,6 +4,14 @@ All notable changes to LPG Modeler are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.18.1] — 2026-10-03
+
+### Fixed
+
+- **`sqlpgq`: a bound at one on an edge that reaches an abstract endpoint is enforced.**
+  `LPG: Generate Schema` for the `sqlpgq` target now writes the `UNIQUE` into every edge
+  table; before, a node could have two partners although the edge is many-to-one.
+
 ## [0.18.0] — 2026-10-03
 
 ### Added
