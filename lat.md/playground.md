@@ -6,7 +6,7 @@ It is the same parser, validator and generators the extension and command line r
 
 They are inlined because the site is served through a CDN that answers a request for any `.yaml` file with a 403, and a page that needs a request to show its first example can fail to. The same bundle test that compares the generators compares the examples.
 
-The site's rule was no build step at all, so that a broken toolchain can never take the documentation down. This keeps the rule's reason and gives up its letter, the same way the blog does: `npm run build:playground` is a tool for the author, its output `docs/playground/lpg-core.js` is committed, and Pages still serves a folder of static files. The staleness test rebuilds the bundle and compares, so a change to `core` that forgot the bundle fails the build instead of publishing an old generator indefinitely.
+The site's rule was no build step at all, so that a broken toolchain can never take the documentation down. This keeps the rule's reason and gives up its letter, the same way the blog does: `npm run build:playground` is a tool for the author, its output `docs/playground/lpg-core.js` is committed, and Pages still serves a folder of static files. The page asks for the bundle by a hash of its content (`lpg-core.js?v=…`), which the build writes into it, because the site sits behind a CDN that keeps a script for four hours: a rebuilt bundle at an unchanged URL is not seen, and a page expecting the new one ran against the old, which is how the examples change shipped broken. The staleness test rebuilds the bundle and compares, so a change to `core` that forgot the bundle fails the build instead of publishing an old generator indefinitely.
 
 ## Parity with the command line
 

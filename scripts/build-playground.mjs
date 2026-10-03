@@ -1,10 +1,24 @@
 import { build } from 'esbuild'
+import { createHash } from 'node:crypto'
 import { readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
 export const BUNDLE = join(ROOT, 'docs', 'playground', 'lpg-core.js')
+export const PAGE = join(ROOT, 'docs', 'playground.html')
+
+/**
+ * The page asks for the bundle by a hash of its content. The site sits behind a CDN that
+ * keeps a script for hours, so a rebuilt bundle at an unchanged URL is not seen, and a page
+ * that expects the new bundle runs against the old one.
+ */
+export const stamp = (text) => createHash('sha256').update(text).digest('hex').slice(0, 10)
+
+/** The page with its script tag pointing at the bundle `text` would be written as. */
+export function stampedPage(page, text) {
+  return page.replace(/<script src="playground\/lpg-core\.js(\?v=[0-9a-f]+)?"><\/script>/, `<script src="playground/lpg-core.js?v=${stamp(text)}"></script>`)
+}
 
 /**
  * `core` resolves an import with `node:path`, and a page has no neighbouring files to
@@ -65,5 +79,6 @@ export async function buildPlayground() {
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const text = await buildPlayground()
   writeFileSync(BUNDLE, text)
+  writeFileSync(PAGE, stampedPage(readFileSync(PAGE, 'utf8'), text))
   console.log(`${BUNDLE} (${Math.round(text.length / 1024)} KiB)`)
 }

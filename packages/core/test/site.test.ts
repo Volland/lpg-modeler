@@ -102,7 +102,8 @@ const localRefs = (attr: 'src' | 'href') => {
     for (const m of read(page).matchAll(pattern)) {
       const url = m[1]!
       if (/^(https?:|mailto:|#)/.test(url)) continue
-      out.push({ page, url, target: resolve(dirname(join(DOCS, page)), url) })
+      // A cache-busting `?v=` names the same file.
+      out.push({ page, url, target: resolve(dirname(join(DOCS, page)), url.split('?')[0]!) })
     }
   }
   return out

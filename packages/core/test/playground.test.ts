@@ -73,8 +73,14 @@ describe('the playground bundle', () => {
 describe('the playground page', () => {
   const page = read(join(ROOT, 'docs', 'playground.html'))
 
+  it('asks for the bundle by the hash of its content, so a CDN cannot serve the last one', async () => {
+    // @ts-expect-error a plain script with no declaration file
+    const { stamp } = await import('../../../scripts/build-playground.mjs')
+    expect(page).toContain(`<script src="playground/lpg-core.js?v=${stamp(read(BUNDLE))}"></script>`)
+  })
+
   it('loads only the bundle beside it, and offers only examples the site publishes', () => {
-    expect(page).toContain('<script src="playground/lpg-core.js"></script>')
+    expect(page).toMatch(/<script src="playground\/lpg-core\.js\?v=[0-9a-f]{10}"><\/script>/)
     expect(page).not.toContain('fetch(')
     for (const m of page.matchAll(/<option value="([a-z]+)">/g)) {
       expect(existsSync(join(ROOT, 'docs', 'examples', `${m[1]}.lpg.yaml`)), m[1]).toBe(true)
