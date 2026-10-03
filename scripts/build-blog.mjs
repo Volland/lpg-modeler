@@ -138,15 +138,20 @@ function highlight(code, lang) {
 /**
  * Rewrites a path written for the repository into one that resolves from `docs/blog/`.
  * Asset paths are repointed at the site's single copy; a model file an article is built
- * around is copied in beside the post, since `docs/` has to stand on its own.
+ * around is copied in beside the post, since `docs/` has to stand on its own. Models are
+ * served as `.txt`: the site's CDN answers a request for `.yaml` or `.yml` with a 403.
  */
 function rewriteHref(href, slugs, models) {
   if (!href || /^(https?:|mailto:|#)/.test(href)) return href
-  if (href.startsWith('../docs/')) return '../' + href.slice('../docs/'.length)
+  if (href.startsWith('../docs/')) {
+    const site = '../' + href.slice('../docs/'.length)
+    // A published example is already on the site; only its served name changes.
+    return site.endsWith('.lpg.yaml') ? `${site}.txt` : site
+  }
   if (href.endsWith('.lpg.yaml')) {
     const file = basename(href)
     models.add(file)
-    return `models/${file}`
+    return `models/${file}.txt`
   }
   if (href.endsWith('.md')) {
     // An article the manifest does not publish is still worth linking, just not here.
@@ -218,6 +223,8 @@ function renderer(slugs, models) {
     const href = rewriteHref(token.attrGet('href'), slugs, models)
     token.attrSet('href', href)
     if (/^https?:/.test(href)) token.attrSet('rel', 'noopener')
+    // A model is served as `.txt` and saved under its real name.
+    if (href.endsWith('.lpg.yaml.txt')) token.attrSet('download', basename(href, '.txt'))
     return self.renderToken(tokens, idx, options)
   }
 
@@ -394,7 +401,12 @@ if (isMain) {
 
   for (const [rel, html] of files) writeFileSync(join(DOCS, rel), html)
   for (const model of models) {
-    writeFileSync(join(dir, 'models', model), readFileSync(join(ARTICLES, model), 'utf8'))
+    writeFileSync(join(dir, 'models', `${model}.txt`), readFileSync(join(ARTICLES, model), 'utf8'))
+  }
+  // The published examples get the same treatment, beside the originals the tests read.
+  const examples = join(DOCS, 'examples')
+  for (const f of readdirSync(examples).filter((f) => f.endsWith('.lpg.yaml'))) {
+    writeFileSync(join(examples, `${f}.txt`), readFileSync(join(examples, f), 'utf8'))
   }
 
   const written = readdirSync(dir).filter((f) => f.endsWith('.html')).length

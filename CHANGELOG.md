@@ -8,6 +8,11 @@ All notable changes to LPG Modeler are recorded here. The format follows
 
 ### Fixed
 
+- **Model downloads work.** The site's CDN answers any request for a `.yaml` file with a 403,
+  so every example and article model download failed. They are now served as `.txt` copies
+  that the link saves under the real `.lpg.yaml` name, and a test rejects a link to a bare
+  `.yaml`.
+
 - **The playground no longer fetches its examples.** The site is served through a CDN that
   answers any request for a `.yaml` file with a 403, so the page could not load its first
   example. The examples are now inlined in the bundle, and a test checks them byte for byte.

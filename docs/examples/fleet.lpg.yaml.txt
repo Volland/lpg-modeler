@@ -1,0 +1,122 @@
+# Inheritance and mixins, which are different tools for different jobs. A three-level
+# abstract hierarchy says what a thing *is*; three mixins say what a thing *carries*.
+lpg: "1.0"
+namespace:
+  prefix: fleet
+  iri: https://example.org/vocab/fleet#
+
+enums:
+  Fuel:
+    id: x_fuel
+    values: [diesel, electric, hydrogen]
+
+# A mixin is a named bag of properties, not a supertype. It declares no parent, never
+# appears in an ancestor chain, and is flattened into every type that applies it before
+# any target sees the model — so it costs the generators nothing.
+mixins:
+  Timestamped:
+    id: m_ts
+    props:
+      createdAt: { id: p_cts, type: zoneddatetime, required: true }
+      updatedAt: { id: p_uts, type: zoneddatetime }
+
+  Auditable:
+    id: m_aud
+    props:
+      createdBy: { id: p_cby, type: string, required: true }
+
+  Located:
+    id: m_loc
+    props:
+      latitude:  { id: p_lat, type: float, min: -90,  max: 90 }
+      longitude: { id: p_lon, type: float, min: -180, max: 180 }
+
+nodes:
+  # The abstract root. No table, no instances — it exists to contribute the key and the
+  # STATIONED_AT edge to everything below it.
+  Asset:
+    id: n_asset
+    abstract: true
+    key: [assetTag]
+    props:
+      assetTag: { id: p_tag, type: string, required: true }
+
+  # Abstract in the middle of the chain: Vehicle is a real distinction in the domain
+  # (a Driver drives one) but nothing is ever *just* a vehicle.
+  Vehicle:
+    id: n_vehicle
+    abstract: true
+    extends: Asset
+    props:
+      vin:  { id: p_vin, type: string, required: true, unique: true }
+      fuel: { id: p_fuel, type: string, enum: Fuel }
+
+  # Three levels deep. assetTag arrives from Asset, vin from Vehicle, and the mixin
+  # properties from Timestamped and Located — the inspector marks the first two with
+  # an arrow and the last two with a diamond, because they are not the same claim.
+  Truck:
+    id: n_truck
+    extends: Vehicle
+    mixins: [Timestamped, Located]
+    props:
+      axles:     { id: p_axl, type: int, min: 2, max: 6 }
+      maxLoadKg: { id: p_load, type: int, min: 0 }
+
+  Van:
+    id: n_van
+    extends: Vehicle
+    mixins: [Timestamped]
+    props:
+      cargoVolumeM3: { id: p_vol, type: float, min: 0 }
+
+  # A sibling of Vehicle rather than of Truck: it is an asset that gets stationed and
+  # towed, but it is not driven.
+  Trailer:
+    id: n_trailer
+    extends: Asset
+    mixins: [Timestamped, Auditable]
+    props:
+      lengthM: { id: p_len, type: float, min: 0 }
+
+  Depot:
+    id: n_depot
+    mixins: [Located]
+    key: [code]
+    props:
+      code: { id: p_code, type: string, required: true }
+      name: { id: p_dname, type: string }
+
+  Driver:
+    id: n_driver
+    mixins: [Timestamped, Auditable]
+    key: [licence]
+    props:
+      licence: { id: p_lic, type: string, required: true }
+      name:    { id: p_drname, type: string, required: true }
+
+edges:
+  # Declared once, on the abstract root. Every descendant has it: the diagram draws the
+  # line on Asset alone and lists it on each subtype in the inspector, while the targets
+  # expand it — LadybugDB emits four FROM/TO pairs, PG-Schema keeps the abstract endpoint.
+  STATIONED_AT:
+    id: e_stat
+    from: Asset
+    to: Depot
+    cardinality: { to: "0..1" }
+
+  # An abstract endpoint on one side only: a Driver drives a Truck or a Van, never a
+  # Trailer, because the distinction is Vehicle rather than Asset.
+  DRIVES:
+    id: e_drives
+    from: Driver
+    to: Vehicle
+    props:
+      since: { id: p_dsince, type: date }
+
+  # Concrete on both ends, and the one relationship the hierarchy exists to make sayable
+  # without repeating itself.
+  TOWS:
+    id: e_tows
+    from: Truck
+    to: Trailer
+    cardinality: { to: "0..1" }

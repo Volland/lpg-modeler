@@ -1,0 +1,35 @@
+# Endpoint bounds. A child has exactly two parents, which none of the four named
+# multiplicities can express.
+lpg: "1.0"
+namespace:
+  prefix: kin
+  iri: https://example.org/vocab/kin#
+
+nodes:
+  Person:
+    id: n_pers
+    key: [ssn]
+    props:
+      ssn:  { id: p_ssn, type: STRING, required: true }
+      born: { id: p_born, type: DATE }
+
+  Passport:
+    id: n_pass
+    key: [number]
+    props:
+      number: { id: p_num, type: STRING, required: true }
+
+edges:
+  # Exactly two. SHACL enforces this; LadybugDB reports that it cannot.
+  HAS_PARENT:
+    id: e_par
+    from: Person
+    to: Person
+    cardinality: { to: "2" }
+
+  # At most one passport per person, at least one holder per passport.
+  HELD_BY:
+    id: e_held
+    from: Passport
+    to: Person
+    cardinality: { from: "0..1", to: "1..*" }

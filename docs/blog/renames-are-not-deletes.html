@@ -119,7 +119,7 @@ edges:
 <p>Memgraph, with schema information enabled so it can also be read back later:</p>
 <pre><code>docker run -d --name memgraph -p 7687:7687 memgraph/memgraph:3.13.1 --schema-info-enabled=true</code></pre>
 <p>Podman works the same way — the run for this article used <code>podman run</code> and <code>podman exec</code> with identical arguments.</p>
-<p>Save the model above as <code>shop.lpg.yaml</code>, or download <a href="models/renames-shop.lpg.yaml"><code>renames-shop.lpg.yaml</code></a> under that name.</p>
+<p>Save the model above as <code>shop.lpg.yaml</code>, or download <a href="models/renames-shop.lpg.yaml.txt" download="renames-shop.lpg.yaml"><code>renames-shop.lpg.yaml</code></a> under that name.</p>
 <hr>
 <h2 id="step-1-give-every-element-an-id">Step 1 — give every element an id<a class="anchor" href="#step-1-give-every-element-an-id" aria-label="Link to this section">#</a></h2>
 <p>The model is valid:</p>
@@ -350,7 +350,7 @@ ALTER TABLE Product DROP legacyCode;</code></pre>
 </ul>
 <hr>
 <h2 id="try-it">Try it<a class="anchor" href="#try-it" aria-label="Link to this section">#</a></h2>
-<p>Download <a href="models/renames-shop.lpg.yaml"><code>renames-shop.lpg.yaml</code></a> and <a href="https://github.com/Volland/lpg-modeler/blob/main/article/renames-shop.seed.cypher" rel="noopener"><code>renames-shop.seed.cypher</code></a>, start Memgraph, and follow the eight steps. Then try the change that should worry you: edit <code>p_dehbt</code> to a new id instead of renaming the property, and watch <code>lpg diff</code> call it what it would really be.</p>
+<p>Download <a href="models/renames-shop.lpg.yaml.txt" download="renames-shop.lpg.yaml"><code>renames-shop.lpg.yaml</code></a> and <a href="https://github.com/Volland/lpg-modeler/blob/main/article/renames-shop.seed.cypher" rel="noopener"><code>renames-shop.seed.cypher</code></a>, start Memgraph, and follow the eight steps. Then try the change that should worry you: edit <code>p_dehbt</code> to a new id instead of renaming the property, and watch <code>lpg diff</code> call it what it would really be.</p>
 <p>The <a href="../migrations.html">migrations guide</a> covers adopting this on a model that is already in production, and <a href="../targets.html#migrations">the targets page</a> lists what each database can and cannot change in place.</p>
   </article>
 

@@ -60,7 +60,7 @@
 <p><em>(Everything below was run with LPG Modeler 0.18.1 against LadybugDB 0.19.1 and DuckDB 1.4.4 with its <code>duckpgq</code> extension. Every output block is pasted from those runs, with the absolute path trimmed from the front of file names. <code>lpg targets</code> lists thirteen targets.)</em></p>
 <hr>
 <h2 id="the-model">The model<a class="anchor" href="#the-model" aria-label="Link to this section">#</a></h2>
-<p>One model carries the whole article: a fleet of trucks, vans and trailers, stationed at depots and driven by drivers. Download <a href="../examples/fleet.lpg.yaml"><code>fleet.lpg.yaml</code></a>, which is also one of the site's examples, or read the part that matters here (ids and comments left out):</p>
+<p>One model carries the whole article: a fleet of trucks, vans and trailers, stationed at depots and driven by drivers. Download <a href="../examples/fleet.lpg.yaml.txt" download="fleet.lpg.yaml"><code>fleet.lpg.yaml</code></a>, which is also one of the site's examples, or read the part that matters here (ids and comments left out):</p>
 <pre><code>enums:
   Fuel:
     values: [diesel, electric, hydrogen]
@@ -412,7 +412,7 @@ plugin bad.cjs could not be loaded: Target 'mermaid' declares an incomplete capa
 <pre><code>npx lpg-modeler-cli targets
 npx lpg-modeler-cli check fleet.lpg.yaml
 npx lpg-modeler-cli audit fleet.lpg.yaml --target ladybug</code></pre>
-<p>Download <a href="../examples/fleet.lpg.yaml"><code>fleet.lpg.yaml</code></a>, run the three commands above, then change something the way the article did. Rename <code>axles</code>, apply the old schema, and run <code>lpg drift</code>. Add a query that uses the old name and run <code>lpg lint-queries</code>. Plant a row the engine accepts and run <code>lpg audit</code>. The model is the same file in every step, and each of those commands asks it something it already knows.</p>
+<p>Download <a href="../examples/fleet.lpg.yaml.txt" download="fleet.lpg.yaml"><code>fleet.lpg.yaml</code></a>, run the three commands above, then change something the way the article did. Rename <code>axles</code>, apply the old schema, and run <code>lpg drift</code>. Add a query that uses the old name and run <code>lpg lint-queries</code>. Plant a row the engine accepts and run <code>lpg audit</code>. The model is the same file in every step, and each of those commands asks it something it already knows.</p>
 <p>Installing the extension, and everything else about getting started, is on the <a href="../getting-started.html">getting started</a> page.</p>
   </article>
 

@@ -88,7 +88,7 @@
 <figure><img src="../assets/diagrams/ltv-composition.png" alt=""><figcaption>LTV has Revenue as its numerator and CustomerCount as its denominator. Revenue is based on orders.amount, filtered by status, at a monthly grain on orders.placedAt; CustomerCount is based on customers.id.</figcaption></figure>
 <p>Deliberately absent: a <code>Dimension</code> class. A dimension isn't a different <em>kind</em> of thing — it's a field being used for grouping. Giving it its own class buys no new structure, just a sixth name to keep straight.</p>
 <h3 id="the-ontology-is-itself-a-model">The ontology is itself a model<a class="anchor" href="#the-ontology-is-itself-a-model" aria-label="Link to this section">#</a></h3>
-<p>Here's the part that's easy to get backwards. The <em>metrics</em> don't belong in a schema file — but the <em>vocabulary</em> they're written in does. <code>Metric</code>, <code>Filter</code> and <code>MAPS_TO</code> change about as often as any other schema, and deserve the same review. So the five-class ontology is an ordinary LPG Modeler model: <a href="models/semantic-layer.lpg.yaml"><code>semantic-layer.lpg.yaml</code></a>.</p>
+<p>Here's the part that's easy to get backwards. The <em>metrics</em> don't belong in a schema file — but the <em>vocabulary</em> they're written in does. <code>Metric</code>, <code>Filter</code> and <code>MAPS_TO</code> change about as often as any other schema, and deserve the same review. So the five-class ontology is an ordinary LPG Modeler model: <a href="models/semantic-layer.lpg.yaml.txt" download="semantic-layer.lpg.yaml"><code>semantic-layer.lpg.yaml</code></a>.</p>
 <figure><img src="../assets/diagrams/semantic-layer-model.png" alt=""><figcaption>The metrics ontology as a model: Dataset and Field form the structural layer; Metric and Filter the computed layer. MAPS_TO is a Field-to-Field edge carrying mappingType, confidence and justification. Metric is BASED_ON and has a GRAIN field, is FILTERED_BY filters, and points at other metrics as NUMERATOR and DENOMINATOR.</figcaption></figure>
 <p>Two choices in it are the argument of this post, stated as schema:</p>
 <ul>
@@ -122,7 +122,7 @@ npx lpg-modeler-cli emit  semantic-layer.lpg.yaml --target owl --target shacl --
 <hr>
 <h2 id="where-to-go-next">Where to go next<a class="anchor" href="#where-to-go-next" aria-label="Link to this section">#</a></h2>
 <ul>
-<li><a href="models/semantic-layer.lpg.yaml"><code>semantic-layer.lpg.yaml</code></a> — the metrics ontology from this post, ready to open in the canvas or emit.</li>
+<li><a href="models/semantic-layer.lpg.yaml.txt" download="semantic-layer.lpg.yaml"><code>semantic-layer.lpg.yaml</code></a> — the metrics ontology from this post, ready to open in the canvas or emit.</li>
 <li><a href="../targets.html">Targets</a> — every projection of the model, and what each one can and cannot enforce.</li>
 <li><a href="rules-without-code.html">Rules without code</a> — SHACL compiled to Cypher with shacl2cypher: the read-time compilation this post leans on.</li>
 <li><a href="you-dont-have-to-choose.html">You don't have to choose</a> — why one model can serve both RDF and property graphs.</li>

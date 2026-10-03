@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { readdirSync, readFileSync, existsSync, statSync } from 'node:fs'
-import { join, resolve, dirname, relative, sep } from 'node:path'
+import { basename, join, resolve, dirname, relative, sep } from 'node:path'
 
 const ROOT = resolve(__dirname, '..', '..', '..')
 const DOCS = join(ROOT, 'docs')
@@ -138,10 +138,28 @@ describe('the site shows the canvas, and shows a model it still ships', () => {
     expect(shots.filter((f) => !html.includes(`assets/screenshots/${f}`))).toEqual([])
   })
 
+  it('serves models as .txt, because the CDN refuses .yaml, and saves them under their own name', () => {
+    // A `.yaml` request is answered with a 403 in front of this site, so a link to one is
+    // a download that fails. The `.txt` copy is generated and has to match its source.
+    const bare = localRefs('href').filter(({ url }) => /\.ya?ml$/.test(url))
+    expect(bare.map(({ page, url }) => `${page}: ${url}`)).toEqual([])
+    for (const page of pages()) {
+      for (const m of read(page).matchAll(/<a\b[^>]*href="([^"]*\.lpg\.yaml\.txt)"[^>]*>/g)) {
+        expect(m[0], `${page}: ${m[1]}`).toContain(`download="${basename(m[1]!, '.txt')}"`)
+      }
+    }
+    const examples = join(DOCS, 'examples')
+    const sources = readdirSync(examples).filter((f) => f.endsWith('.lpg.yaml'))
+    expect(sources.length).toBeGreaterThan(0)
+    for (const f of sources) {
+      expect(readFileSync(join(examples, `${f}.txt`), 'utf8')).toBe(readFileSync(join(examples, f), 'utf8'))
+    }
+  })
+
   it('offers for download every example model it names', () => {
     // The screenshots are captured from a published example, and the captions say so.
     // The promise only holds while that file is still there to download.
-    const named = localRefs('href').filter(({ url }) => url.endsWith('.lpg.yaml'))
+    const named = localRefs('href').filter(({ url }) => url.endsWith('.lpg.yaml.txt'))
     expect(named.length).toBeGreaterThan(0)
     const missing = named
       .filter(({ target }) => !existsSync(target))
@@ -232,7 +250,7 @@ describe('the blog is the articles, rendered', () => {
     const { models } = await build()
     expect(models.length).toBeGreaterThan(0)
     for (const model of models) {
-      const copy = join(DOCS, 'blog', 'models', model)
+      const copy = join(DOCS, 'blog', 'models', `${model}.txt`)
       expect(existsSync(copy)).toBe(true)
       expect(readFileSync(copy, 'utf8')).toBe(readFileSync(join(ROOT, 'article', model), 'utf8'))
     }

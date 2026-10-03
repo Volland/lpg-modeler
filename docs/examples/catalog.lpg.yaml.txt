@@ -1,0 +1,46 @@
+# Enums, list-valued properties, and an open type. A good second model to read after
+# the starter: every feature here is one the generated artifacts disagree about.
+lpg: "1.0"
+namespace:
+  prefix: cat
+  iri: https://example.org/vocab/catalog#
+
+enums:
+  Format:
+    id: x_fmt
+    values: [vinyl, cd, digital]
+
+mixins:
+  Timestamped:
+    id: m_ts
+    props:
+      createdAt: { id: p_cts, type: ZONED_DATETIME, required: true }
+
+nodes:
+  Release:
+    id: n_rel
+    mixins: [Timestamped]
+    # A composite key: two properties identify one release.
+    key: [label, catalogNumber]
+    props:
+      label:         { id: p_lab, type: STRING, required: true }
+      catalogNumber: { id: p_num, type: STRING, required: true }
+      format:        { id: p_fmt, type: string, enum: Format }
+      genres:        { id: p_gen, type: LIST<STRING> }
+      pressed:       { id: p_prs, type: DATE }
+
+  Artist:
+    id: n_art
+    # Open: an artist may carry properties this model does not declare.
+    open: true
+    key: [slug]
+    props:
+      slug:    { id: p_slug, type: STRING, required: true }
+      aliases: { id: p_ali, type: string, list: true }
+
+edges:
+  RELEASED_BY:
+    id: e_relby
+    from: Release
+    to: Artist
+    cardinality: { to: "1..*" }
