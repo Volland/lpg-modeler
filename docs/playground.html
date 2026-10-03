@@ -122,11 +122,9 @@
   }
 
   function load(name) {
-    // The published example files, from this origin: the file offered for download is
-    // the file loaded here.
-    fetch('examples/' + name + '.lpg.yaml').then(function (r) { return r.text() })
-      .then(function (text) { model.value = text; render() })
-      .catch(function () { problems.textContent = 'The example could not be loaded.' })
+    // The published example files, inlined in the bundle: the page does not fetch them.
+    model.value = LpgCore.examples[name]
+    render()
   }
 
   model.addEventListener('input', render)

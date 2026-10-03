@@ -2,6 +2,11 @@ import { resolveModel } from './resolve'
 import { validateModel } from './validate'
 import { emit, targetNames } from './emit/index'
 import type { Diagnostic } from './ir'
+// Supplied by the bundler: the published example models, by name. See scripts/build-playground.mjs.
+import examplesBundled from 'lpg-playground-examples'
+
+/** The published example models, inlined so the page needs no request to load one. */
+export const examples: Record<string, string> = examplesBundled
 
 /**
  * The entry the documentation site's playground is bundled from: parse, resolve,

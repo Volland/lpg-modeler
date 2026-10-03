@@ -2,7 +2,9 @@
 
 A page on the documentation site where a visitor edits model YAML and sees it validate and generate for every target, in the browser, with nothing installed. Built from [[packages/core/src/browser.ts#run]].
 
-It is the same parser, validator and generators the extension and command line run, bundled from `core`. The page has no diagram and no live-database commands: React Flow would weigh the bundle past the point of a quick look, and a browser cannot reach a database, so those stay with the extension and the command line, and the page says so. Examples are loaded from the published `docs/examples/` files, so the model a visitor downloads is the one they were shown.
+It is the same parser, validator and generators the extension and command line run, bundled from `core`. The page has no diagram and no live-database commands: React Flow would weigh the bundle past the point of a quick look, and a browser cannot reach a database, so those stay with the extension and the command line, and the page says so. Examples are the published `docs/examples/` files, inlined into the bundle rather than fetched, so the model a visitor is shown is byte for byte the one offered for download.
+
+They are inlined because the site is served through a CDN that answers a request for any `.yaml` file with a 403, and a page that needs a request to show its first example can fail to. The same bundle test that compares the generators compares the examples.
 
 The site's rule was no build step at all, so that a broken toolchain can never take the documentation down. This keeps the rule's reason and gives up its letter, the same way the blog does: `npm run build:playground` is a tool for the author, its output `docs/playground/lpg-core.js` is committed, and Pages still serves a folder of static files. The staleness test rebuilds the bundle and compares, so a change to `core` that forgot the bundle fails the build instead of publishing an old generator indefinitely.
 

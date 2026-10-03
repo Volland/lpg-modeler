@@ -1,4 +1,4 @@
-import { readFileSync, existsSync } from 'node:fs'
+import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { runInNewContext } from 'node:vm'
 import { describe, expect, it } from 'vitest'
@@ -28,6 +28,13 @@ describe('the playground bundle', () => {
     // @ts-expect-error a plain script with no declaration file
     const { buildPlayground } = await import('../../../scripts/build-playground.mjs')
     expect(read(BUNDLE) === await buildPlayground()).toBe(true)
+  })
+
+  it('carries every published example, byte for byte, so the page fetches nothing', () => {
+    const page = load() as Playground & { examples: Record<string, string> }
+    const files = readdirSync(join(ROOT, 'docs', 'examples')).filter((f) => f.endsWith('.lpg.yaml'))
+    expect(Object.keys(page.examples).sort()).toEqual(files.map((f) => f.replace('.lpg.yaml', '')).sort())
+    for (const f of files) expect(page.examples[f.replace('.lpg.yaml', '')]).toBe(read(join(ROOT, 'docs', 'examples', f)))
   })
 
   it('offers every target, since none of them needs a runtime', () => {
@@ -68,6 +75,7 @@ describe('the playground page', () => {
 
   it('loads only the bundle beside it, and offers only examples the site publishes', () => {
     expect(page).toContain('<script src="playground/lpg-core.js"></script>')
+    expect(page).not.toContain('fetch(')
     for (const m of page.matchAll(/<option value="([a-z]+)">/g)) {
       expect(existsSync(join(ROOT, 'docs', 'examples', `${m[1]}.lpg.yaml`)), m[1]).toBe(true)
     }
