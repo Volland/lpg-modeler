@@ -4,6 +4,17 @@ All notable changes to LPG Modeler are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.18.0] — 2026-10-03
+
+### Added
+
+- **Four more generation targets in `LPG: Generate Schema`.** The extension bundles
+  `core`, so the picker now also offers `typescript` (interfaces for application code),
+  `context` (a compact schema card for prompts and agents), `docs` (a self-contained HTML
+  data dictionary with an enforcement matrix) and `sqlpgq` (DuckDB tables plus a property
+  graph). The command line gained `audit`, `drift`, `lint-queries`, `mcp`, SQL import and
+  `--plugin` in the same release; see the repository changelog.
+
 ## [0.17.0] — 2026-10-02
 
 ### Changed
