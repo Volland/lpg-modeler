@@ -242,6 +242,21 @@ CREATE CONSTRAINT ON (n:Person) ASSERT n.createdAt IS TYPED LOCALDATETIME;</code
 
 
 <section class="wrap narrow">
+  <h2>typescript, context, docs, sqlpgq</h2>
+  <p>
+    Four targets that serve the code around the database rather than the database alone.
+    <strong>typescript</strong> emits one dependency-free <code>.ts</code> file of interfaces,
+    with a parent and a mixin as <code>extends</code>, enums as unions, and a
+    <code>SCHEMA</code> const for the keys, labels and endpoints a type cannot say.
+    <strong>context</strong> emits a compact schema card for prompts and agents.
+    <strong>docs</strong> emits a self-contained HTML data dictionary whose enforcement matrix
+    shows what every target does with each feature your model uses.
+    <strong>sqlpgq</strong> emits DuckDB tables that enforce required, unique, bounds, enums and
+    foreign keys, plus a <code>CREATE PROPERTY GRAPH</code> for the <code>duckpgq</code>
+    extension. Because DuckDB requires unique labels, an edge reaching an abstract endpoint
+    becomes one table per endpoint pair, and the artifact says so.
+  </p>
+
   <h2>Standards targets</h2>
   <p>
     Three targets exist so a model is readable by tools this project does not own. None is a

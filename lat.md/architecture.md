@@ -24,9 +24,15 @@ The repository is a monorepo of three packages: `core` holds parsing, the IR, va
 
 ## Modularity
 
-Modularity means two separate things, and only one of them ships in v1: models compose across files, while emitters sit behind a registry that is internal for now.
+Modularity means two separate things: models compose across files, and targets and sources register through a plugin seam.
 
-Model composition is a metamodel feature and cannot be retrofitted once models exist in the wild, so it lands first — see [[metamodel#Composition]]. A public plugin API is deliberately deferred until three real emitters have shown where the seam actually falls; the [[emitters#Capability Matrix]] is what that API will eventually expose.
+Model composition is a metamodel feature and cannot be retrofitted once models exist in the wild, so it landed first — see [[metamodel#Composition]]. The plugin seam waited until emitters had shown where it falls, and with nine of them and six sources it had not moved: a capability set plus an emit function, or an importer plus the extensions it answers to.
+
+### Plugins
+
+A plugin is a module whose default export takes `registerTarget` and `registerImporter`, loaded by `lpg --plugin <module>`. It may add targets and sources and never replace one that ships.
+
+The [[emitters#Capability Matrix]] is the contract: a target registering without every key of the capability set is refused, naming what is missing, because a target that does not say what it cannot express would break the rule that nothing is dropped silently. Its diagnostics flow through the same reporting as a built-in's, and `lpg targets` marks it `(plugin)`. A plugin is loaded only when named, never discovered: it is arbitrary code run with the user's privileges, by a tool people point at databases, and no sandbox is promised. A plugin source is read on its own, like a live instance. The IR types a plugin sees are public surface from here on, so a metamodel addition is a compatibility question; `packages/core/test/fixtures/plugin/hello.cjs` is the in-tree plugin whose loading is the check.
 
 ## Editing Surface
 
@@ -40,7 +46,7 @@ Registering the canvas as a `CustomTextEditorProvider` was rejected: it would be
 
 Every other entry point needs a model file to already exist — the canvas, and every CLI verb — so without this the first step was to know the shape of a file nobody had shown you yet. The template carries stable ids and one seeded node type with a key, because a model that generates nothing on its first run reads as a broken tool rather than an empty one. The seed is named `Thing` rather than after the model, so that it reads as a placeholder to rename.
 
-The file suffix is forced to `.lpg.yaml` whatever the save dialog returns. A model saved as plain `.yaml` gets no schema validation and no canvas, which looks like the extension failing rather than a naming mistake. Keeping the template in `core` is what lets a test resolve it, validate it, and generate all eight targets from it without an editor.
+The file suffix is forced to `.lpg.yaml` whatever the save dialog returns. A model saved as plain `.yaml` gets no schema validation and no canvas, which looks like the extension failing rather than a naming mistake. Keeping the template in `core` is what lets a test resolve it, validate it, and generate every target from it without an editor.
 
 ### Reaching a model
 
@@ -220,6 +226,8 @@ v1 is a visual modeler: the full compiler pipeline plus a canvas that authors th
 
 The original plan deferred interactive editing to v2 and shipped a read-only canvas first. That was amended: building the compiler first would have left the tool unusable for its stated purpose until a second release, and the IR is exercised by every canvas action anyway, so real use validates the metamodel rather than tests alone.
 
+The wave after v1 moves the model from schema-change time into daily use. Landed: the TypeScript, context, docs and SQL/PGQ targets ([[emitters#TypeScript Target]], [[emitters#Context Target]], [[emitters#Docs Target]], [[emitters#SQL/PGQ Target]]), the SQL importer ([[importers#Reading SQL DDL]]), data [[audit#Audit|audit]] and schema [[drift#Drift|drift]], [[lint#Query Lint|query linting]], the [[agent#Agent|MCP server]], the [[playground#Playground|playground]], and the [[architecture#Modularity#Plugins|plugin API]]. Still deferred, each with its gate recorded in `openspec/changes/`: data migrations, which need a mapping format that touches what the model file holds, and a concise DSL, which keeps locked decision 2 until demand says otherwise.
+
 ### Still deferred
 
 User-supplied template targets remain out of scope.
@@ -266,7 +274,7 @@ The runtime is checked before the path, because without it no path could be open
 
 `docs/` is a hand-written static site that GitHub Pages serves verbatim from the branch folder. It is the public face of the material this knowledge graph holds, aimed at someone deciding whether to install rather than at someone changing the code.
 
-Diagrams are authored as SVG and exported to PNG beside them. Both formats are kept because the Marketplace rejects SVG in a README, while the site prefers it. Neither is generated at build time: the site has no build step at all, so a broken toolchain can never take the documentation down.
+Diagrams are authored as SVG and exported to PNG beside them. Both formats are kept because the Marketplace rejects SVG in a README, while the site prefers it. Neither is generated at build time: the site has no build step at all, so a broken toolchain can never take the documentation down. The one generated artifact that is committed is the [[playground#Playground|playground]]'s bundle, kept honest by a test that rebuilds it.
 
 The site fetches nothing from a third party. Fonts are self-hosted rather than loaded from a content delivery network, because a request to Google Fonts sends every visitor's IP address to Google, which LG München I held unlawful without consent (20.01.2022, 3 O 17493/20) and which triggered a wave of German warning letters. Both families are SIL Open Font Licence 1.1, so self-hosting is permitted. A test asserts that no page fetches a cross-origin subresource, because the privacy statement is only true while it is true, and a single convenient `<link>` would quietly make it false.
 

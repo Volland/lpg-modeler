@@ -10,7 +10,7 @@ The set covers the hierarchy, identity, and edge properties, plus [[metamodel#Li
 
 A downgrade is reported only when a model actually uses the feature. A target that cannot enforce closure says so in the capability set, but does not raise a diagnostic on every closed type, which would be noise on every model rather than information.
 
-Constraint downgrades are reported at `info` rather than `warning`. Six of the eight targets can carry no [[metamodel#Value Constraints|value]] or [[metamodel#Named Constraints|named]] constraint at all, so a warning apiece would bury the downgrades that are genuinely surprising — a `required` property that silently vanishes is a different class of problem from SHACL being the only place a regular expression can live. One shared reporter emits them, so the five cannot drift apart in what they say.
+Constraint downgrades are reported at `info` rather than `warning`. Most targets can carry no [[metamodel#Value Constraints|value]] or [[metamodel#Named Constraints|named]] constraint at all, so a warning apiece would bury the downgrades that are genuinely surprising — a `required` property that silently vanishes is a different class of problem from SHACL being the only place a regular expression can live. One shared reporter emits them, so the targets cannot drift apart in what they say.
 
 A capability value is not always a yes or a no. LadybugDB declares [[metamodel#Cardinality]] as `upper-bound-only`, because its multiplicity keyword says an end holds at most one and nothing else. Collapsing that to `enforced` would be the exact overstatement the matrix exists to prevent, so the partial case gets its own value rather than being rounded up.
 
@@ -165,6 +165,56 @@ A slot carries an upper bound of one as `multivalued: false` and a lower bound o
 
 LinkML has one `integer`, so every [[metamodel#Scalar Types#Integer Widths|width]] lands on it: a width is a storage detail there rather than a different type, and reporting each as a downgrade would bury the four that are real ones — `uuid`, `json`, `duration` and `blob`, none of which LinkML has a range for.
 
+## TypeScript Target
+
+The model as application code sees it: one interface per node type, edge type and mixin, a string-literal union per enum, and a `SCHEMA` const for what types cannot say. The artifact imports nothing. Emitted by [[packages/core/src/emit/typescript.ts#emitTypescript]].
+
+A parent and a mixin are both `extends`, and an interface declares only its own properties, so the declaration reads like the model file and a mixin change edits one interface. A required property is a plain member and an optional one is `?`, which makes requiredness the one constraint this target genuinely enforces: omitting the member fails the build. Enums are enforced the same way, as unions. Composites map natively — a `STRUCT` to an object type, a `MAP` to a `Record` or a `Map` by key type, a `UNION` to a union — so this and ladybug are the two targets that carry them whole.
+
+The contested scalars — the temporal types and `decimal` — are emitted as named aliases (`LpgDate`, `LpgDecimal`, …) declared once at the top, because drivers disagree about their runtime shape and a consumer should remap one line, not every field. `int128` and `uint64` are `bigint`; `blob` is `Uint8Array`; `json` is `unknown`.
+
+What a type system cannot enforce — uniqueness, value bounds, named constraints, cardinality — is JSDoc at the member it belongs to plus the usual downgrade diagnostics, and the machine-readable facts (labels as the multi-label targets read them, keys, endpoints, cardinality) live in the `SCHEMA` const, derived from the same IR as the interfaces so the two cannot disagree. An edge interface that would collide with another declaration takes an `Edge` suffix and the collision is reported; the `SCHEMA` const keeps the model's own name.
+
+### The compiler is the engine
+
+This target has no database, so the TypeScript compiler is what its output is measured against: a test type-checks the artifact of every fixture under `strict` and fails on any diagnostic.
+
+A golden file alone would freeze a syntax error as faithfully as a working declaration, which is the same reason the Ladybug target executes its DDL rather than only snapshotting it.
+
+## Context Target
+
+The schema card: the whole model compressed for a prompt, one line per element, deterministic so it can be committed and diffed. Emitted by [[packages/core/src/emit/context.ts#emitContext]].
+
+Text-to-Cypher and agent pipelines need the schema in the prompt, and the model file is the wrong artifact for that: verbose, full of element ids and layout concerns. The card is a projection of the resolved IR — hierarchy, mixins, keys, properties with marks defined by a legend at the top, edges with endpoints and cardinality, enums, named constraints in words. Nothing in the model is omitted and nothing is enforced, so the full capability set is declared and no downgrade is ever reported; a raw SHACL fragment is included verbatim rather than noted. Elements appear in IR order, like the generated DDL, so the card diffs minimally.
+
+## Docs Target
+
+The data dictionary: one self-contained HTML page a teammate reads instead of the model file, with the capability matrix made visible for the features the model actually uses. Emitted by [[packages/core/src/emit/docs.ts#emitDocs]].
+
+Each node type's section carries what the inspector shows — parent, mixins, key, a property table with the `↑` and `◇` provenance marks, constraints in words — plus the two lists a diagram cannot show at once: edges in and edges out, inherited ones naming their declaring type. Inline styles, no script needed for reading, and no external fetch of any kind: the page gets committed and served from places the author does not control, so it adopts the [[architecture#Distribution#Documentation site|site's]] no-third-party rule, and a test rejects any cross-origin `src` or `href`.
+
+### Enforcement matrix
+
+One row per capability the model uses, one column per database and validation target, each cell that target's declared capability in a reader's words.
+
+The capability constants are imported from the sibling emitter modules — the registry would be an import cycle — so the matrix can never disagree with what `emit` reports: both read the same values. A feature the model does not use has no row, for the same reason an unused capability raises no diagnostic.
+
+## SQL/PGQ Target
+
+Ordinary DuckDB tables carrying the constraints, and a `CREATE PROPERTY GRAPH` that maps them, for the `duckpgq` extension. Emitted by [[packages/core/src/emit/sqlpgq.ts#emitSqlPgq]].
+
+Underneath it is a relational engine, so this target enforces nearly everything the graph engines cannot: `NOT NULL` for a required property (the key or not), `UNIQUE`, `CHECK` for [[metamodel#Value Constraints|bounds, lengths and patterns]], foreign keys from every edge table to its endpoint tables, and enum types. A composite key is a native `PRIMARY KEY` and a composite endpoint a composite foreign key, with nothing synthesized. `STRUCT`, `MAP`, `UNION`, lists and fixed arrays are column types, spelled by a local formatter because a struct *field* named `at` or `values` must be quoted and the shared one does not.
+
+A hierarchy is flattened to leaf tables as on [[emitters#Ladybug Target|LadybugDB]]. What the engine lacks is overlapping labels: measured, every label must be unique across tables, and `[:A|B]` does not parse. An edge type reaching an abstract endpoint is therefore one edge table and one label per concrete pair, reported as `downgrade-edge-expansion`. An end bounded at one is `UNIQUE` on the other end's key columns, which holds within a table and not across an expanded set — reported as `downgrade-cardinality-expanded` — and a minimum or a maximum above one has no spelling. Named constraints are `CHECK`s except an edge `count`, which would need a subquery and is reported; `namedConstraints` is therefore `partial`. An open type is closed here and says so.
+
+A name is quoted when DuckDB's parser would refuse it bare: every keyword that is not `unreserved`, 159 words. `AT` is the case that forced the rule — a `type_function` keyword, not reserved, and still a syntax error as a table name — while all 330 unreserved words parse bare as both table and column. DuckDB names are case-insensitive, so two tables differing only in case would collide; the edge table takes an `_edge` suffix and the collision is reported.
+
+### Verification
+
+The artifact is executed: every fixture is applied to a real DuckDB with `duckpgq` loaded, twice, and each constraint the target claims to enforce is violated and refused.
+
+Required, unique, key, foreign key, bound, pattern, length, enum, comparison and `exactlyOne` all reject bad rows, an end bounded at one rejects a second row, a composite key reaches a composite foreign key, and a query over `GRAPH_TABLE` reads back what was written. The quoted-word list is compared to `duckdb_keywords()` itself, so a release that reserves another word fails there first. The suite needs the extension, which is installed from DuckDB's community repository; when that cannot be reached the engine tests are skipped with a warning rather than failed, since the golden file and unit tests still run.
+
 ## Template Targets
 
 Targets that cannot be tested against a running instance are not shipped as code. Instead the resolved IR is exposed to a user-supplied template, so an additional dialect is a small amount of configuration rather than a feature request.
@@ -211,7 +261,7 @@ Reifying only what needs it follows the treatment of property graphs as accident
 
 Only the ladybug target stores a [[metamodel#Composite Types|composite]]. The other six report one downgrade per composite property and emit the scalar it degrades to, so a model that uses a struct still generates a usable artifact everywhere else.
 
-The downgrade is raised by one shared reporter rather than per emitter, for the same reason the constraint downgrades are: six targets saying the same thing in six wordings would drift. It is a `warning` rather than the `info` used for constraints, because a property whose structure silently flattens is the surprising kind of loss — the kind the capability matrix exists to surface.
+The downgrade is raised by one shared reporter rather than per emitter, for the same reason the constraint downgrades are: several targets saying the same thing in as many wordings would drift. It is a `warning` rather than the `info` used for constraints, because a property whose structure silently flattens is the surprising kind of loss — the kind the capability matrix exists to surface.
 
 What each target keeps is what it already had a place for. GQL and PG-Schema write the element scalar, wrapped in `LIST<…>` when the composite holds many; LinkML writes the corresponding range with `multivalued`; SHACL and OWL write the XSD datatype. Neo4j has no type DDL at all, so it writes a comment saying the value is unstorable: a Neo4j property is a primitive or an array of primitives, and a struct would have to become its own node, which the model does not say to do.
 

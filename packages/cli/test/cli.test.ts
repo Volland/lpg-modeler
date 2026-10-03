@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterAll } from 'vitest'
-import { spawnSync } from 'node:child_process'
+import { spawn, spawnSync } from 'node:child_process'
+import { createInterface } from 'node:readline'
 import { chmodSync, copyFileSync, existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
@@ -32,7 +33,8 @@ describe('lpg cli', () => {
     const r = run(['targets'])
     expect(r.status).toBe(0)
     expect(r.stdout.trim().split('\n').sort()).toEqual(
-      ['falkordb', 'gql', 'ladybug', 'linkml', 'memgraph', 'neo4j', 'owl', 'pgschema', 'shacl'])
+      ['context', 'docs', 'falkordb', 'gql', 'ladybug', 'linkml', 'memgraph', 'neo4j',
+        'owl', 'pgschema', 'shacl', 'sqlpgq', 'typescript'])
   })
 
   it('checks a valid model and exits zero', () => {
@@ -826,5 +828,212 @@ describe.runIf(NEO4J_URI).sequential('lpg apply and import against a running neo
     expect(wrong.status).toBe(1)
     expect(wrong.stderr).toContain('import-catalog')
     expect(existsSync(join(d, 'wrong.lpg.yaml'))).toBe(false)
+  })
+})
+
+// @lat: [[importers#Reading SQL DDL]]
+describe('lpg import from SQL DDL', () => {
+  it('imports a pg_dump-shaped schema to a model that checks clean', () => {
+    const d = mkdtempSync(join(tmpdir(), 'lpg-sql-'))
+    const out = join(d, 'shop.lpg.yaml')
+    const r = run(['import', join(FIXTURES, 'shop.sql'), '--out', out])
+    expect(r.status).toBe(0)
+    expect(r.stderr).toContain('import-join-table')
+    const written = readFileSync(out, 'utf8')
+    expect(written).toContain('a foreign key was read as an edge')
+    for (const name of ['Person:', 'Orders:', 'ORDER_LINE:']) expect(written).toContain(name)
+    expect(run(['check', out]).stdout).toContain('0 error(s)')
+  })
+})
+
+// @lat: [[audit#Audit]]
+describe('lpg audit', () => {
+  it('writes the audit script for review when no connection is named', () => {
+    const r = run(['audit', join(FIXTURES, 'social.lpg.yaml'), '--target', 'neo4j'])
+    expect(r.status).toBe(0)
+    expect(r.stdout).toContain('Target: neo4j audit')
+    expect(r.stdout).toContain('RETURN count(*) AS violations;')
+  })
+
+  it('refuses a target it has no audit for', () => {
+    const r = run(['audit', join(FIXTURES, 'social.lpg.yaml'), '--target', 'shacl'])
+    expect(r.status).toBe(1)
+    expect(r.stderr).toContain('audit-unsupported-target')
+  })
+
+  it('runs the checks read-only against a LadybugDB database and gates on the counts', () => {
+    const d = mkdtempSync(join(tmpdir(), 'lpg-audit-'))
+    const model = join(FIXTURES, 'social.lpg.yaml')
+    expect(run(['emit', model, '--target', 'ladybug', '--out', d]).status).toBe(0)
+    const db = join(d, 'social.lbdb')
+    expect(run(['apply', join(d, 'social.ladybug.cypher'), '--target', 'ladybug', '--database', db]).status).toBe(0)
+
+    // An empty database violates nothing.
+    const clean = run(['audit', model, '--target', 'ladybug', '--database', db])
+    expect(clean.status).toBe(0)
+    expect(clean.stdout).toContain('no violations')
+
+  })
+})
+
+// @lat: [[drift#Drift]]
+describe('lpg drift', () => {
+  it('reports no drift against the script the model generates', () => {
+    const d = mkdtempSync(join(tmpdir(), 'lpg-drift-'))
+    const model = join(FIXTURES, 'social.lpg.yaml')
+    expect(run(['emit', model, '--target', 'ladybug', '--out', d]).status).toBe(0)
+    const r = run(['drift', model, '--script', join(d, 'social.ladybug.cypher')])
+    expect(r.status).toBe(0)
+    expect(r.stdout).toContain('no drift against ladybug')
+  })
+
+  it('reports drift when the script no longer matches the model, and in JSON when asked', () => {
+    const d = mkdtempSync(join(tmpdir(), 'lpg-drift-'))
+    expect(run(['emit', join(FIXTURES, 'features.lpg.yaml'), '--target', 'ladybug', '--out', d]).status).toBe(0)
+    const r = run(['drift', join(FIXTURES, 'social.lpg.yaml'),
+      '--script', join(d, 'features.ladybug.cypher'), '--json'])
+    expect(r.status).toBe(1)
+    const parsed = JSON.parse(r.stdout) as { target: string; findings: Array<{ kind: string }> }
+    expect(parsed.target).toBe('ladybug')
+    expect(parsed.findings.length).toBeGreaterThan(0)
+  })
+
+  it('reports no drift against a database the script was applied to', () => {
+    const d = mkdtempSync(join(tmpdir(), 'lpg-drift-'))
+    const model = join(FIXTURES, 'social.lpg.yaml')
+    expect(run(['emit', model, '--target', 'ladybug', '--out', d]).status).toBe(0)
+    const db = join(d, 'social.lbdb')
+    expect(run(['apply', join(d, 'social.ladybug.cypher'), '--target', 'ladybug', '--database', db]).status).toBe(0)
+    const r = run(['drift', model, '--database', db])
+    expect(r.status).toBe(0)
+    expect(r.stdout).toContain('no drift against ladybug')
+
+    const drifted = run(['drift', join(FIXTURES, 'features.lpg.yaml'), '--database', db])
+    expect(drifted.status).toBe(1)
+    expect(drifted.stdout).toContain('missing')
+  })
+})
+
+// @lat: [[architecture#Modularity#Plugins]]
+describe('lpg --plugin', () => {
+  const PLUGIN = join(FIXTURES, 'plugin', 'hello.cjs')
+
+  it('marks a plugin target in the listing and emits through it', () => {
+    const listed = run(['targets', '--plugin', PLUGIN])
+    expect(listed.status).toBe(0)
+    expect(listed.stdout).toContain('hello (plugin)')
+    expect(listed.stdout).toContain('ladybug\n')
+
+    const r = run(['emit', join(FIXTURES, 'features.lpg.yaml'), '--plugin', PLUGIN, '--target', 'hello'])
+    expect(r.status).toBe(0)
+    expect(r.stdout).toContain('Driver')
+    // The plugin's downgrade reaches the user in the voice of a built-in target's.
+    expect(r.stderr).toContain('[hello] downgrade-enum')
+  })
+
+  it('reads a plugin source by extension', () => {
+    const d = mkdtempSync(join(tmpdir(), 'lpg-plugin-'))
+    const names = join(d, 'things.names')
+    writeFileSync(names, 'Alpha\nBeta\n')
+    const out = join(d, 'things.lpg.yaml')
+    expect(run(['import', names, '--plugin', PLUGIN, '--out', out]).status).toBe(0)
+    expect(readFileSync(out, 'utf8')).toContain('Alpha:')
+  })
+
+  it('does not know the target without the plugin, and says a bad plugin is bad', () => {
+    expect(run(['emit', join(FIXTURES, 'social.lpg.yaml'), '--target', 'hello']).stderr)
+      .toContain('unknown-target')
+    const r = run(['targets', '--plugin', join(FIXTURES, 'plugin', 'missing.cjs')])
+    expect(r.status).toBe(1)
+    expect(r.stderr).toContain('could not be loaded')
+  })
+})
+
+// @lat: [[agent#Agent]]
+describe('lpg mcp', () => {
+  /** A scripted client: write the messages, close stdin, read every reply line. */
+  const session = (model: string, lines: object[], between?: () => void): Array<Record<string, any>> => {
+    const input = lines.map((l) => JSON.stringify(l)).join('\n') + '\n'
+    const r = spawnSync('node', [CLI, 'mcp', model], { encoding: 'utf8', input })
+    expect(r.status).toBe(0)
+    between?.()
+    return r.stdout.trim().split('\n').filter(Boolean).map((l) => JSON.parse(l))
+  }
+
+  it('speaks MCP over stdio, one reply per request and none per notification', () => {
+    const replies = session(join(FIXTURES, 'social.lpg.yaml'), [
+      { jsonrpc: '2.0', id: 1, method: 'initialize', params: {} },
+      { jsonrpc: '2.0', method: 'notifications/initialized' },
+      { jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'describe_type', arguments: { name: 'Car' } } },
+    ])
+    expect(replies).toHaveLength(2)
+    expect(replies[0]!.result.serverInfo.name).toBe('lpg-modeler')
+    expect(JSON.parse(replies[1]!.result.content[0].text).key).toEqual(['vin'])
+  })
+
+  it('answers from the model as it is now: an edit while the server runs shows', async () => {
+    const d = mkdtempSync(join(tmpdir(), 'lpg-mcp-'))
+    const model = join(d, 'm.lpg.yaml')
+    copyFileSync(join(FIXTURES, 'social.lpg.yaml'), model)
+    const child = spawn('node', [CLI, 'mcp', model], { stdio: ['pipe', 'pipe', 'inherit'] })
+    const lines: string[] = []
+    let waiting: ((l: string) => void) | undefined
+    createInterface({ input: child.stdout }).on('line', (l) => {
+      if (waiting) { const w = waiting; waiting = undefined; w(l) } else lines.push(l)
+    })
+    const ask = (id: number): Promise<Record<string, any>> => new Promise((res) => {
+      waiting = (l) => res(JSON.parse(l))
+      child.stdin.write(JSON.stringify({
+        jsonrpc: '2.0', id, method: 'tools/call',
+        params: { name: 'describe_type', arguments: { name: 'Car' } },
+      }) + '\n')
+    })
+    try {
+      expect((await ask(1)).result.isError).toBeUndefined()
+      // The same process, the same session: only the file on disk changes.
+      writeFileSync(model, readFileSync(model, 'utf8').replace('  Car:', '  Auto:').replace(/\bCar\b/g, 'Auto'))
+      expect((await ask(2)).result.isError).toBe(true)
+    } finally {
+      child.stdin.end()
+    }
+  })
+
+  it('refuses a model it cannot read, writing nothing to stdout', () => {
+    const r = spawnSync('node', [CLI, 'mcp', join(FIXTURES, 'absent.lpg.yaml')], { encoding: 'utf8', input: '' })
+    expect(r.status).toBe(1)
+    expect(r.stdout).toBe('')
+  })
+})
+
+// @lat: [[lint#Query Lint]]
+describe('lpg lint-queries', () => {
+  const write = (name: string, text: string) => {
+    const d = mkdtempSync(join(tmpdir(), 'lpg-lint-'))
+    const f = join(d, name)
+    writeFileSync(f, text)
+    return f
+  }
+  const model = join(FIXTURES, 'social.lpg.yaml')
+
+  it('reports a renamed property at its position and exits non-zero', () => {
+    const f = write('q.cypher', "MATCH (p:Person)\nWHERE p.mail = 'x'\nRETURN p\n")
+    const r = run(['lint-queries', model, f])
+    expect(r.status).toBe(1)
+    expect(r.stderr).toMatch(/q\.cypher:2:9 error lint-unknown-property: Person has no property 'mail'/)
+    expect(r.stdout).toContain('1 finding(s) in 1 file(s)')
+  })
+
+  it('exits zero on clean queries, across several files', () => {
+    const a = write('a.cypher', 'MATCH (p:Person)-[:KNOWS]->(q:Person) RETURN q.email\n')
+    const b = write('b.cypher', 'MATCH (c:Car) RETURN c.vin\n')
+    const r = run(['lint-queries', model, a, b])
+    expect(r.status).toBe(0)
+    expect(r.stdout).toContain('no findings in 2 file(s)')
+  })
+
+  it('refuses a missing query file, and a model with errors', () => {
+    expect(run(['lint-queries', model, '/nope.cypher']).status).toBe(1)
+    expect(run(['lint-queries', join(FIXTURES, 'broken.lpg.yaml'), write('q.cypher', 'RETURN 1')]).status).toBe(1)
+    expect(run(['lint-queries', model]).status).toBe(2)
   })
 })

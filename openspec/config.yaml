@@ -69,8 +69,9 @@ context: |
   12. Renames are detected via element ids, never inferred from structural similarity.
   13. Only targets testable against a real engine ship as code. Everything else is a
       user-supplied template over the IR.
-  14. The public plugin API is deferred until three emitters exist. The capability
-      set is what it will eventually expose.
+  14. The public plugin API exposes the capability set. (Deferred until three emitters
+      existed; opened by change `add-plugin-api` once nine had left the seam where it
+      was: `lpg --plugin <module>`, targets and sources only, never replacing a built-in.)
 
   ## v1 scope
 
@@ -100,6 +101,18 @@ context: |
   neo4j, memgraph and falkordb; import reads a running Neo4j and FalkorDB. A Bolt URI
   is identified by engine, Memgraph first. Canvas themes (`add-canvas-themes`) keep
   the palette in editor settings. None of the four amended a locked decision.
+
+  A later wave (changes `add-typescript-target`, `add-context-target`, `add-docs-target`,
+  `add-sql-importer`, `add-audit`, `add-drift`, `add-plugin-api`, `add-mcp-server`,
+  `add-query-lint`, `add-playground`, `add-sqlpgq-target`, archived 2026-10-02 and
+  2026-10-03) moved the model from schema-change time into daily use: four more targets,
+  a SQL importer, `audit`, `drift`, `lint-queries`, `mcp`, `--plugin`, and a browser
+  playground. It amended locked decision 14 only (the plugin API is open); decision 13 was
+  upheld by executing the TypeScript and DuckDB artifacts. Still open, each with its gate:
+  `add-data-migrations` (needs a mapping format that touches what the model file holds)
+  and `add-dsl-language-server` (keeps decision 2 until demand says otherwise). The live
+  suites for audit and drift (`audit-drift.live.test.ts`) are written but were not run,
+  because the Podman machine would not start.
 
   Visual authoring, the layout sidecar, editable views, and the RDF targets moved
   from OUT to IN: shipping a compiler first would have left the tool unusable for
@@ -149,6 +162,31 @@ context: |
     table referenced by a rel table cannot be dropped.
   - Dropping a rel table's LAST endpoint pair is accepted, and the next statement on
     that table segfaults the process. Never empty a rel table's pairs in place.
+
+  Verified against LadybugDB 0.19.1 while implementing the audit checks:
+
+  - `size()` works on a string; `length()` and `char_length()` do not exist for one.
+  - `=~` matches a regex (full-match), and `regexp_matches()` also exists.
+  - OPTIONAL MATCH, CASE, NOT ... IN, WITH ... WHERE over an aggregate, and an unbound
+    relationship pattern `()-[r:E]->()` all work; an aggregate over zero rows returns 0.
+  - Counts come back from the embedded driver as BigInt; convert before comparing.
+
+  Verified against DuckDB 1.4.4 with the duckpgq community extension for the sqlpgq target:
+
+  - NOT NULL, UNIQUE, CHECK (a NULL passes it), PRIMARY KEY, composite PRIMARY KEY, foreign
+    keys (composite too) and enum types are all enforced on write. An enum value outside
+    the type surfaces as a Conversion Error rather than a constraint error.
+  - Every property-graph label must be unique across tables ("Label owns is not unique").
+    `[:A|B]` label alternation does not parse. A label may equal its table's name.
+  - Table and column names are case-insensitive: `PERSON` collides with `Person`.
+  - A bare name fails to parse when its keyword category is anything but unreserved: 75
+    reserved, 35 type_function (e.g. `AT`) and 49 column_name words. All 330 unreserved
+    words parse bare as a table and as a column. STRUCT and UNION field names follow the
+    same rule (`STRUCT(at TIMESTAMP)` fails).
+  - `CREATE TYPE IF NOT EXISTS`, `CREATE TABLE IF NOT EXISTS` and `CREATE OR REPLACE
+    PROPERTY GRAPH` repeat silently; plain `CREATE TYPE` errors the second time.
+  - `regexp_matches` finds a match anywhere in the string; `length()` counts characters.
+  - A PROPERTY GRAPH with no EDGE TABLES clause is accepted.
 
   Verified against FalkorDB 4.20.4 (Podman container) for the FalkorDB planner:
 

@@ -6,13 +6,15 @@
     "build": "npm run build -w packages/core && npm run build -w packages/cli && npm run build -w packages/vscode",
     "test": "vitest run",
     "lint": "eslint packages --ext .ts,.tsx",
-    "build:blog": "node scripts/build-blog.mjs"
+    "build:blog": "node scripts/build-blog.mjs",
+    "build:playground": "node scripts/build-playground.mjs"
   },
   "devDependencies": {
     "@ladybugdb/core": "0.19.1",
     "@types/node": "^22.7.5",
     "@typescript-eslint/eslint-plugin": "^8.70.0",
     "@typescript-eslint/parser": "^8.70.0",
+    "duckdb": "1.4.4",
     "eslint": "^8.57.1",
     "markdown-it": "^14.1.0",
     "neo4j-driver": "^6.2.0",

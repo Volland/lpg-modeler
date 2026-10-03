@@ -4,6 +4,67 @@ All notable changes to LPG Modeler are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **Three generation targets.** `typescript` emits one self-contained `.ts` file of
+  interfaces (`extends` for parents and mixins, unions for enums, composites carried
+  natively) plus a `SCHEMA` const with labels, keys, endpoints and cardinality; its
+  artifact is type-checked under strict TypeScript in the tests. `context` emits a
+  compact, deterministic schema card for prompts and agents. `docs` emits a
+  self-contained HTML data dictionary with an enforcement matrix — what each target
+  does with every feature the model uses — that fetches nothing from anywhere.
+- **SQL DDL import.** `lpg import schema.sql` reads a `pg_dump --schema-only` dump:
+  tables become node types, enum types become enums, a foreign key becomes an edge
+  (`NOT NULL` and `UNIQUE` shape its cardinality), and a table whose primary key is
+  exactly its two foreign keys becomes an edge type with the leftover columns as
+  properties. Every inference and every skipped statement is reported.
+- **`lpg audit`.** One read-only query per constraint a target cannot enforce —
+  required, unique, key parts and tuples, enums, bounds, lengths, patterns, closed
+  types, cardinality, named constraints — selected from the capability matrix per
+  target and edition. Without a connection it writes a reviewable script; with
+  `--uri`/`--database` it runs each check read-only and exits non-zero on any
+  violation. The LadybugDB checks are executed in-process in the tests.
+- **`lpg drift`.** Compares what a database actually holds against what the model
+  requires of that target — tables, columns, keys and endpoint pairs on LadybugDB;
+  constraints and indexes on Neo4j, Memgraph and FalkorDB — matching structurally,
+  never by constraint name. Reads a live instance, a database path, or a committed
+  DDL script (`--script`) with no database at all; `--json` for CI.
+- **`sqlpgq` target.** DuckDB tables carrying the constraints — `NOT NULL`, `UNIQUE`,
+  `CHECK` for bounds, lengths and patterns, native composite keys, foreign keys from
+  every edge table, enum types — and a `CREATE PROPERTY GRAPH` over them for the
+  `duckpgq` extension. Unlike the graph engines it enforces nearly everything, because
+  it is relational underneath. DuckDB requires every label to be unique, so an edge
+  reaching an abstract endpoint becomes one table and label per pair, and says so. Names
+  the parser refuses bare (159 keywords, `AT` among them) are quoted. The artifact is
+  executed in DuckDB in the tests, each claimed constraint violated and refused.
+- **`lpg lint-queries`.** Checks the labels, relationship types and property names in
+  query files against the model: unknown names, an edge traversed against its direction
+  or between types it cannot connect, a literal that cannot be compared with its
+  property, an enum value the model does not have. A lexer, not a grammar — whatever it
+  cannot resolve (an unlabelled or rebound variable, a label expression, a call) is
+  skipped rather than guessed. Query files only.
+- **`lpg mcp`.** Serves the model to an MCP client over stdio, read-only: `schema_card`,
+  `list_types`, `describe_type`, `describe_edge`. The model is re-resolved on every call,
+  so an edit on disk reaches the next question in the same session.
+- **Plugins.** `lpg --plugin <module>` loads a module that registers targets and sources.
+  A target must declare a complete capability set or is refused, naming what is missing;
+  a plugin cannot replace a built-in; `lpg targets` marks plugin targets. A plugin runs
+  with your privileges and is loaded only when named.
+- **Playground.** A page on the documentation site that edits a model in the browser and
+  shows its diagnostics and the generated artifact for every target, from a committed
+  bundle of `core` that a test rebuilds and compares. No diagram and no database
+  commands; those stay with the extension and the command line.
+- **Still proposed.** Data migrations (they need a mapping format that touches what the
+  model file holds) and a concise DSL are specified in `openspec/changes/`, each with the
+  gate that defers it.
+
+### Changed
+
+- `Capabilities.namedConstraints` may now be `partial`, for a target that enforces the
+  comparisons and presence rules and not an edge count.
+
 ## [0.17.0] — 2026-10-02
 
 No change to the command line; it is released at the same version so a version number means

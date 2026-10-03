@@ -44,23 +44,88 @@
 
 Usage:
   lpg check &lt;model.lpg.yaml&gt;
-  lpg emit  &lt;model.lpg.yaml&gt; --target &lt;gql|ladybug|linkml|neo4j|owl|pgschema|shacl&gt; [options]
-  lpg ids   &lt;model.lpg.yaml&gt;        assign any missing stable element ids
+  lpg emit  &lt;model.lpg.yaml&gt; --target &lt;context|docs|falkordb|gql|ladybug|linkml|memgraph|neo4j|owl|pgschema|shacl|typescript&gt; [options]
+  lpg ids    &lt;model.lpg.yaml&gt;       assign any missing stable element ids
   lpg lock    &lt;model.lpg.yaml&gt; [--check]
   lpg diff    &lt;model.lpg.yaml&gt; [--fail-on &lt;additive|breaking|destructive&gt;] [--json]
   lpg migrate &lt;model.lpg.yaml&gt; [--target &lt;ladybug|neo4j|falkordb|memgraph&gt;] [--out &lt;dir&gt;]
                                [--allow-destructive] [--edition ...] [--graph-key ...]
-  lpg import  bolt://host:7687 [--user &lt;name&gt;] [--out &lt;model.lpg.yaml&gt;]
-  lpg apply   &lt;script&gt; --target &lt;memgraph|neo4j&gt; --uri bolt://host:7687 [--user &lt;name&gt;]
-  lpg apply   &lt;script&gt; --target ladybug --database &lt;path.lbdb&gt; [--no-create]
-  lpg apply   &lt;script&gt; --target falkordb --uri redis://host:6379 [--graph-key &lt;key&gt;]
-              [--allow-destructive] [--dry-run]
-  lpg targets
+  lpg audit  &lt;model.lpg.yaml&gt; --target &lt;ladybug|neo4j|memgraph|falkordb&gt; [--out &lt;dir&gt;]
+             [--uri &lt;bolt-or-redis-uri&gt; | --database &lt;path&gt;] [--edition ...] [--graph-key ...]
+  lpg drift  &lt;model.lpg.yaml&gt; (--uri &lt;bolt-or-redis-uri&gt; | --database &lt;path&gt; | --script &lt;ddl&gt;)
+             [--graph-key ...] [--from memgraph|neo4j] [--json]
+  lpg import &lt;file...&gt; [--from &lt;falkordb|ladybug|ladybug-db|memgraph|neo4j|rdf|sql&gt;] [--out &lt;model.lpg.yaml&gt;]
+  lpg import bolt://host:7687 [--user &lt;name&gt;] [--out &lt;model.lpg.yaml&gt;]
+  lpg apply  &lt;script&gt; --target &lt;memgraph|neo4j&gt; --uri bolt://host:7687 [--user &lt;name&gt;]
+             [--allow-destructive] [--dry-run]
+  lpg apply  &lt;script&gt; --target ladybug --database &lt;path.lbdb&gt; [--no-create]
+             [--allow-destructive] [--dry-run]
+  lpg apply  &lt;script&gt; --target falkordb --uri redis://host:6379 [--graph-key &lt;key&gt;]
+             [--allow-destructive] [--dry-run]
+  lpg lint-queries &lt;model.lpg.yaml&gt; &lt;query-file...&gt;   check labels, edges and properties in queries
+  lpg mcp    &lt;model.lpg.yaml&gt;        serve the model to an MCP client over stdio (read-only)
+  lpg targets [--plugin &lt;module&gt;]
 
 Options:
-  --target &lt;name&gt;       generation target (repeatable)
-  --out &lt;dir&gt;           write artifacts to this directory instead of stdout
-  --edition &lt;name&gt;      neo4j edition: community (default) or enterprise</code></pre>
+  --target &lt;name&gt;       generation or migration target (repeatable); migrate defaults
+                        to ladybug, neo4j, falkordb and memgraph
+  --plugin &lt;module&gt;     load a module that registers targets or sources (repeatable); it
+                        runs with your privileges, so it is loaded only when named
+  --out &lt;path&gt;          emit: a directory to write artifacts into
+                        migrate: where scripts go (default: migrations/ beside the model)
+                        import: the model file to write, instead of stdout
+  --from &lt;name&gt;         import: what the inputs are, when the names do not say;
+                        ladybug-db opens each path as a LadybugDB database
+  --edition &lt;name&gt;      neo4j edition: community (default) or enterprise
+  --graph-key &lt;key&gt;     falkordb: the Redis key the graph lives under (emit default:
+                        the model's namespace prefix; import: needed when the server
+                        holds more than one graph; apply: overrides the script's own)
+  --check               lock: fail if the model has changed since the lockfile
+  --fail-on &lt;class&gt;     diff: fail on a change of this class or a more severe one
+  --json                diff: print the change set as JSON
+  --allow-destructive   migrate: generate changes that discard stored data
+                        apply: run a script whose statements are marked destructive
+  --uri &lt;bolt-uri&gt;      apply: the instance to run the script against
+  --database &lt;path&gt;     apply, audit, drift: the LadybugDB database to use, which is
+                        embedded rather than reached over a network; audit and drift
+                        open it read-only
+  --script &lt;path&gt;       drift: a generated LadybugDB DDL script to compare against,
+                        with no database at all
+  --no-create           apply: refuse a database path that holds none, rather than
+                        creating the database there
+  --user &lt;name&gt;         import, apply: the database user; the password is read from
+                        MEMGRAPH_PASSWORD or NEO4J_PASSWORD, by engine, never a flag
+  --dry-run             apply: print the statements without connecting
+
+The lockfile (&lt;stem&gt;.lpg.lock.json) is committed beside the model. It records what was
+last deployed, so diff and migrate compare the model against it by element id.
+
+Several files are imported together: a SHACL shapes graph and the OWL ontology
+beside it each carry half of a model, and the DDL adds the endpoints and the
+exact column widths neither of them keeps.
+
+A LadybugDB database is read from its catalog, opened read-only. A directory or a
+.lbdb, .lbug or .kuzu file is taken to be one; that needs @ladybugdb/core installed.
+
+A bolt:// URI is a running Memgraph or Neo4j, whose schema is read without writing to
+it. Which engine it is comes from the instance itself, not the URI; --from memgraph or
+--from neo4j overrides. Reading one, and apply, need neo4j-driver installed.
+
+A redis:// URI is a running FalkorDB. Every read is a read-only query, which the server
+refuses to write through, and --graph-key names the graph when it holds more than one.
+Reading one, and apply, need a redis client installed. The password for any of the three
+comes from MEMGRAPH_PASSWORD, NEO4J_PASSWORD or FALKORDB_PASSWORD, never a flag.</code></pre>
+<h2>Checking what is deployed and what is asked</h2>
+<p>
+  <code>lpg audit</code> turns each constraint a target cannot enforce into a read-only query
+  that counts violations, and <code>lpg drift</code> compares a database, or a committed DDL
+  script, with what the model requires. <code>lpg lint-queries</code> checks the labels,
+  relationship types and properties in query files against the model, skipping whatever it
+  cannot resolve rather than guessing. <code>lpg mcp</code> serves the model to an MCP client
+  over stdio, read-only. <code>--plugin &lt;module&gt;</code> loads a module that registers more
+  targets or sources; it runs with your privileges, so it is loaded only when named.
+</p>
+
 
   <h2>check</h2>
   <p>

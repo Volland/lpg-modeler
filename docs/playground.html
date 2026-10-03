@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Playground — LPG Modeler</title>
+<meta name="description" content="Edit a model in the browser and watch it validate and generate for every target. Nothing is installed and nothing leaves the page.">
+<link rel="icon" href="assets/icon.png">
+<link rel="stylesheet" href="assets/fonts.css">
+<link rel="stylesheet" href="assets/site.css">
+<style>
+.play { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
+@media (max-width: 800px) { .play { grid-template-columns: 1fr; } }
+.play textarea, .play pre { width: 100%; box-sizing: border-box; min-height: 26rem; max-height: 40rem; overflow: auto;
+  font: 13px/1.5 ui-monospace, Menlo, Consolas, monospace; border: 1px solid var(--line);
+  border-radius: 8px; padding: 12px; background: var(--surface); color: var(--ink); margin: 0; }
+.play textarea { resize: vertical; }
+.bar { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin: 0 0 12px; }
+.bar label { display: flex; gap: 6px; align-items: center; }
+.bar select { font: inherit; padding: 4px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--ink); }
+#problems { min-height: 0; max-height: 10rem; margin-bottom: 12px; }
+.err { color: #b3261e; } .warn { color: #8a5a00; }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="index.html"><img src="assets/icon.png" alt=""> LPG Modeler</a>
+    <nav class="links">
+      <a href="index.html">Overview</a>
+      <a href="getting-started.html">Getting started</a>
+      <a href="examples.html">Examples</a>
+      <a href="model-format.html">Model format</a>
+      <a href="targets.html">Targets</a>
+      <a href="cli.html">CLI</a>
+      <a href="migrations.html">Migrations</a>
+      <a href="architecture.html">Architecture</a>
+      <a href="blog/index.html">Blog</a>
+      <a href="https://github.com/Volland/lpg-modeler">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+<div class="wrap hero">
+  <span class="eyebrow">Try it</span>
+  <h1>A model in, every schema out</h1>
+  <p class="lede">
+    This is the same parser, validator and generators the extension and the command line
+    run, in your browser. Nothing is installed and nothing leaves the page. The diagram and
+    the live-database commands need the <a href="getting-started.html">extension</a> or
+    the <a href="cli.html">command line</a>.
+  </p>
+</div>
+
+<section class="wrap">
+  <div class="bar">
+    <label>Example
+      <select id="example">
+        <option value="fleet">fleet</option>
+        <option value="social">social</option>
+        <option value="kinship">kinship</option>
+        <option value="catalog">catalog</option>
+        <option value="booking">booking</option>
+      </select>
+    </label>
+    <label>Target <select id="target"></select></label>
+  </div>
+  <pre id="problems" aria-live="polite"></pre>
+  <div class="play">
+    <label>Model
+      <textarea id="model" spellcheck="false" aria-label="Model, in YAML"></textarea>
+    </label>
+    <label>Generated
+      <pre id="artifact" aria-label="Generated artifact"></pre>
+    </label>
+  </div>
+</section>
+</main>
+
+<footer class="site">
+  <div class="wrap">
+    <span>LPG Modeler — MIT licensed</span>
+    <span class="spacer"><a href="impressum.html">Impressum</a></span>
+    <span><a href="datenschutz.html">Datenschutz</a></span>
+    <span><a href="agb.html">AGB</a></span>
+    <span><a href="https://github.com/Volland/lpg-modeler">Source</a></span>
+    <span><a href="https://github.com/Volland/lpg-modeler/issues">Issues</a></span>
+  </div>
+</footer>
+
+<script src="playground/lpg-core.js"></script>
+<script>
+(function () {
+  var model = document.getElementById('model')
+  var target = document.getElementById('target')
+  var example = document.getElementById('example')
+  var problems = document.getElementById('problems')
+  var artifact = document.getElementById('artifact')
+
+  LpgCore.targets().forEach(function (t) {
+    var o = document.createElement('option')
+    o.value = o.textContent = t
+    if (t === 'shacl') o.selected = true
+    target.appendChild(o)
+  })
+
+  function render() {
+    var result = LpgCore.run(model.value, target.value)
+    problems.textContent = ''
+    if (result.diagnostics.length === 0) problems.textContent = 'No problems.'
+    result.diagnostics.forEach(function (d) {
+      var line = document.createElement('div')
+      line.className = d.severity === 'error' ? 'err' : d.severity === 'warning' ? 'warn' : ''
+      var where = d.line ? d.line + ':' + d.column + ' ' : ''
+      var tag = d.target ? '[' + d.target + '] ' : ''
+      line.textContent = where + d.severity + ' ' + tag + d.code + ': ' + d.message
+      problems.appendChild(line)
+    })
+    artifact.textContent = result.artifact ? result.artifact.content : 'Nothing is generated from a model with errors.'
+  }
+
+  function load(name) {
+    // The published example files, from this origin: the file offered for download is
+    // the file loaded here.
+    fetch('examples/' + name + '.lpg.yaml').then(function (r) { return r.text() })
+      .then(function (text) { model.value = text; render() })
+      .catch(function () { problems.textContent = 'The example could not be loaded.' })
+  }
+
+  model.addEventListener('input', render)
+  target.addEventListener('change', render)
+  example.addEventListener('change', function () { load(example.value) })
+  load(example.value)
+})()
+</script>
+</body>
+</html>

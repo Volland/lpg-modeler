@@ -14,10 +14,14 @@ import { emitOwl, OWL_CAPABILITIES } from './owl'
 import { emitGql, GQL_CAPABILITIES } from './gql'
 import { emitPgSchema, PGSCHEMA_CAPABILITIES } from './pgschema'
 import { emitLinkml, LINKML_CAPABILITIES } from './linkml'
+import { emitTypescript, TYPESCRIPT_CAPABILITIES } from './typescript'
+import { emitContext, CONTEXT_CAPABILITIES } from './context'
+import { emitDocs, DOCS_CAPABILITIES } from './docs'
+import { emitSqlPgq, SQLPGQ_CAPABILITIES } from './sqlpgq'
 
 export type Emitter = (model: ModelIR, options: EmitOptions) => EmitResult
 
-interface Registration {
+export interface Registration {
   capabilities: Capabilities
   emit: Emitter
   /**
@@ -42,11 +46,42 @@ const REGISTRY = new Map<string, Registration>([
   ['gql', { capabilities: GQL_CAPABILITIES, emit: emitGql }],
   ['pgschema', { capabilities: PGSCHEMA_CAPABILITIES, emit: emitPgSchema }],
   ['linkml', { capabilities: LINKML_CAPABILITIES, emit: emitLinkml }],
+  ['typescript', { capabilities: TYPESCRIPT_CAPABILITIES, emit: emitTypescript }],
+  ['context', { capabilities: CONTEXT_CAPABILITIES, emit: emitContext }],
+  ['docs', { capabilities: DOCS_CAPABILITIES, emit: emitDocs }],
+  ['sqlpgq', { capabilities: SQLPGQ_CAPABILITIES, emit: emitSqlPgq }],
 ])
 
-export function registerTarget(name: string, reg: Registration): void {
+/** The names the tool ships with; a plugin may add a target but never replace one. */
+const BUILT_IN = new Set(REGISTRY.keys())
+const PLUGIN_TARGETS = new Set<string>()
+const CAPABILITY_KEYS = Object.keys(LADYBUG_CAPABILITIES)
+
+/**
+ * Add a target. The capability set is the contract: a registration without every key of
+ * it is refused, because a target that does not say what it cannot express would break
+ * the rule that nothing is dropped silently. `plugin` marks where the target came from,
+ * so `lpg targets` can say so. See lat.md/architecture#Modularity#Plugins.
+ */
+export function registerTarget(
+  name: string, reg: Registration, options: { plugin?: boolean } = {},
+): void {
+  if (!/^[a-z][a-z0-9-]*$/.test(name)) {
+    throw new Error(`Target name '${name}' must be lower-case letters, digits and hyphens, starting with a letter.`)
+  }
+  if (BUILT_IN.has(name)) throw new Error(`Target '${name}' is built in and cannot be replaced.`)
+  if (typeof reg?.emit !== 'function') throw new Error(`Target '${name}' registers no emit function.`)
+  const caps = reg.capabilities as unknown as Record<string, unknown> | undefined
+  const missing = caps ? CAPABILITY_KEYS.filter((k) => !(k in caps)) : CAPABILITY_KEYS
+  if (missing.length > 0) {
+    throw new Error(`Target '${name}' declares an incomplete capability set; missing: ${missing.join(', ')}. The capability set is how a target says what it cannot express.`)
+  }
   REGISTRY.set(name, reg)
+  if (options.plugin) PLUGIN_TARGETS.add(name)
 }
+
+/** Whether a target was registered by a plugin rather than shipped. */
+export const isPluginTarget = (name: string): boolean => PLUGIN_TARGETS.has(name)
 
 export function targetNames(): string[] {
   return [...REGISTRY.keys()].sort()

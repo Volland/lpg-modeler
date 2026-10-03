@@ -178,6 +178,28 @@ A schema read should not scan a production graph, and a sample is evidence rathe
 
 What no FalkorDB schema holds — enums, cardinality, value bounds, named constraints, mixins, integer widths, open and closed types — is reported as lost.
 
+## Reading SQL DDL
+
+A SQL dump — what `pg_dump --schema-only` writes — is read into a model: tables become node types, foreign keys become edges, and a join table becomes an edge type. Read by [[packages/core/src/import/sql.ts#importSql]].
+
+This is the adoption importer: the teams this tool wants already model graphs as foreign keys and `parent_id` columns, and retyping that schema is the wall. The reader is hand-written over a statement splitter that honours quotes and dollar-quoted bodies, in the manner of the LadybugDB DDL reader, and recognises `CREATE TABLE`, `ALTER TABLE … ADD CONSTRAINT`, `CREATE TYPE … AS ENUM` and single-column `CREATE UNIQUE INDEX`. Everything else is counted per leading keyword and reported once as `import-skipped-statements`, never silently skipped.
+
+A primary key is the key, `NOT NULL` is required, `UNIQUE` is unique, `varchar(n)` keeps its length as `maxLength`, `numeric(p,s)` its precision, and a column of an enum type references the enum. A type outside the map is read as a string and reported, as a foreign XSD datatype is. `snake_case` table names are read into PascalCase type names and the mapping reported in one summary; column names are kept verbatim, because they are how the reader maps the model back to their data, and nothing is singularised — guessing `User` from `users` wrong is worse than a plural type name. A SQL source is imported on its own, like a live instance: nothing in it aligns with an RDF vocabulary or a LadybugDB catalog.
+
+### Foreign keys become edges
+
+A single-column foreign key becomes a many-to-one edge from the declaring type to the referenced one, and the column is dropped, because the edge is where that fact now lives.
+
+`NOT NULL` raises the to end's minimum to 1, and a `UNIQUE` foreign key bounds the from end at one — each person has at most one profile.
+
+The edge is named by the constraint when one was written, else by the column minus its `_id`/`_fk` tail, upper-snake, and every naming and every drop is reported. Two exceptions keep the column: one that is part of the primary key, because removing it would break the key, and the columns of a multi-column foreign key, which have no single property to become. Both are reported, and the reference still becomes an edge. A reference to a table the file does not create keeps its column and declares no edge, reported as `import-unresolved-reference` — an edge to a type that does not exist would fail resolution.
+
+### The join-table rule
+
+A table is an edge type only when its primary key is exactly its two single-column foreign keys; its remaining columns become the edge's properties. Anything looser stays a node type with foreign-key edges.
+
+The rule is exact rather than fuzzy because the failure modes are asymmetric: a join table read as a node type is merely verbose, while a node type read as an edge deletes a type a query may name. A table with its own `id` key and two foreign keys is therefore a node type, however join-like it looks. The reading is reported as an inference, in the voice of [[importers#Un-flattening Inheritance]], and the edge runs from the reference whose column leads the primary key.
+
 ## Combining Sources
 
 RDF and DDL are complementary, so an import given both uses each for what only it has. RDF is the base, because it alone carries the hierarchy.

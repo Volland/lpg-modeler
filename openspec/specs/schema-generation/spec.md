@@ -214,3 +214,154 @@ Each enum in the model SHALL be declared as a Memgraph enum, and a property limi
 
 - **WHEN** a user opens the target choice on the canvas
 - **THEN** memgraph is offered alongside the other targets, and choosing it writes the same script the command line produces
+
+### Requirement: TypeScript target generates compiling type declarations
+
+The system SHALL provide a `typescript` target that generates, for the **typescript** target, a single self-contained `.ts` artifact: one `interface` per node type, mixin and edge type, one string-literal union type per enum, and named type aliases for the scalars drivers disagree on (`decimal`, `date`, `datetime`, `zoneddatetime`, `duration`). The artifact SHALL import nothing and SHALL type-check under `strict` TypeScript.
+
+#### Scenario: Hierarchy and mixins become extends
+
+- **WHEN** a model declares `Person extends Party` with mixin `Timestamped`
+- **THEN** the artifact declares `interface Person extends Party, Timestamped` carrying only the properties `Person` itself declares
+
+#### Scenario: Required and optional properties
+
+- **WHEN** a node type declares a required property and an optional one
+- **THEN** the required property is a plain member and the optional one is marked `?`
+
+#### Scenario: Enum property compiles to a union
+
+- **WHEN** a property is limited to enum `Status` with values `active` and `retired`
+- **THEN** the artifact declares `type Status = 'active' | 'retired'` and the property's type is `Status`
+
+#### Scenario: Composite types are carried natively
+
+- **WHEN** a property's type is `STRUCT(street STRING, zip STRING)`
+- **THEN** the member's type is an object type with those fields, and no downgrade is reported for it
+
+#### Scenario: Open type gains an index signature
+
+- **WHEN** a node type is declared open
+- **THEN** its interface carries a `[key: string]: unknown` index signature
+
+### Requirement: TypeScript target carries runtime facts in a SCHEMA const
+
+The artifact SHALL export a `SCHEMA` const, `as const`, holding for every node type its labels (own name plus ancestors), its key and whether it is abstract, and for every edge type its endpoints and cardinality.
+
+#### Scenario: Labels and key in the manifest
+
+- **WHEN** `Person extends Party` declares key `email`
+- **THEN** `SCHEMA.nodes.Person` holds `labels: ['Person', 'Party']` and `key: ['email']`
+
+#### Scenario: Edge endpoints in the manifest
+
+- **WHEN** an edge type `DRIVES` runs from `Person` to `Car` with many-to-many cardinality
+- **THEN** `SCHEMA.edges.DRIVES` holds `from: 'Person'`, `to: 'Car'` and the cardinality's name
+
+### Requirement: TypeScript target reports what a type cannot enforce
+
+For the **typescript** target, uniqueness, value bounds, patterns, length bounds and named constraints SHALL be written as JSDoc at the member or interface they belong to and reported as downgrade diagnostics. They SHALL NOT be silently dropped.
+
+#### Scenario: Unique property
+
+- **WHEN** a non-key property is declared unique
+- **THEN** its member carries a JSDoc note naming the uniqueness and a downgrade diagnostic is reported
+
+#### Scenario: Value bounds
+
+- **WHEN** a property declares `min` and `max`
+- **THEN** the bounds appear in the member's JSDoc and a `downgrade-value-constraint` diagnostic is reported
+
+### Requirement: Context target generates a compact schema card
+
+The system SHALL provide a `context` target that generates, for the **context** target, a deterministic Markdown artifact holding every node type (with hierarchy, mixins, key, abstract and open marks, and every property with its type, requiredness, uniqueness, bounds and enum), every edge type (with endpoints and cardinality), every enum with its values, every mixin, and every named constraint in words. Nothing in the model SHALL be omitted, and no downgrade SHALL be reported.
+
+#### Scenario: A node type is one line
+
+- **WHEN** the card is generated for a model where `Person extends Party` applies mixin `Timestamped`, declares key `email`, and has a unique property
+- **THEN** one bullet names `Person`, its parent, its mixin, its key, and the property with a uniqueness mark
+
+#### Scenario: Card is deterministic
+
+- **WHEN** the card is generated twice from the same model
+- **THEN** both artifacts are byte-identical
+
+#### Scenario: Everything appears
+
+- **WHEN** the card is generated for a model with enums and named constraints
+- **THEN** every enum value and every constraint name in the resolved IR appears in the artifact
+
+#### Scenario: Raw SHACL is carried
+
+- **WHEN** a node type carries a raw SHACL fragment
+- **THEN** the fragment appears verbatim under that type and no `downgrade-raw-shacl` diagnostic is reported
+
+### Requirement: Docs target generates a self-contained data dictionary
+
+The system SHALL provide a `docs` target that generates, for the **docs** target, one self-contained HTML artifact: a table of contents, a section per node type (hierarchy, mixins, key, a property table with provenance marks for inherited and mixin-applied properties, named constraints in words, and the type's incoming and outgoing edge types), and sections for edge types, mixins and enums. The page SHALL reference no external subresource.
+
+#### Scenario: Every type is reachable from the table of contents
+
+- **WHEN** the artifact is generated
+- **THEN** every node type, edge type, mixin and enum has an anchored section linked from the table of contents
+
+#### Scenario: Inherited properties are marked with their source
+
+- **WHEN** a node type inherits a property and receives another from a mixin
+- **THEN** its property table shows both with the declaring type or mixin named
+
+#### Scenario: No external fetches
+
+- **WHEN** the artifact is generated for any model
+- **THEN** the page contains no `src` or `href` that resolves to another origin
+
+### Requirement: Docs target displays the enforcement matrix
+
+The artifact SHALL contain a matrix with one row per capability the model actually uses and one column per database and validation target, each cell stating that target's declared capability (enforced, partial, documented, unsupported — in reader's words). The cells SHALL be derived from the same capability sets `emit` reports downgrades from.
+
+#### Scenario: A model that uses enums
+
+- **WHEN** the model constrains a property to an enum
+- **THEN** the matrix has an enums row showing, among others, that memgraph enforces it partially and neo4j does not enforce it
+
+#### Scenario: A feature the model does not use
+
+- **WHEN** the model declares no named constraints
+- **THEN** the matrix has no named-constraints row
+
+### Requirement: SQL/PGQ target generates DuckDB tables and a property graph
+
+The system SHALL provide a `sqlpgq` target that generates, for the **sqlpgq** target, DuckDB SQL: one table per concrete node type with every property as a typed column, `NOT NULL` for a required property, `UNIQUE` for a unique one, `CHECK` for bounds, lengths and patterns, and a `PRIMARY KEY` over the key; one edge table per concrete endpoint pair with foreign keys to both endpoint tables; one `CREATE TYPE … AS ENUM` per enum; and a `CREATE OR REPLACE PROPERTY GRAPH` mapping them. The artifact SHALL apply to a DuckDB with the `duckpgq` extension, twice in a row.
+
+#### Scenario: A concrete type becomes a vertex table
+
+- **WHEN** the artifact is generated for a model with `Person` keyed by `id`
+- **THEN** a `Person` table with `PRIMARY KEY (id)` appears and the property graph names it as a vertex table with label `Person`
+
+#### Scenario: What the model requires is refused on write
+
+- **WHEN** a row without a required value, a duplicate of a unique value, a value outside its bounds, or an edge to a missing node is inserted
+- **THEN** DuckDB refuses it
+
+#### Scenario: A composite key is native
+
+- **WHEN** a node type declares a composite key
+- **THEN** the table has a composite `PRIMARY KEY` and an edge to it has a composite foreign key, with no synthesized column
+
+### Requirement: An abstract endpoint expands to one edge table and label per pair
+
+An edge type reaching an abstract endpoint SHALL be generated as one edge table per concrete endpoint pair, each with its own unique label, and a `downgrade-edge-expansion` diagnostic SHALL be reported, because a DuckDB property graph requires every label to be unique.
+
+#### Scenario: An abstract source
+
+- **WHEN** an edge type runs from an abstract type with two concrete subtypes
+- **THEN** two edge tables and two labels are generated, and the downgrade is reported
+
+### Requirement: SQL/PGQ target reports what a table cannot hold
+
+For the **sqlpgq** target, an open node type, an end bounded other than at-most-one, an end bounded at one on an expanded edge set, and an edge `count` assertion SHALL each be reported as a downgrade and noted in a comment at the site. A name DuckDB refuses bare SHALL be quoted.
+
+#### Scenario: A keyword as a name
+
+- **WHEN** a node type or property is named with a keyword that is not unreserved, such as `order` or `AT`
+- **THEN** it is quoted and the artifact still applies

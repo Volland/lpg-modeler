@@ -43,8 +43,12 @@ export interface Capabilities {
    * some are not, each reported individually.
    */
   valueConstraints: 'enforced' | 'partial' | 'unsupported'
-  /** Whether an assertion spanning more than one property is enforced. */
-  namedConstraints: 'enforced' | 'unsupported'
+  /**
+   * Whether an assertion spanning more than one property is enforced. `partial` means
+   * the comparisons and presence rules are and an edge count is not, each reported
+   * individually.
+   */
+  namedConstraints: 'enforced' | 'partial' | 'unsupported'
   /** Whether a raw SHACL fragment is spliced through rather than ignored. */
   rawPassthrough: boolean
   /**

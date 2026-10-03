@@ -4,6 +4,7 @@ import { importLadybug, type CatalogImportInput } from './ladybug'
 import { importMemgraph, type MemgraphImportInput } from './memgraph'
 import { importNeo4j, type Neo4jImportInput } from './neo4j'
 import { importFalkor, type FalkorImportInput } from './falkordb'
+import { importSql } from './sql'
 
 /**
  * A file read as text, or a database or instance whose catalog the caller has already
@@ -28,24 +29,41 @@ const texts = (inputs: ImportInput[]): TextImportInput[] =>
  */
 export type Importer = (inputs: ImportInput[]) => ImportResult
 
-interface Registration {
+export interface ImporterRegistration {
   importer: Importer
   /** Extensions this source is recognised by when no format is named. */
   extensions: string[]
 }
 
-const REGISTRY = new Map<string, Registration>([
+const REGISTRY = new Map<string, ImporterRegistration>([
   ['rdf', { importer: (i) => importRdf(texts(i)), extensions: ['.ttl', '.owl', '.shacl', '.n3'] }],
   ['ladybug', { importer: (i) => importLadybug(i.filter((x): x is TextImportInput | CatalogImportInput => 'text' in x || 'ladybugCatalog' in x)), extensions: ['.cypher', '.ddl'] }],
   // A running instance, read by the caller: it has no file extension to answer to.
   ['memgraph', { importer: (i) => importMemgraph(i.filter((x): x is MemgraphImportInput => 'memgraphCatalog' in x)), extensions: [] }],
   ['neo4j', { importer: (i) => importNeo4j(i.filter((x): x is Neo4jImportInput => 'neo4jCatalog' in x)), extensions: [] }],
   ['falkordb', { importer: (i) => importFalkor(i.filter((x): x is FalkorImportInput => 'falkorCatalog' in x)), extensions: [] }],
+  ['sql', { importer: (i) => importSql(texts(i)), extensions: ['.sql'] }],
 ])
 
-export function registerImporter(name: string, reg: Registration): void {
+const BUILT_IN = new Set(REGISTRY.keys())
+const PLUGIN_IMPORTERS = new Set<string>()
+
+/** Add a source. A plugin may add one but never replace one that ships. */
+export function registerImporter(
+  name: string, reg: ImporterRegistration, options: { plugin?: boolean } = {},
+): void {
+  if (!/^[a-z][a-z0-9-]*$/.test(name)) {
+    throw new Error(`Importer name '${name}' must be lower-case letters, digits and hyphens, starting with a letter.`)
+  }
+  if (BUILT_IN.has(name)) throw new Error(`Importer '${name}' is built in and cannot be replaced.`)
+  if (typeof reg?.importer !== 'function' || !Array.isArray(reg.extensions)) {
+    throw new Error(`Importer '${name}' must register an importer function and the extensions it answers to.`)
+  }
   REGISTRY.set(name, reg)
+  if (options.plugin) PLUGIN_IMPORTERS.add(name)
 }
+
+export const isPluginImporter = (name: string): boolean => PLUGIN_IMPORTERS.has(name)
 
 export function importerNames(): string[] {
   return [...REGISTRY.keys()].sort()
@@ -58,6 +76,7 @@ export function importerNames(): string[] {
  */
 const ALIASES: Record<string, string> = {
   shacl: 'rdf', owl: 'rdf', turtle: 'rdf', ttl: 'rdf', 'ladybug-db': 'ladybug',
+  postgres: 'sql', postgresql: 'sql',
 }
 
 export function resolveFormat(name: string): string | undefined {
@@ -81,6 +100,8 @@ export function detectFormat(input: ImportInput): string | undefined {
   }
   if (/^\s*@prefix\b|^\s*@base\b|\bsh:NodeShape\b|\bowl:Class\b/m.test(input.text)) return 'rdf'
   if (/CREATE\s+(NODE|REL)\s+TABLE/i.test(input.text)) return 'ladybug'
+  // A plain CREATE TABLE is SQL; the LadybugDB spelling was already claimed above.
+  if (/\bCREATE\s+(?:UNLOGGED\s+|TEMPORARY\s+|TEMP\s+)?TABLE\b/i.test(input.text)) return 'sql'
   return undefined
 }
 
@@ -111,6 +132,14 @@ export function importModel(inputs: ImportInput[], format?: string): ImportResul
     groups.set(kind, list)
   }
 
+  // A source a plugin registered is read on its own, like a live instance: nothing in
+  // the built-in readers knows what it carries.
+  for (const [kind, list] of groups) {
+    if (!isPluginImporter(kind)) continue
+    const out = REGISTRY.get(kind)!.importer(list)
+    return { model: out.model, diagnostics: [...diagnostics, ...out.diagnostics] }
+  }
+
   const rdfInputs = groups.get('rdf') ?? []
   const ddlInputs = groups.get('ladybug') ?? []
   const memgraphInputs = (groups.get('memgraph') ?? []) as MemgraphImportInput[]
@@ -129,6 +158,18 @@ export function importModel(inputs: ImportInput[], format?: string): ImportResul
         `${name} instance is imported on its own. Import it separately from RDF or LadybugDB sources.`))
     }
     const out = read()
+    return { model: out.model, diagnostics: [...diagnostics, ...out.diagnostics] }
+  }
+
+  // A SQL schema aligns with neither an RDF vocabulary nor a LadybugDB catalog, so it
+  // is imported on its own, exactly as a live instance is.
+  const sqlInputs = groups.get('sql') ?? []
+  if (sqlInputs.length > 0) {
+    if (rdfInputs.length > 0 || ddlInputs.length > 0) {
+      diagnostics.push(err('import-mixed-sources',
+        'A SQL schema is imported on its own. Import it separately from RDF or LadybugDB sources.'))
+    }
+    const out = importSql(texts(sqlInputs))
     return { model: out.model, diagnostics: [...diagnostics, ...out.diagnostics] }
   }
 

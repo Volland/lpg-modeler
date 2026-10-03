@@ -2,15 +2,18 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync, statSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { join, resolve as resolvePath, basename, dirname } from 'node:path'
+import { pathToFileURL } from 'node:url'
 import {
-  applyEdits, atLeast, backfillIdEdits, CHANGE_CLASSES, describeChange, detectFormat, diffModels,
+  applyEdits, atLeast, backfillIdEdits, CHANGE_CLASSES, describeChange, describeFinding,
+  detectFormat, diffModels, drift, handleMcpMessage, lintQuery,
   emit, identifyBoltEngine, idsNotWritten, importModel, importerNames, lockfilePath,
-  migrationFileName, parseViews,
-  planMigration, readFalkorSchema, readFalkorScript, readLadybugCatalog, readLockfile,
+  parseLadybugDdl, resolveFormat,
+  migrationFileName, parseViews, planAudit,
+  planMigration, isPluginTarget, registerImporter, registerTarget, readFalkorSchema, readFalkorScript, readLadybugCatalog, readLockfile,
   readMemgraphSchema, readNeo4jSchema, resolveModel, serializeModel, sidecarPaths,
   summarizeChanges, targetNames, validateModel, writeLockfile,
-  type ChangeClass, type Diagnostic, type EmitOptions, type FalkorClient, type ImportInput,
-  type LadybugConnection, type Lockfile, type ModelIR,
+  type ChangeClass, type Diagnostic, type DriftInput, type EmitOptions, type FalkorClient,
+  type ImportInput, type LadybugConnection, type Lockfile, type ModelIR, type ModelSource,
 } from '@lpg/core'
 
 const read = (p: string): string | undefined => {
@@ -66,6 +69,10 @@ Usage:
   lpg diff    <model.lpg.yaml> [--fail-on <${CHANGE_CLASSES.join('|')}>] [--json]
   lpg migrate <model.lpg.yaml> [--target <ladybug|neo4j|falkordb|memgraph>] [--out <dir>]
                                [--allow-destructive] [--edition ...] [--graph-key ...]
+  lpg audit  <model.lpg.yaml> --target <ladybug|neo4j|memgraph|falkordb> [--out <dir>]
+             [--uri <bolt-or-redis-uri> | --database <path>] [--edition ...] [--graph-key ...]
+  lpg drift  <model.lpg.yaml> (--uri <bolt-or-redis-uri> | --database <path> | --script <ddl>)
+             [--graph-key ...] [--from memgraph|neo4j] [--json]
   lpg import <file...> [--from <${[...importerNames(), 'ladybug-db'].sort().join('|')}>] [--out <model.lpg.yaml>]
   lpg import bolt://host:7687 [--user <name>] [--out <model.lpg.yaml>]
   lpg apply  <script> --target <memgraph|neo4j> --uri bolt://host:7687 [--user <name>]
@@ -74,11 +81,15 @@ Usage:
              [--allow-destructive] [--dry-run]
   lpg apply  <script> --target falkordb --uri redis://host:6379 [--graph-key <key>]
              [--allow-destructive] [--dry-run]
-  lpg targets
+  lpg lint-queries <model.lpg.yaml> <query-file...>   check labels, edges and properties in queries
+  lpg mcp    <model.lpg.yaml>        serve the model to an MCP client over stdio (read-only)
+  lpg targets [--plugin <module>]
 
 Options:
   --target <name>       generation or migration target (repeatable); migrate defaults
                         to ladybug, neo4j, falkordb and memgraph
+  --plugin <module>     load a module that registers targets or sources (repeatable); it
+                        runs with your privileges, so it is loaded only when named
   --out <path>          emit: a directory to write artifacts into
                         migrate: where scripts go (default: migrations/ beside the model)
                         import: the model file to write, instead of stdout
@@ -94,8 +105,11 @@ Options:
   --allow-destructive   migrate: generate changes that discard stored data
                         apply: run a script whose statements are marked destructive
   --uri <bolt-uri>      apply: the instance to run the script against
-  --database <path>     apply: the LadybugDB database to run the script against, which
-                        is embedded rather than reached over a network
+  --database <path>     apply, audit, drift: the LadybugDB database to use, which is
+                        embedded rather than reached over a network; audit and drift
+                        open it read-only
+  --script <path>       drift: a generated LadybugDB DDL script to compare against,
+                        with no database at all
   --no-create           apply: refuse a database path that holds none, rather than
                         creating the database there
   --user <name>         import, apply: the database user; the password is read from
@@ -130,6 +144,7 @@ class UsageError extends Error {}
 function parseArgs(argv: string[]) {
   const positional: string[] = []
   const targets: string[] = []
+  const plugins: string[] = []
   let out: string | undefined
   let from: string | undefined
   let graphKey: string | undefined
@@ -141,11 +156,13 @@ function parseArgs(argv: string[]) {
   let uri: string | undefined
   let user: string | undefined
   let database: string | undefined
+  let script: string | undefined
   let noCreate = false
   let dryRun = false
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]
     if (a === '--target') targets.push(argv[++i] ?? '')
+    else if (a === '--plugin') plugins.push(argv[++i] ?? '')
     else if (a === '--out') out = argv[++i]
     else if (a === '--from') from = argv[++i]
     else if (a === '--graph-key') graphKey = argv[++i]
@@ -163,14 +180,15 @@ function parseArgs(argv: string[]) {
     else if (a === '--uri') uri = argv[++i]
     else if (a === '--user') user = argv[++i]
     else if (a === '--database') database = argv[++i]
+    else if (a === '--script') script = argv[++i]
     else if (a === '--no-create') noCreate = true
     else if (a === '--dry-run') dryRun = true
     else if (a?.startsWith('--')) throw new UsageError()
     else if (a) positional.push(a)
   }
   return {
-    positional, targets, out, from, graphKey, edition, failOn, check, json, allowDestructive,
-    uri, user, database, noCreate, dryRun,
+    positional, targets, plugins, out, from, graphKey, edition, failOn, check, json, allowDestructive,
+    uri, user, database, script, noCreate, dryRun,
   }
 }
 
@@ -470,7 +488,7 @@ async function runImport(
   const kinds = new Set(inputs.map((i) => ('memgraphCatalog' in i ? 'memgraph'
     : 'falkorCatalog' in i ? 'falkordb'
     : 'neo4jCatalog' in i ? 'neo4j'
-      : from && 'text' in i ? (from === 'ladybug' || from === 'ladybug-db' ? 'ladybug' : 'rdf') : detectFormat(i))))
+      : from && 'text' in i ? resolveFormat(from) ?? detectFormat(i) : detectFormat(i))))
   const caveat = kinds.has('rdf')
     ? ['Check anything the import reported: RDF cannot express an abstract type, a',
       'mixin or a uniqueness constraint, and several scalars share one XSD datatype.']
@@ -485,6 +503,10 @@ async function runImport(
         ? ['Check anything the import reported: Neo4j holds no cardinality, value bound, enum',
           'or mixin, a hierarchy is read from labels that occur together, and on Community a',
           'key is recovered from a uniqueness constraint rather than declared.']
+      : kinds.has('sql')
+        ? ['Check anything the import reported: a foreign key was read as an edge, a join',
+          'table as an edge type, and both readings are inferences. SQL holds no hierarchy,',
+          'mixin or pattern, and statements outside the schema subset were not read.']
         : ['Check anything the import reported: LadybugDB keeps one table per concrete',
           'type, so an abstract type, a mixin, an enum and a value constraint are not in it.']
   const source = serializeModel(model, {
@@ -621,6 +643,168 @@ function runMigrate(
   process.stdout.write(`${lockPath} (revision ${plan.revision}: ${summarizeChanges(plan.changes)})\n`)
   const { errors } = report(collected)
   return errors > 0 ? 1 : 0
+}
+
+/**
+ * `lpg drift`: compare what a database actually holds against what the model requires
+ * of that target. Matching is structural — a live schema carries no element ids and its
+ * constraint names are cosmetic — and the expected side is built by the emitters' own
+ * functions, so drift cannot spell an expectation differently from `emit`.
+ * See lat.md/drift#Drift.
+ */
+async function runDrift(
+  modelPath: string, uri: string | undefined, user: string | undefined,
+  database: string | undefined, script: string | undefined, graphKey: string | undefined,
+  from: string | undefined, json: boolean, options: EmitOptions,
+): Promise<number> {
+  const { model, diagnostics } = analyse(modelPath)
+  const errors = diagnostics.filter((d) => d.severity === 'error')
+  if (errors.length > 0) {
+    report(errors)
+    process.stderr.write('refusing to compare a model with errors\n')
+    return 1
+  }
+  report(diagnostics.filter((d) => d.severity === 'warning'))
+
+  let input: DriftInput
+  try {
+    if (script) {
+      const abs = resolvePath(script)
+      const text = read(abs)
+      if (text === undefined) { process.stderr.write(`cannot read ${abs}\n`); return 1 }
+      input = { ladybug: { catalog: parseLadybugDdl(text), source: 'ddl' } }
+    } else if (database) {
+      const readIn = await readDatabase(resolvePath(database))
+      input = { ladybug: { catalog: (readIn as { ladybugCatalog: NonNullable<DriftInput['ladybug']>['catalog'] }).ladybugCatalog, source: 'database' } }
+    } else if (uri && isRedisUri(uri)) {
+      const readIn = await readFalkor(uri, user, graphKey)
+      input = { falkordb: (readIn as { falkorCatalog: NonNullable<DriftInput['falkordb']> }).falkorCatalog }
+    } else if (uri) {
+      const named = from === 'memgraph' || from === 'neo4j' ? from : undefined
+      const readIn = await readBolt(uri, user, named)
+      input = 'neo4jCatalog' in readIn ? { neo4j: readIn.neo4jCatalog }
+        : { memgraph: (readIn as { memgraphCatalog: NonNullable<DriftInput['memgraph']> }).memgraphCatalog }
+    } else {
+      return usage()
+    }
+  } catch (e) {
+    if (!(e instanceof ImportFailure)) throw e
+    process.stderr.write(`${e.message}\n`)
+    return 1
+  }
+
+  const result = drift(model, input, options)
+  report(result.diagnostics)
+  if (result.diagnostics.some((d) => d.severity === 'error')) return 1
+  if (json) {
+    process.stdout.write(`${JSON.stringify({ target: result.target, findings: result.findings }, null, 2)}\n`)
+  } else {
+    for (const f of result.findings) process.stdout.write(`${describeFinding(f)}\n`)
+    process.stdout.write(result.findings.length > 0
+      ? `${result.findings.length} drift finding(s) against ${result.target}\n`
+      : `no drift against ${result.target}\n`)
+  }
+  return result.findings.length > 0 ? 1 : 0
+}
+
+/** One audit check's count, printed as it lands; non-zero anywhere gates the exit. */
+async function runAuditChecks(
+  checks: Array<{ label: string; query: string }>, ask: (q: string) => Promise<unknown>,
+): Promise<number> {
+  let total = 0
+  for (const [i, check] of checks.entries()) {
+    let value: unknown
+    try {
+      value = await ask(check.query)
+    } catch (e) {
+      process.stderr.write(`check ${i + 1} of ${checks.length} failed: ${(e as Error).message}\n  ${check.query}\n`)
+      process.stderr.write(`${i} check(s) had run; the rest did not.\n`)
+      return 1
+    }
+    const n = Number(value ?? 0)
+    total += n
+    process.stdout.write(`[${i + 1}/${checks.length}] ${check.label}: ${n}\n`)
+  }
+  process.stdout.write(total > 0 ? `${total} violation(s) found\n` : `no violations in ${checks.length} check(s)\n`)
+  return total > 0 ? 1 : 0
+}
+
+/**
+ * `lpg audit`: a read-only query per constraint the target leaves unenforced. Without a
+ * connection the script is written for review; with one, every check runs through a
+ * read-only channel — a read session, GRAPH.RO_QUERY, or a read-only embedded open —
+ * so audit cannot write anywhere, by construction. See lat.md/audit#Audit.
+ */
+async function runAudit(
+  modelPath: string, targets: string[], out: string | undefined, uri: string | undefined,
+  user: string | undefined, database: string | undefined, graphKey: string | undefined,
+  options: EmitOptions,
+): Promise<number> {
+  const target = targets[0]
+  if (!target || targets.length > 1) return usage()
+  const { abs, model, diagnostics } = analyse(modelPath)
+  const modelErrors = diagnostics.filter((d) => d.severity === 'error')
+  if (modelErrors.length > 0) {
+    report(modelErrors)
+    process.stderr.write('refusing to audit from a model with errors\n')
+    return 1
+  }
+  const plan = planAudit(model, target, options)
+  const collected = [...diagnostics.filter((d) => d.severity !== 'error'), ...plan.diagnostics]
+  report(collected)
+  if (plan.diagnostics.some((d) => d.severity === 'error')) return 1
+
+  if (!uri && !database) {
+    if (out) {
+      if (!existsSync(out)) mkdirSync(out, { recursive: true })
+      const file = join(out, `${stemOf(abs)}.audit.${plan.extension}`)
+      writeFileSync(file, plan.content)
+      process.stdout.write(`${file}\n`)
+    } else {
+      process.stdout.write(plan.content)
+    }
+    return 0
+  }
+
+  try {
+    if (target === 'ladybug') {
+      if (!database || uri) return usage()
+      if (!existsSync(resolvePath(database))) {
+        process.stderr.write(`cannot open LadybugDB database ${resolvePath(database)}: no such file or directory\n`)
+        return 1
+      }
+      return await withDatabase(resolvePath(database), /* readOnly */ true, (conn) =>
+        runAuditChecks(plan.checks, async (q) => {
+          const result = await conn.query(q)
+          const rows = await (Array.isArray(result) ? result[result.length - 1]! : result).getAll()
+          return rows[0]?.violations
+        }))
+    }
+    if (!uri || database) return usage()
+    if (target === 'falkordb') {
+      const { client, falkor } = await connectFalkor(uri, user)
+      try {
+        const key = graphKey ?? model.namespace.prefix
+        return await runAuditChecks(plan.checks, async (q) => {
+          const reply = await falkor.sendCommand(['GRAPH.RO_QUERY', key, q]) as unknown[][][]
+          return reply?.[1]?.[0]?.[0]
+        })
+      } finally {
+        await client.quit().catch(() => undefined)
+      }
+    }
+    const connection = await connectBolt(uri, user, target as BoltEngine)
+    try {
+      return await runAuditChecks(plan.checks, async (q) =>
+        (await connection.run(q, 'READ'))[0]?.violations)
+    } finally {
+      await connection.driver.close()
+    }
+  } catch (e) {
+    if (!(e instanceof ImportFailure)) throw e
+    process.stderr.write(`${e.message}\n`)
+    return 1
+  }
 }
 
 /** The Bolt engines a script can be applied to, in the order the usage text names them. */
@@ -860,18 +1044,113 @@ async function runApply(
   }
 }
 
+/**
+ * `lpg lint-queries`: check the labels, relationship types and property names in query
+ * files against the model. Query text only — a source file with a query inside it is not
+ * lexed, because finding the query is a parser's job and a wrong guess is worse than none.
+ * See lat.md/lint#Query Lint.
+ */
+function runLintQueries(modelPath: string, files: string[]): number {
+  if (files.length === 0) return usage()
+  const { model, diagnostics } = analyse(modelPath)
+  const errors = diagnostics.filter((d) => d.severity === 'error')
+  if (errors.length > 0) {
+    report(errors)
+    process.stderr.write('refusing to lint against a model with errors\n')
+    return 1
+  }
+  const findings: Diagnostic[] = []
+  for (const file of files) {
+    const abs = resolvePath(file)
+    const text = read(abs)
+    if (text === undefined) { process.stderr.write(`cannot read ${abs}\n`); return 1 }
+    findings.push(...lintQuery(model, text, abs))
+  }
+  const { errors: found } = report(findings)
+  process.stdout.write(findings.length === 0
+    ? `no findings in ${files.length} file(s)\n`
+    : `${findings.length} finding(s) in ${files.length} file(s)\n`)
+  return found > 0 ? 1 : 0
+}
+
+/**
+ * `lpg mcp`: serve the model over MCP on stdio, one JSON message per line. Read-only by
+ * construction, and the model is re-resolved on every call, so an edit on disk reaches
+ * the next question. Only protocol messages go to stdout; everything else is stderr.
+ * See lat.md/agent#Agent.
+ */
+function runMcp(modelPath: string): Promise<number> {
+  const abs = resolvePath(modelPath)
+  if (read(abs) === undefined) { process.stderr.write(`cannot read ${abs}\n`); return Promise.resolve(1) }
+  const source: ModelSource = () => {
+    const { model, diagnostics } = analyse(abs)
+    const errors = diagnostics.filter((d) => d.severity === 'error')
+    if (errors.length > 0) {
+      return { error: `The model has ${errors.length} error(s): ${errors.slice(0, 5).map((e) => `${e.code}: ${e.message}`).join('; ')}` }
+    }
+    return { model }
+  }
+  return new Promise((resolve) => {
+    let buffer = ''
+    process.stdin.setEncoding('utf8')
+    process.stdin.on('data', (chunk: string) => {
+      buffer += chunk
+      for (let i = buffer.indexOf('\n'); i >= 0; i = buffer.indexOf('\n')) {
+        const line = buffer.slice(0, i).trim()
+        buffer = buffer.slice(i + 1)
+        if (!line) continue
+        const reply = handleMcpMessage(line, source)
+        if (reply !== undefined) process.stdout.write(`${JSON.stringify(reply)}\n`)
+      }
+    })
+    process.stdin.on('end', () => resolve(0))
+  })
+}
+
+/**
+ * Load plugin modules. A plugin is a module whose default export is a function taking the
+ * registration API; it may add targets and sources, never replace one that ships, and
+ * every target it adds must declare a complete capability set. A plugin is arbitrary code
+ * run with the user's privileges, so it is loaded only when named, never discovered.
+ * See lat.md/architecture#Modularity#Plugins.
+ */
+async function loadPlugins(paths: string[]): Promise<boolean> {
+  for (const path of paths) {
+    const abs = resolvePath(path)
+    try {
+      const mod = await import(pathToFileURL(abs).href)
+      let init = mod.default ?? mod
+      if (typeof init !== 'function' && typeof init?.default === 'function') init = init.default
+      if (typeof init !== 'function') {
+        process.stderr.write(`plugin ${abs} does not export a function; export default (api) => { api.registerTarget(…) }\n`)
+        return false
+      }
+      await init({
+        registerTarget: (name: string, reg: Parameters<typeof registerTarget>[1]) =>
+          registerTarget(name, reg, { plugin: true }),
+        registerImporter: (name: string, reg: Parameters<typeof registerImporter>[1]) =>
+          registerImporter(name, reg, { plugin: true }),
+      })
+    } catch (e) {
+      process.stderr.write(`plugin ${abs} could not be loaded: ${(e as Error).message}\n`)
+      return false
+    }
+  }
+  return true
+}
+
 async function main(argv: string[]): Promise<number> {
   const [command, ...rest] = argv
   if (!command || command === '--help' || command === '-h') return usage()
+  const {
+    positional, targets, plugins, out, from, graphKey, edition, failOn, check, json, allowDestructive,
+    uri, user, database, script, noCreate, dryRun,
+  } = parseArgs(rest)
+  if (!(await loadPlugins(plugins))) return 1
   if (command === 'targets') {
-    process.stdout.write(targetNames().join('\n') + '\n')
+    process.stdout.write(targetNames().map((t) => (isPluginTarget(t) ? `${t} (plugin)` : t)).join('\n') + '\n')
     return 0
   }
-
-  const {
-    positional, targets, out, from, graphKey, edition, failOn, check, json, allowDestructive,
-    uri, user, database, noCreate, dryRun,
-  } = parseArgs(rest)
   const modelPath = positional[0]
   if (!modelPath) return usage()
 
@@ -883,6 +1162,14 @@ async function main(argv: string[]): Promise<number> {
   if (command === 'import') return runImport(positional, from, out, user, graphKey)
   if (command === 'apply') {
     return runApply(modelPath, targets, uri, user, database, graphKey, noCreate, allowDestructive, dryRun)
+  }
+  if (command === 'audit') {
+    return runAudit(modelPath, targets, out, uri, user, database, graphKey, options)
+  }
+  if (command === 'mcp') return runMcp(modelPath)
+  if (command === 'lint-queries') return runLintQueries(modelPath, positional.slice(1))
+  if (command === 'drift') {
+    return runDrift(modelPath, uri, user, database, script, graphKey, from, json, options)
   }
   if (command === 'lock') return runLock(modelPath, check)
   if (command === 'diff') return runDiff(modelPath, failOn, json)
