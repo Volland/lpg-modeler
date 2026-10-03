@@ -359,7 +359,7 @@ An edge type reaching an abstract endpoint SHALL be generated as one edge table 
 
 ### Requirement: SQL/PGQ target reports what a table cannot hold
 
-For the **sqlpgq** target, an open node type, an end bounded other than at-most-one, an end bounded at one on an expanded edge set, and an edge `count` assertion SHALL each be reported as a downgrade and noted in a comment at the site. A name DuckDB refuses bare SHALL be quoted.
+For the **sqlpgq** target, an open node type, an end bounded other than at-most-one, an end bounded at one whose other end has several concrete types (so a node has rows in several edge tables), and an edge `count` assertion SHALL each be reported as a downgrade and noted in a comment at the site. A name DuckDB refuses bare SHALL be quoted.
 
 #### Scenario: A keyword as a name
 

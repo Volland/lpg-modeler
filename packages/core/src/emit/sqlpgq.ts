@@ -1,7 +1,9 @@
 import type {
   Assertion, Diagnostic, EdgeTypeIR, ModelIR, NodeTypeIR, PropertyIR, ScalarType, ValueType,
 } from '../ir'
-import { concreteNodes, describeCardinality, isUnconstrained, typeParams } from '../ir'
+import {
+  concreteDescendants, concreteNodes, describeCardinality, isUnconstrained, typeParams,
+} from '../ir'
 import {
   constraintDowngrade, downgrade, reportUnsupportedConstraints,
   type Capabilities, type EmitOptions, type EmitResult,
@@ -273,9 +275,15 @@ function edgeTables(
       `Edge type '${edge.name}' declares ${describeCardinality(edge.cardinality)} cardinality. SQL constraints express only an upper bound of one per end, so ${lost.join(' and ')} ${lost.length > 1 ? 'are' : 'is'} unenforced.`,
       edge.loc)
   }
-  if (expanded && (maxOne.to || maxOne.from)) {
+  // A bound at one is a UNIQUE inside each edge table, and that is complete unless the
+  // other end also expands: a source with several concrete target types has a row in
+  // several tables, and no single table sees all of them.
+  const leaks: string[] = []
+  if (maxOne.to && concreteDescendants(model, edge.to).length > 1) leaks.push("'to'")
+  if (maxOne.from && concreteDescendants(model, edge.from).length > 1) leaks.push("'from'")
+  if (leaks.length > 0) {
     downgrade(diags, 'sqlpgq', 'downgrade-cardinality-expanded',
-      `Edge type '${edge.name}' bounds an end at one, but its ${pairs.length} edge tables are separate, so the bound holds within each table and not across them.`,
+      `Edge type '${edge.name}' bounds ${leaks.join(' and ')} at one, but the other end has several concrete types, so a node can have rows in several edge tables. The bound holds within each table and not across them.`,
       edge.loc)
   }
 
@@ -314,10 +322,10 @@ function edgeTables(
       comments: [],
     })
     // `to` bounds how many targets one source has, so at most one is a source-side unique.
-    if (!expanded && maxOne.to) {
+    if (maxOne.to) {
       entries.push({ sql: `UNIQUE (${srcCols.map(ident).join(', ')})`, comments: ['-- at most one target per source: enforced on write.'] })
     }
-    if (!expanded && maxOne.from) {
+    if (maxOne.from) {
       entries.push({ sql: `UNIQUE (${dstCols.map(ident).join(', ')})`, comments: ['-- at most one source per target: enforced on write.'] })
     }
     const head: string[] = []

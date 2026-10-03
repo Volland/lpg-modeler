@@ -52,6 +52,27 @@ describe('sqlpgq target', () => {
     expect(content).toContain('-- UNENFORCED: constraint')
   })
 
+  it('writes the bound on an expanded edge into every table, and reports a leak only when both ends expand', () => {
+    // Abstract source, one concrete target: each source type has one table, so the
+    // UNIQUE inside it is the whole bound.
+    const one = inline(
+      'nodes:\n  Base:\n    abstract: true\n    key: [id]\n    props:\n      id: { type: string, required: true }\n'
+      + '  A:\n    extends: Base\n  B:\n    extends: Base\n'
+      + '  D:\n    key: [code]\n    props:\n      code: { type: string, required: true }\n'
+      + 'edges:\n  AT: { from: Base, to: D, cardinality: many-to-one }\n')
+    const a = emit(one, 'sqlpgq')
+    expect(a.content.match(/UNIQUE \(src_id\)/g)).toHaveLength(2)
+    expect(codes(a.diagnostics)).toContain('downgrade-edge-expansion')
+    expect(codes(a.diagnostics)).not.toContain('downgrade-cardinality-expanded')
+    // Abstract target: a source can have a row in each target's table.
+    const many = inline(
+      'nodes:\n  S:\n    key: [id]\n    props:\n      id: { type: string, required: true }\n'
+      + '  Base:\n    abstract: true\n    key: [code]\n    props:\n      code: { type: string, required: true }\n'
+      + '  X:\n    extends: Base\n  Y:\n    extends: Base\n'
+      + 'edges:\n  AT: { from: S, to: Base, cardinality: many-to-one }\n')
+    expect(codes(emit(many, 'sqlpgq').diagnostics)).toContain('downgrade-cardinality-expanded')
+  })
+
   it('writes a unique key on the end that is bounded at one', () => {
     const model = inline(
       'nodes:\n  A:\n    key: [id]\n    props:\n      id: { type: string, required: true }\n'
@@ -152,6 +173,19 @@ describe.runIf(engine)('sqlpgq artifact, executed in DuckDB with duckpgq', () =>
     // `to` is bounded at one: a source has at most one target.
     await expect(exec(db, "INSERT INTO E VALUES ('1', '3')")).rejects.toThrow(/unique|Duplicate/i)
     await exec(db, "INSERT INTO E VALUES ('3', '2')") // many sources may share a target
+  })
+
+  it('enforces the bound at one on every table of an expanded edge', async () => {
+    const model = inline(
+      'nodes:\n  Base:\n    abstract: true\n    key: [id]\n    props:\n      id: { type: string, required: true }\n'
+      + '  A:\n    extends: Base\n  B:\n    extends: Base\n'
+      + '  D:\n    key: [code]\n    props:\n      code: { type: string, required: true }\n'
+      + 'edges:\n  AT: { from: Base, to: D, cardinality: many-to-one }\n')
+    const db = await applied(model)
+    await exec(db, "INSERT INTO A VALUES ('a1'); INSERT INTO B VALUES ('b1'); INSERT INTO D VALUES ('d1'), ('d2')")
+    await exec(db, "INSERT INTO AT_A_D VALUES ('a1', 'd1'); INSERT INTO AT_B_D VALUES ('b1', 'd1')")
+    await expect(exec(db, "INSERT INTO AT_A_D VALUES ('a1', 'd2')")).rejects.toThrow(/unique|Duplicate/i)
+    await expect(exec(db, "INSERT INTO AT_B_D VALUES ('b1', 'd2')")).rejects.toThrow(/unique|Duplicate/i)
   })
 
   it('carries a composite key natively, through to an edge’s composite foreign key', async () => {
