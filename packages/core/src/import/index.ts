@@ -5,6 +5,7 @@ import { importMemgraph, type MemgraphImportInput } from './memgraph'
 import { importNeo4j, type Neo4jImportInput } from './neo4j'
 import { importFalkor, type FalkorImportInput } from './falkordb'
 import { importSql } from './sql'
+import { importTgs, looksLikeTgs } from './tgs'
 
 /**
  * A file read as text, or a database or instance whose catalog the caller has already
@@ -43,6 +44,9 @@ const REGISTRY = new Map<string, ImporterRegistration>([
   ['neo4j', { importer: (i) => importNeo4j(i.filter((x): x is Neo4jImportInput => 'neo4jCatalog' in x)), extensions: [] }],
   ['falkordb', { importer: (i) => importFalkor(i.filter((x): x is FalkorImportInput => 'falkorCatalog' in x)), extensions: [] }],
   ['sql', { importer: (i) => importSql(texts(i)), extensions: ['.sql'] }],
+  // A schema note is Markdown, and so is every other note, so `.md` alone settles nothing:
+  // the frontmatter is what says a note is TGS. See lat.md/importers#Reading TGS Notes.
+  ['tgs', { importer: (i) => importTgs(texts(i)), extensions: [] }],
 ])
 
 const BUILT_IN = new Set(REGISTRY.keys())
@@ -76,7 +80,7 @@ export function importerNames(): string[] {
  */
 const ALIASES: Record<string, string> = {
   shacl: 'rdf', owl: 'rdf', turtle: 'rdf', ttl: 'rdf', 'ladybug-db': 'ladybug',
-  postgres: 'sql', postgresql: 'sql',
+  postgres: 'sql', postgresql: 'sql', typegraph: 'tgs', 'typed-graph': 'tgs',
 }
 
 export function resolveFormat(name: string): string | undefined {
@@ -98,6 +102,7 @@ export function detectFormat(input: ImportInput): string | undefined {
   for (const [name, reg] of REGISTRY) {
     if (reg.extensions.some((e) => lower.endsWith(e))) return name
   }
+  if (lower.endsWith('.md') && looksLikeTgs(input.text)) return 'tgs'
   if (/^\s*@prefix\b|^\s*@base\b|\bsh:NodeShape\b|\bowl:Class\b/m.test(input.text)) return 'rdf'
   if (/CREATE\s+(NODE|REL)\s+TABLE/i.test(input.text)) return 'ladybug'
   // A plain CREATE TABLE is SQL; the LadybugDB spelling was already claimed above.
@@ -170,6 +175,17 @@ export function importModel(inputs: ImportInput[], format?: string): ImportResul
         'A SQL schema is imported on its own. Import it separately from RDF or LadybugDB sources.'))
     }
     const out = importSql(texts(sqlInputs))
+    return { model: out.model, diagnostics: [...diagnostics, ...out.diagnostics] }
+  }
+
+  // Schema notes are a whole ontology on their own, read together whatever their number.
+  const tgsInputs = groups.get('tgs') ?? []
+  if (tgsInputs.length > 0) {
+    if (rdfInputs.length > 0 || ddlInputs.length > 0 || sqlInputs.length > 0) {
+      diagnostics.push(err('import-mixed-sources',
+        'TGS schema notes are imported on their own. Import them separately from RDF, SQL or LadybugDB sources.'))
+    }
+    const out = importTgs(texts(tgsInputs))
     return { model: out.model, diagnostics: [...diagnostics, ...out.diagnostics] }
   }
 

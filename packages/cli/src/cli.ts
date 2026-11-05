@@ -1,19 +1,20 @@
 #!/usr/bin/env node
-import { readFileSync, writeFileSync, existsSync, mkdirSync, statSync } from 'node:fs'
+import { readFileSync, writeFileSync, existsSync, mkdirSync, statSync, readdirSync } from 'node:fs'
+import { createInterface } from 'node:readline/promises'
 import { createRequire } from 'node:module'
 import { join, resolve as resolvePath, basename, dirname } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import {
   applyEdits, atLeast, backfillIdEdits, CHANGE_CLASSES, describeChange, describeFinding,
   detectFormat, diffModels, drift, handleMcpMessage, lintQuery,
-  emit, identifyBoltEngine, idsNotWritten, importModel, importerNames, lockfilePath,
+  emit, exportTgs, identifyBoltEngine, idsNotWritten, importModel, importerNames, lockfilePath,
   parseLadybugDdl, resolveFormat,
   migrationFileName, parseViews, planAudit,
   planMigration, isPluginTarget, registerImporter, registerTarget, readFalkorSchema, readFalkorScript, readLadybugCatalog, readLockfile,
   readMemgraphSchema, readNeo4jSchema, resolveModel, serializeModel, sidecarPaths,
-  summarizeChanges, targetNames, validateModel, writeLockfile,
+  summarizeChanges, targetNames, TGS_LAYOUTS, validateModel, writeLockfile,
   type ChangeClass, type Diagnostic, type DriftInput, type EmitOptions, type FalkorClient,
-  type ImportInput, type LadybugConnection, type Lockfile, type ModelIR, type ModelSource,
+  type ImportInput, type LadybugConnection, type Lockfile, type ModelIR, type ModelSource, type TgsLayout,
 } from '@lpg/core'
 
 const read = (p: string): string | undefined => {
@@ -75,6 +76,8 @@ Usage:
              [--graph-key ...] [--from memgraph|neo4j] [--json]
   lpg import <file...> [--from <${[...importerNames(), 'ladybug-db'].sort().join('|')}>] [--out <model.lpg.yaml>]
   lpg import bolt://host:7687 [--user <name>] [--out <model.lpg.yaml>]
+  lpg import Types/ | <note.md> [--from tgs] [--out <model.lpg.yaml>]
+  lpg export <model.lpg.yaml> --to tgs [--out <schema folder>] [--layout <folder|single>] [--force]
   lpg apply  <script> --target <memgraph|neo4j> --uri bolt://host:7687 [--user <name>]
              [--allow-destructive] [--dry-run]
   lpg apply  <script> --target ladybug --database <path.lbdb> [--no-create]
@@ -93,8 +96,15 @@ Options:
   --out <path>          emit: a directory to write artifacts into
                         migrate: where scripts go (default: migrations/ beside the model)
                         import: the model file to write, instead of stdout
+                        export: the schema folder (default: Types/ here)
   --from <name>         import: what the inputs are, when the names do not say;
-                        ladybug-db opens each path as a LadybugDB database
+                        ladybug-db opens each path as a LadybugDB database, tgs reads
+                        a folder or a note as Typed Graph Schema notes
+  --to <format>         export: tgs, Typed Graph Schema notes
+  --layout <name>       export: folder (one note per node type) or single (one note
+                        holding the joint ontology); asked for on a terminal when absent
+  --force               export: rewrite a note even when it declares types the export
+                        does not contain
   --edition <name>      neo4j edition: community (default) or enterprise
   --graph-key <key>     falkordb: the Redis key the graph lives under (emit default:
                         the model's namespace prefix; import: needed when the server
@@ -125,6 +135,11 @@ exact column widths neither of them keeps.
 
 A LadybugDB database is read from its catalog, opened read-only. A directory or a
 .lbdb, .lbug or .kuzu file is taken to be one; that needs @ladybugdb/core installed.
+
+A folder holding Markdown notes is a Typed Graph schema folder (Types/): every note
+directly in it is read, and together they are one ontology. One .md note is read on
+its own. An export writes into an existing note only the TGS keys and its lpg key,
+which keeps what TGS cannot say, and never deletes a note.
 
 A bolt:// URI is a running Memgraph or Neo4j, whose schema is read without writing to
 it. Which engine it is comes from the instance itself, not the URI; --from memgraph or
@@ -159,6 +174,9 @@ function parseArgs(argv: string[]) {
   let script: string | undefined
   let noCreate = false
   let dryRun = false
+  let to: string | undefined
+  let layout: TgsLayout | undefined
+  let force = false
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]
     if (a === '--target') targets.push(argv[++i] ?? '')
@@ -183,12 +201,19 @@ function parseArgs(argv: string[]) {
     else if (a === '--script') script = argv[++i]
     else if (a === '--no-create') noCreate = true
     else if (a === '--dry-run') dryRun = true
+    else if (a === '--to') to = argv[++i]
+    else if (a === '--layout') {
+      const v = argv[++i]
+      const named = v === 'per-type' ? 'folder' : v
+      if (!(TGS_LAYOUTS as readonly string[]).includes(named ?? '')) throw new UsageError()
+      layout = named as TgsLayout
+    } else if (a === '--force') force = true
     else if (a?.startsWith('--')) throw new UsageError()
     else if (a) positional.push(a)
   }
   return {
     positional, targets, plugins, out, from, graphKey, edition, failOn, check, json, allowDestructive,
-    uri, user, database, script, noCreate, dryRun,
+    uri, user, database, script, noCreate, dryRun, to, layout, force,
   }
 }
 
@@ -461,6 +486,9 @@ async function runImport(
   graphKey: string | undefined,
 ): Promise<number> {
   const inputs: ImportInput[] = []
+  // Every note of a schema folder is a schema note, whatever its frontmatter says, so
+  // a folder names the format for the whole import.
+  let format = from
   try {
     for (const file of files) {
       const named = from?.toLowerCase()
@@ -473,6 +501,13 @@ async function runImport(
         continue
       }
       const abs = resolvePath(file)
+      const notes = schemaFolderNotes(abs, from)
+      if (notes) {
+        if (notes.length === 0) { process.stderr.write(`no Markdown notes directly in ${abs}\n`); return 1 }
+        inputs.push(...notes)
+        format ??= 'tgs'
+        continue
+      }
       if (isDatabasePath(abs, from)) { inputs.push(await readDatabase(abs)); continue }
       const text = read(abs)
       if (text === undefined) { process.stderr.write(`cannot read ${abs}\n`); return 1 }
@@ -484,12 +519,16 @@ async function runImport(
     return 1
   }
 
-  const { model, diagnostics } = importModel(inputs, from)
+  const { model, diagnostics } = importModel(inputs, format)
   const kinds = new Set(inputs.map((i) => ('memgraphCatalog' in i ? 'memgraph'
     : 'falkorCatalog' in i ? 'falkordb'
     : 'neo4jCatalog' in i ? 'neo4j'
-      : from && 'text' in i ? resolveFormat(from) ?? detectFormat(i) : detectFormat(i))))
-  const caveat = kinds.has('rdf')
+      : format && 'text' in i ? resolveFormat(format) ?? detectFormat(i) : detectFormat(i))))
+  const caveat = kinds.has('tgs')
+    ? ['Check anything the import reported: unless the notes carry the lpg key an export',
+      'writes, TGS holds no key, hierarchy, uniqueness or exact type, so a key may have',
+      'been synthesized and an edge with several endpoint types narrowed to one.']
+    : kinds.has('rdf')
     ? ['Check anything the import reported: RDF cannot express an abstract type, a',
       'mixin or a uniqueness constraint, and several scalars share one XSD datatype.']
     : kinds.has('memgraph')
@@ -529,6 +568,94 @@ async function runImport(
   // Validate what was actually written, not the model in memory.
   const { errors } = report([...diagnostics, ...analyse(target).diagnostics])
   return errors > 0 ? 1 : 0
+}
+
+/**
+ * The notes of a schema folder, when a path is one: a directory with Markdown notes in
+ * it, or any directory when `--from tgs` says so. Only notes directly in the folder are
+ * schema notes (TGS §3). Anything else is left to the database check.
+ * See lat.md/importers#Reading TGS Notes.
+ */
+function schemaFolderNotes(path: string, from: string | undefined): ImportInput[] | undefined {
+  const named = from ? resolveFormat(from) : undefined
+  if (from && named !== 'tgs') return undefined
+  let entries: string[]
+  try {
+    if (!statSync(path).isDirectory()) return undefined
+    entries = readdirSync(path)
+  } catch { return undefined }
+  const notes = entries.filter((e) => e.toLowerCase().endsWith('.md')).sort()
+  if (notes.length === 0 && named !== 'tgs') return undefined
+  return notes.flatMap((n) => {
+    const p = join(path, n)
+    try {
+      if (!statSync(p).isFile()) return []
+      return [{ path: p, text: readFileSync(p, 'utf8') }]
+    } catch { return [] }
+  })
+}
+
+/** Ask for the layout on a terminal; elsewhere say which one is used. */
+async function chooseLayout(layout: TgsLayout | undefined): Promise<TgsLayout> {
+  if (layout) return layout
+  if (!process.stdin.isTTY || !process.stderr.isTTY) {
+    process.stderr.write('no --layout given and no terminal to ask on: writing a folder of notes, one per node type\n')
+    return 'folder'
+  }
+  const rl = createInterface({ input: process.stdin, output: process.stderr })
+  try {
+    for (;;) {
+      const answer = (await rl.question(
+        'Write the ontology as\n  1) a folder of notes, one per node type\n  2) a single note holding the joint ontology\nLayout [1]: ')).trim().toLowerCase()
+      if (answer === '' || answer === '1' || answer === 'folder') return 'folder'
+      if (answer === '2' || answer === 'single') return 'single'
+    }
+  } finally {
+    rl.close()
+  }
+}
+
+/**
+ * Write a model as Typed Graph Schema notes into a schema folder. Existing notes are read
+ * first, so the export merges into them rather than overwriting, and is refused for a note
+ * that declares types the model does not have. See lat.md/emitters#TGS Target.
+ */
+async function runExport(
+  modelPath: string, to: string | undefined, out: string | undefined,
+  layout: TgsLayout | undefined, force: boolean,
+): Promise<number> {
+  if (to !== undefined && to.toLowerCase() !== 'tgs') {
+    process.stderr.write(`unknown export format '${to}'; export writes tgs\n`)
+    return 2
+  }
+  const { abs, model, diagnostics } = analyse(modelPath)
+  const errors = diagnostics.filter((d) => d.severity === 'error')
+  if (errors.length > 0) {
+    report(errors)
+    process.stderr.write('refusing to export a model with errors\n')
+    return 1
+  }
+  const chosen = await chooseLayout(layout)
+  const folder = resolvePath(out ?? 'Types')
+  const existing: Record<string, string> = {}
+  if (existsSync(folder)) {
+    for (const n of readdirSync(folder)) {
+      if (!n.toLowerCase().endsWith('.md')) continue
+      const text = read(join(folder, n))
+      if (text !== undefined) existing[n] = text
+    }
+  }
+  const result = exportTgs(model, {
+    layout: chosen, stem: stemOf(abs), source: basename(abs), existing, force,
+  })
+  if (result.notes.length > 0 && !existsSync(folder)) mkdirSync(folder, { recursive: true })
+  for (const note of result.notes) {
+    const file = join(folder, note.file)
+    writeFileSync(file, note.content)
+    process.stdout.write(`${file}${note.merged ? ' (merged)' : ''}\n`)
+  }
+  const { errors: failed } = report([...diagnostics, ...result.diagnostics])
+  return failed > 0 ? 1 : 0
 }
 
 const stemOf = (modelPath: string) => basename(modelPath).replace(/\.lpg\.ya?ml$/, '')
@@ -1144,7 +1271,7 @@ async function main(argv: string[]): Promise<number> {
   if (!command || command === '--help' || command === '-h') return usage()
   const {
     positional, targets, plugins, out, from, graphKey, edition, failOn, check, json, allowDestructive,
-    uri, user, database, script, noCreate, dryRun,
+    uri, user, database, script, noCreate, dryRun, to, layout, force,
   } = parseArgs(rest)
   if (!(await loadPlugins(plugins))) return 1
   if (command === 'targets') {
@@ -1160,6 +1287,7 @@ async function main(argv: string[]): Promise<number> {
   }
 
   if (command === 'import') return runImport(positional, from, out, user, graphKey)
+  if (command === 'export') return runExport(modelPath, to, out, layout, force)
   if (command === 'apply') {
     return runApply(modelPath, targets, uri, user, database, graphKey, noCreate, allowDestructive, dryRun)
   }

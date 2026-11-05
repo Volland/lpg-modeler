@@ -72,6 +72,14 @@
         "title": "LPG: Import Model…"
       },
       {
+        "command": "lpg.importTgs",
+        "title": "LPG: Import Typed Graph Schema…"
+      },
+      {
+        "command": "lpg.exportTgs",
+        "title": "LPG: Export Typed Graph Schema…"
+      },
+      {
         "command": "lpg.openCanvas",
         "title": "LPG: Open Canvas"
       },

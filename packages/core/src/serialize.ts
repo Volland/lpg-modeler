@@ -35,9 +35,28 @@ const SPELLING: Record<ScalarType, string> = {
 
 const spell = (s: ScalarType) => SPELLING[s]
 
+/**
+ * An IRI as YAML. Most read back bare, but one ending in a colon -- `urn:tgs:`, the TGS
+ * base IRI -- or holding `: ` or ` #` would be read as a mapping or cut at a comment.
+ */
+function iriScalar(iri: string): string {
+  return /:$|:\s|\s#|^[\s{}[\],&*!|>'"%@`#]/.test(iri) ? JSON.stringify(iri) : iri
+}
+
 /** A YAML scalar that is safe unquoted, or a quoted one when it is not. */
 function scalar(v: string): string {
   return /^[A-Za-z_][A-Za-z0-9_-]*$/.test(v) ? v : JSON.stringify(v)
+}
+
+/**
+ * A property's type as a model file spells it, without its list marker unless the type
+ * is composite. Exported for the TGS target, which records the exact type beside the
+ * coarser TGS kind. See lat.md/emitters#TGS Target.
+ */
+export function writtenType(p: PropertyIR): string {
+  return p.composite
+    ? formatValueType(p.composite, spell)
+    : `${spell(p.type)}${typeParams(p)}`
 }
 
 /**
@@ -50,9 +69,7 @@ function property(p: PropertyIR): string {
   // only the scalar it degrades to, which would lose the structure on the way out. A
   // decimal's `(precision, scale)` rides in the spelling too -- that is where the type
   // parser reads it from, so writing the pair as sibling keys would drop it silently.
-  const written = p.composite
-    ? formatValueType(p.composite, spell)
-    : `${spell(p.type)}${typeParams(p)}`
+  const written = writtenType(p)
   // `DOUBLE[128]` and `STRUCT(a INT64)` both carry characters that start a flow
   // collection, so an unquoted type would end the property map early.
   parts.push(`type: ${scalar(written)}`)
@@ -202,14 +219,14 @@ export function serializeModel(model: ModelIR, options: SerializeOptions = {}): 
   }
   lines.push('namespace:')
   lines.push(`  prefix: ${scalar(model.namespace.prefix)}`)
-  lines.push(`  iri: ${model.namespace.iri}`)
+  lines.push(`  iri: ${iriScalar(model.namespace.iri)}`)
 
   const extra = Object.entries(model.prefixes ?? {})
     .filter(([p]) => p !== model.namespace.prefix)
     .sort(([a], [b]) => a.localeCompare(b))
   if (extra.length > 0) {
     lines.push('', 'prefixes:')
-    for (const [p, iri] of extra) lines.push(`  ${scalar(p)}: ${iri}`)
+    for (const [p, iri] of extra) lines.push(`  ${scalar(p)}: ${iriScalar(iri)}`)
   }
 
   lines.push(...enumsBlock(model.enums))

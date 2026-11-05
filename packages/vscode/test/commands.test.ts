@@ -195,3 +195,77 @@ describe('LPG: Import Model', () => {
     expect(harness.warnings.join(' ')).toContain('Nothing was imported')
   })
 })
+
+// @lat: [[emitters#TGS Target#Layouts]]
+describe('LPG: Export and Import Typed Graph Schema', () => {
+  const social = (): string => {
+    const file = path.join(root, 'social.lpg.yaml')
+    fs.copyFileSync(path.join(__dirname, '..', '..', 'core', 'test', 'fixtures', 'social.lpg.yaml'), file)
+    return file
+  }
+
+  it('asks for the layout and writes a single note into Types/', async () => {
+    activate(context())
+    harness.foundFiles = [Uri.file(social())]
+    harness.quickPicks = ['Single note holding the joint ontology', 'Types/ in the workspace']
+
+    await commands.executeCommand('lpg.exportTgs')
+
+    expect(harness.quickPickItems[0]).toEqual(
+      ['Folder of notes, one per node type', 'Single note holding the joint ontology'])
+    const note = path.join(root, 'Types', 'social.md')
+    expect(fs.readFileSync(note, 'utf8')).toContain('schemas:')
+    expect(harness.openedEditors).toContain(note)
+    expect(harness.errors).toEqual([])
+  })
+
+  it('writes a folder of notes, one per node type', async () => {
+    activate(context())
+    harness.foundFiles = [Uri.file(social())]
+    harness.quickPicks = ['Folder of notes, one per node type', 'Types/ in the workspace']
+
+    await commands.executeCommand('lpg.exportTgs')
+
+    expect(fs.readdirSync(path.join(root, 'Types')).sort())
+      .toEqual(['Car.md', 'Company.md', 'Party.md', 'Person.md'])
+  })
+
+  it('imports a schema folder back into a model and draws it', async () => {
+    activate(context())
+    harness.foundFiles = [Uri.file(social())]
+    harness.quickPicks = ['Folder of notes, one per node type', 'Types/ in the workspace']
+    await commands.executeCommand('lpg.exportTgs')
+
+    harness.quickPicks = ['Folder of schema notes (Types/)']
+    harness.openDialog = [Uri.file(path.join(root, 'Types'))]
+    harness.saveDialog = Uri.file(path.join(root, 'back.lpg.yaml'))
+    await commands.executeCommand('lpg.importTgs')
+
+    const back = fs.readFileSync(path.join(root, 'back.lpg.yaml'), 'utf8')
+    expect(back).toContain('extends: Party')
+    expect(back).toContain('mixins: [Timestamped]')
+    expect(harness.panels.length).toBeGreaterThan(0)
+    expect(harness.errors).toEqual([])
+  })
+
+  it('imports a single note', async () => {
+    activate(context())
+    harness.foundFiles = [Uri.file(social())]
+    harness.quickPicks = ['Single note holding the joint ontology', 'Types/ in the workspace']
+    await commands.executeCommand('lpg.exportTgs')
+
+    harness.quickPicks = ['Single schema note']
+    harness.openDialog = [Uri.file(path.join(root, 'Types', 'social.md'))]
+    harness.saveDialog = Uri.file(path.join(root, 'back.lpg.yaml'))
+    await commands.executeCommand('lpg.importTgs')
+
+    expect(fs.readFileSync(path.join(root, 'back.lpg.yaml'), 'utf8')).toContain('abstract: true')
+  })
+
+  it('does nothing when the mode pick is dismissed', async () => {
+    activate(context())
+    harness.quickPicks = [undefined]
+    await commands.executeCommand('lpg.importTgs')
+    expect(harness.openedEditors).toEqual([])
+  })
+})

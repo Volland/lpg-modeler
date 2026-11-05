@@ -18,6 +18,7 @@ import { emitTypescript, TYPESCRIPT_CAPABILITIES } from './typescript'
 import { emitContext, CONTEXT_CAPABILITIES } from './context'
 import { emitDocs, DOCS_CAPABILITIES } from './docs'
 import { emitSqlPgq, SQLPGQ_CAPABILITIES } from './sqlpgq'
+import { emitTgs, TGS_CAPABILITIES } from './tgs'
 
 export type Emitter = (model: ModelIR, options: EmitOptions) => EmitResult
 
@@ -50,6 +51,7 @@ const REGISTRY = new Map<string, Registration>([
   ['context', { capabilities: CONTEXT_CAPABILITIES, emit: emitContext }],
   ['docs', { capabilities: DOCS_CAPABILITIES, emit: emitDocs }],
   ['sqlpgq', { capabilities: SQLPGQ_CAPABILITIES, emit: emitSqlPgq }],
+  ['tgs', { capabilities: TGS_CAPABILITIES, emit: emitTgs }],
 ])
 
 /** The names the tool ships with; a plugin may add a target but never replace one. */

@@ -215,6 +215,38 @@ The artifact is executed: every fixture is applied to a real DuckDB with `duckpg
 
 Required, unique, key, foreign key, bound, pattern, length, enum, comparison and `exactlyOne` all reject bad rows, an end bounded at one rejects a second row, in every table of an expanded edge too, a composite key reaches a composite foreign key, and a query over `GRAPH_TABLE` reads back what was written. The quoted-word list is compared to `duckdb_keywords()` itself, so a release that reserves another word fails there first. The suite needs the extension, which is installed from DuckDB's community repository; when that cannot be reached the engine tests are skipped with a warning rather than failed, since the golden file and unit tests still run.
 
+## TGS Target
+
+Typed Graph Schema notes: YAML frontmatter in Markdown notes in a `Types/` folder, which Typed Graph's Obsidian plugin, `tg` CLI and VS Code commands read. Written by [[packages/core/src/emit/tgs.ts#exportTgs]].
+
+TGS has typed properties, typed edges with properties, and allowed values, and nothing about identity, hierarchy or uniqueness. A type is written with every property it has — inherited and mixin properties flattened onto it, as [[emitters#Ladybug Target|Ladybug]] copies columns down — and an abstract endpoint as the list of its concrete descendants, because a TGS reader knows no subtype and would otherwise reject every note typed by a concrete label.
+
+Every type declares `edges`, even an empty one. An LPG type's outgoing edges are exactly those declared, and TGS reads an absent `edges` as "any edge at all", so leaving it out would invert the meaning rather than lose it. The to end's bound becomes `many: false` and `required: true` on the type's edge entry, which is why the capability is `upper-bound-only`; a from-end bound or a count beyond one is a `downgrade-cardinality`.
+
+Scalars map to the seven TGS kinds. Integer widths and float precision all become `number` without a downgrade, as in [[emitters#LinkML Target|LinkML]]: a width is a storage detail there. `uuid`, `json`, `duration` and `blob` have no kind and are reported as `downgrade-type`.
+
+### The lpg Key
+
+What TGS cannot say travels in a note-level `lpg` frontmatter key, which TGS §3 requires every reader to ignore, so the notes stay valid TGS and still round-trip.
+
+It holds the namespace and, by element name, ids, abstract, extends, mixins, key, open, exact types, uniqueness, enum names, value bounds, declared endpoints and cardinality.
+
+Each item it carries is also a downgrade, because a TGS validator will not enforce it: `downgrade-abstract`, `downgrade-inheritance`, `downgrade-key`, `downgrade-unique`, and `downgrade-open` once, at `info`, because frontmatter is open by definition. Element ids are kept so that a model edited as notes and imported back is diffed by id rather than seen as renamed — see [[metamodel#Stable Element IDs]].
+
+### Layouts
+
+A model is written in one of two layouts. `folder` writes one note per node type with `schema:`, each edge type in its source type's note; `single` writes one note holding the joint ontology with `schemas:` and `edgeTypes:`.
+
+The `folder` note body is left empty on purpose: the body of a `schema:` note is that type's template (TGS §8), so prose there would be stamped into every new note, and an empty body lets the reader generate the template from the declaration. The `single` note gets a short description, which TGS treats as documentation. Both layouts import identically.
+
+The layout is the user's choice, so it is asked for: the editor command offers a pick and `lpg export` prompts on a terminal ([[packages/cli/src/cli.ts#chooseLayout]]), falling back to `folder` with a message when nothing can answer. The registry's `emit(model, 'tgs')` is the `single` layout, so the target also works everywhere a target does.
+
+### Writing into a Schema Folder
+
+An export reads the folder first and merges, never overwrites: of an existing note it replaces only `tgs`, `schema`, `schemas`, `edgeTypes`, `prefixes` and `lpg`, keeping every other key byte for byte and the body.
+
+Keys are cut by indentation rather than reparsed and re-dumped, for the same reason model edits are text splices. A note that declares types the export does not contain is refused (`export-tgs-would-drop`) unless `--force`, and no note is ever deleted; a note an earlier export wrote and this one does not is reported as `export-tgs-stale-note`, since importing the folder would bring its types back. This is TGS §13.5, applied to the outbound direction.
+
 ## Template Targets
 
 Targets that cannot be tested against a running instance are not shipped as code. Instead the resolved IR is exposed to a user-supplied template, so an additional dialect is a small amount of configuration rather than a feature request.

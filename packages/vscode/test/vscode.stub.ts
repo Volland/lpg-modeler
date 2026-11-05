@@ -38,6 +38,7 @@ export class Range {
 export enum DiagnosticSeverity { Error = 0, Warning = 1, Information = 2, Hint = 3 }
 export enum ViewColumn { One = 1, Beside = -2 }
 export enum ConfigurationTarget { Global = 1, Workspace = 2, WorkspaceFolder = 3 }
+export enum FileType { Unknown = 0, File = 1, Directory = 2 }
 
 export class Diagnostic {
   source?: string
@@ -204,6 +205,9 @@ export const workspace = {
       await fs.promises.writeFile(uri.fsPath, content)
     },
     readFile: async (uri: Uri) => fs.promises.readFile(uri.fsPath),
+    readDirectory: async (uri: Uri): Promise<[string, FileType][]> =>
+      (await fs.promises.readdir(uri.fsPath, { withFileTypes: true }))
+        .map((d) => [d.name, d.isFile() ? FileType.File : d.isDirectory() ? FileType.Directory : FileType.Unknown]),
   },
   openTextDocument: async (target: Uri | string) => {
     const p = typeof target === 'string' ? target : target.fsPath

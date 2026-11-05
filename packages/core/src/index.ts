@@ -25,6 +25,11 @@ export { TYPESCRIPT_CAPABILITIES } from './emit/typescript'
 export { CONTEXT_CAPABILITIES } from './emit/context'
 export { DOCS_CAPABILITIES } from './emit/docs'
 export { SQLPGQ_CAPABILITIES } from './emit/sqlpgq'
+export {
+  TGS_CAPABILITIES, TGS_LAYOUTS, exportTgs, emitTgs,
+  type TgsLayout, type TgsExportOptions, type TgsExportResult, type TgsNote,
+} from './emit/tgs'
+export { importTgs, looksLikeTgs, TGS_BASE_IRI, type TgsImportOptions } from './import/tgs'
 export * from './emit/reify'
 export {
   importModel, importerNames, registerImporter, isPluginImporter, detectFormat, resolveFormat,

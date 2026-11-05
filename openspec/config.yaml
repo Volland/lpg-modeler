@@ -114,6 +114,13 @@ context: |
   suites for audit and drift (`audit-drift.live.test.ts`) are written but were not run,
   because the Podman machine would not start.
 
+  Change `add-tgs-exchange` (archived 2026-11-05) added Typed Graph Schema as a source
+  and a target: `lpg export --to tgs` in a `folder` or `single` layout, `lpg import` of a
+  schema folder or one note, and two VS Code commands. What TGS cannot say rides in a
+  note-level `lpg` key that TGS readers must ignore. No locked decision was amended:
+  decision 4 is met on import by a synthesized `title` key, and decision 13 by checking
+  the output with `tg validate --schema-only` when `tg` is installed.
+
   Visual authoring, the layout sidecar, editable views, and the RDF targets moved
   from OUT to IN: shipping a compiler first would have left the tool unusable for
   its stated purpose until a second release.

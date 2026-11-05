@@ -29,6 +29,7 @@ as ERD-like diagrams, and generating database DDL and RDF artifacts from a singl
 - **Models inheritance and mixins as separate tools.** An abstract label hierarchy says what a thing *is* and carries keys and edges down to every descendant; a mixin is a bag of properties a type applies, with no supertype and no identity. Both are flattened before any generator sees the model.
 - **Generates nine targets** from one model: LadybugDB DDL, Neo4j constraints, FalkorDB schema, Memgraph schema, SHACL shapes, and an OWL ontology — plus three standards artifacts, GQL graph types (ISO/IEC 39075), PG-Schema, and LinkML.
 - **Imports what you already have.** A model can start from a SHACL shapes graph, an OWL ontology or LadybugDB DDL rather than from an empty file. Several files are read together, because each carries what the others cannot — and whatever could not be recovered is reported rather than guessed.
+- **Exchanges ontologies with [Typed Graph](https://github.com/Volland/typedgraph).** `lpg export --to tgs` writes the model as TGS schema notes into a `Types/` folder — a folder of notes, one per node type, or one note holding the joint ontology — and `lpg import Types/` reads a schema folder of any number of ontology notes back. What TGS cannot say rides in an `lpg` key TGS readers ignore, so the round trip is exact.
 - **Reports every downgrade.** Anything a target cannot enforce becomes an editor diagnostic *and* a comment at the lossy line of the artifact. Nothing disappears quietly.
 - **Models lists, enums, open types and cardinality** — and cardinality is genuinely enforced where it can be: LadybugDB rejects a violating write, and SHACL bounds both directions.
 - **Stays interoperable.** The model file is self-describing, its scalar types answer to their GQL names, and the JSON Schema is 2020-12 — so a model is readable outside this tool, not only inside it.
@@ -103,6 +104,18 @@ because each carries what the other cannot:
 ```bash
 npx lpg-modeler-cli import domain.shacl.ttl domain.owl.ttl --out domain.lpg.yaml
 ```
+
+Or exchange the ontology with Typed Graph's `Types/` folder. The export asks for the layout — a
+folder of notes, one per node type, or a single note holding the joint ontology — and merges
+into notes that already exist rather than overwriting them:
+
+```bash
+npx lpg-modeler-cli export domain.lpg.yaml --to tgs --layout folder --out Types
+npx lpg-modeler-cli import Types --out domain.lpg.yaml          # the folder: every note in it
+npx lpg-modeler-cli import Types/code-types.md                  # or one note
+```
+
+In VS Code the same is **LPG: Export Typed Graph Schema…** and **LPG: Import Typed Graph Schema…**.
 
 Or read a LadybugDB database you already run. It is opened read-only, and reading it needs the
 engine's runtime, which the CLI does not bundle:

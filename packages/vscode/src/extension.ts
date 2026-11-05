@@ -6,10 +6,11 @@ import {
   pruneLayout,
   removeFromView, removeFromViews, renameInViews, resolveModel, serializeLayout,
   serializeViews, setPosition,
-  importModel, isValidPrefix, newModelSource, serializeModel, sidecarPaths,
+  exportTgs, importModel, isValidPrefix, newModelSource, serializeModel, sidecarPaths,
   targetNames, validateModel,
   ORDERED_TYPES, SCALAR_TYPES, TEXT_TYPES,
-  type Assertion, type Diagnostic, type Layout, type ModelIR, type TextEdit, type ViewDef,
+  type Assertion, type Diagnostic, type ImportResult, type Layout, type ModelIR, type TextEdit,
+  type TgsLayout, type ViewDef,
   type ViewsFile,
 } from '@lpg/core'
 import type { HostMessage, Intent, Projection, ViewMessage, WireProperty } from './protocol'
@@ -523,14 +524,26 @@ export function activate(context: vscode.ExtensionContext): void {
     })))
     const { model, diagnostics } = importModel(inputs)
 
+    return saveImported({ model, diagnostics }, picked.map((u) => path.basename(u.fsPath)), [
+      'RDF cannot express an abstract type, a mixin or a uniqueness constraint, and',
+      'several scalars share one XSD datatype. Check what the import reported.',
+    ], 'no owl:Class, sh:NodeShape or CREATE TABLE was found in those files')
+  }
+
+  /**
+   * The second half of every import: refuse on an error, ask where the model goes, write
+   * it, open it on the canvas, and offer what the source could not carry.
+   */
+  const saveImported = async (
+    { model, diagnostics }: ImportResult, sources: string[], caveat: string[], nothing: string,
+  ): Promise<vscode.Uri | undefined> => {
     const errors = diagnostics.filter((d) => d.severity === 'error')
     if (errors.length > 0) {
       void vscode.window.showErrorMessage(`Import failed: ${errors[0]?.message ?? ''}`)
       return undefined
     }
     if (model.nodes.length === 0) {
-      void vscode.window.showWarningMessage(
-        'Nothing was imported: no owl:Class, sh:NodeShape or CREATE TABLE was found in those files.')
+      void vscode.window.showWarningMessage(`Nothing was imported: ${nothing}.`)
       return undefined
     }
 
@@ -547,12 +560,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
     const target = withModelSuffix(chosen)
     const source = serializeModel(model, {
-      header: [
-        `Imported by lpg-modeler from ${picked.map((u) => path.basename(u.fsPath)).join(', ')}.`,
-        '',
-        'RDF cannot express an abstract type, a mixin or a uniqueness constraint, and',
-        'several scalars share one XSD datatype. Check what the import reported.',
-      ],
+      header: [`Imported by lpg-modeler from ${sources.join(', ')}.`, '', ...caveat],
     })
     await vscode.workspace.fs.writeFile(target, new TextEncoder().encode(source))
 
@@ -565,7 +573,7 @@ export function activate(context: vscode.ExtensionContext): void {
     const lossy = diagnostics.filter((d) => d.code.startsWith('import-'))
     if (lossy.length > 0) {
       void vscode.window.showInformationMessage(
-        `Imported ${model.nodes.length} type(s) and ${model.edges.length} edge(s), with ${lossy.length} note(s) on what RDF and DDL could not carry.`,
+        `Imported ${model.nodes.length} type(s) and ${model.edges.length} edge(s), with ${lossy.length} note(s) on what the source could not carry.`,
         'Show notes',
       ).then((pick) => {
         if (pick === 'Show notes') {
@@ -576,6 +584,125 @@ export function activate(context: vscode.ExtensionContext): void {
       })
     }
     return target
+  }
+
+  const FOLDER_OF_NOTES = 'Folder of schema notes (Types/)'
+  const SINGLE_NOTE = 'Single schema note'
+
+  /** The Markdown notes directly in a folder: the schema notes of a schema folder (TGS §3). */
+  const notesIn = async (dir: vscode.Uri): Promise<Array<{ path: string; text: string }>> => {
+    let entries: [string, vscode.FileType][] = []
+    try { entries = await vscode.workspace.fs.readDirectory(dir) } catch { return [] }
+    const files = entries
+      .filter(([n, t]) => t === vscode.FileType.File && n.toLowerCase().endsWith('.md'))
+      .map(([n]) => n).sort()
+    return Promise.all(files.map(async (n) => {
+      const uri = vscode.Uri.joinPath(dir, n)
+      return { path: uri.fsPath, text: new TextDecoder().decode(await vscode.workspace.fs.readFile(uri)) }
+    }))
+  }
+
+  /**
+   * Read Typed Graph Schema notes -- a whole schema folder or one note -- into a model.
+   * See lat.md/importers#Reading TGS Notes.
+   */
+  const importTgsNotes = async (): Promise<vscode.Uri | undefined> => {
+    const mode = await vscode.window.showQuickPick([FOLDER_OF_NOTES, SINGLE_NOTE],
+      { title: 'Import Typed Graph Schema from' })
+    if (!mode) return undefined
+    const folder = vscode.workspace.workspaceFolders?.[0]
+    const types = folder ? vscode.Uri.joinPath(folder.uri, 'Types') : undefined
+    const picked = await vscode.window.showOpenDialog(mode === FOLDER_OF_NOTES
+      ? { title: 'Import a schema folder', openLabel: 'Import folder', canSelectFolders: true, canSelectFiles: false, canSelectMany: false, ...(types ? { defaultUri: types } : {}) }
+      : { title: 'Import a schema note', openLabel: 'Import note', canSelectMany: false, filters: { 'Schema note': ['md'] }, ...(types ? { defaultUri: types } : {}) })
+    const uri = picked?.[0]
+    if (!uri) return undefined
+
+    const inputs = mode === FOLDER_OF_NOTES
+      ? await notesIn(uri)
+      : [{ path: uri.fsPath, text: new TextDecoder().decode(await vscode.workspace.fs.readFile(uri)) }]
+    if (inputs.length === 0) {
+      void vscode.window.showWarningMessage(`No Markdown notes directly in ${path.basename(uri.fsPath)}.`)
+      return undefined
+    }
+    return saveImported(importModel(inputs, 'tgs'), [path.basename(uri.fsPath)], [
+      'Unless the notes carry the lpg key an export writes, TGS holds no key, hierarchy,',
+      'uniqueness or exact type. Check what the import reported.',
+    ], 'the notes declare no types')
+  }
+
+  /**
+   * Write the model as Typed Graph Schema notes in the layout the user picks.
+   * See lat.md/emitters#TGS Target.
+   */
+  const exportTgsNotes = async (): Promise<void> => {
+    const uri = await modelForCommand()
+    if (!uri) return
+    const modelPath = uri.fsPath
+    const { model, diagnostics } = resolveModel(modelPath, makeReader())
+    const errors = [...diagnostics, ...validateModel(model, await loadViews(modelPath))]
+      .filter((d) => d.severity === 'error')
+    if (errors.length > 0) {
+      void vscode.window.showErrorMessage(
+        `Cannot export: the model has ${errors.length} error(s). See the Problems panel.`)
+      return
+    }
+
+    const layoutPick = await vscode.window.showQuickPick(
+      ['Folder of notes, one per node type', 'Single note holding the joint ontology'],
+      { title: 'Export Typed Graph Schema as' })
+    if (!layoutPick) return
+    const layout: TgsLayout = layoutPick.startsWith('Folder') ? 'folder' : 'single'
+
+    const workspaceFolder = vscode.workspace.workspaceFolders?.[0]
+    const defaultFolder = workspaceFolder
+      ? vscode.Uri.joinPath(workspaceFolder.uri, 'Types')
+      : vscode.Uri.file(path.join(path.dirname(modelPath), 'Types'))
+    const here = `Types/ in ${workspaceFolder ? 'the workspace' : 'the model\'s folder'}`
+    const where = await vscode.window.showQuickPick([here, 'Choose another folder…'],
+      { title: 'Schema folder' })
+    if (!where) return
+    let schemaFolder = defaultFolder
+    if (where !== here) {
+      const picked = await vscode.window.showOpenDialog({
+        title: 'Schema folder', openLabel: 'Export here',
+        canSelectFolders: true, canSelectFiles: false, canSelectMany: false,
+      })
+      if (!picked?.[0]) return
+      schemaFolder = picked[0]
+    }
+
+    const existing: Record<string, string> = {}
+    for (const n of await notesIn(schemaFolder)) existing[path.basename(n.path)] = n.text
+    const stem = path.basename(modelPath).replace(/\.lpg\.ya?ml$/, '')
+    const result = exportTgs(model, { layout, stem, source: path.basename(modelPath), existing })
+    for (const note of result.notes) {
+      await vscode.workspace.fs.writeFile(vscode.Uri.joinPath(schemaFolder, note.file),
+        new TextEncoder().encode(note.content))
+    }
+
+    const refused = result.diagnostics.filter((d) => d.severity === 'error')
+    for (const d of refused) void vscode.window.showErrorMessage(d.message)
+    const warnings = result.diagnostics.filter((d) => d.severity === 'warning')
+    if (warnings.length > 0) {
+      void vscode.window.showWarningMessage(
+        `Exported with ${warnings.length} note(s) on what TGS validators will not enforce; the lpg key keeps each.`,
+        'Show notes',
+      ).then((pick) => {
+        if (pick === 'Show notes') {
+          const channel = vscode.window.createOutputChannel('LPG Export')
+          for (const d of warnings) channel.appendLine(`${d.code}: ${d.message}`)
+          channel.show(true)
+        }
+      })
+    }
+    const first = result.notes[0]
+    if (!first) return
+    void vscode.window.showInformationMessage(layout === 'single'
+      ? `Wrote ${first.file} into ${path.basename(schemaFolder.fsPath)}/.`
+      : `Wrote ${result.notes.length} note(s) into ${path.basename(schemaFolder.fsPath)}/, one per node type.`)
+    const doc = await vscode.workspace.openTextDocument(vscode.Uri.joinPath(schemaFolder, first.file))
+    await vscode.window.showTextDocument(doc, { preview: true, viewColumn: vscode.ViewColumn.Beside })
   }
 
   const newModel = async (): Promise<vscode.Uri | undefined> => {
@@ -690,6 +817,10 @@ function withModelSuffix(uri: vscode.Uri): vscode.Uri {
   context.subscriptions.push(
     vscode.commands.registerCommand('lpg.newModel', reporting('LPG: New Model', newModel)),
     vscode.commands.registerCommand('lpg.import', reporting('LPG: Import Model', importSchemas)),
+    vscode.commands.registerCommand('lpg.importTgs',
+      reporting('LPG: Import Typed Graph Schema', importTgsNotes)),
+    vscode.commands.registerCommand('lpg.exportTgs',
+      reporting('LPG: Export Typed Graph Schema', exportTgsNotes)),
     vscode.commands.registerCommand('lpg.openCanvas', reporting('LPG: Open Canvas', () => openCanvas())),
     vscode.commands.registerCommand('lpg.exportPng',
       reporting('LPG: Export Diagram as PNG', exportAs('png'))),

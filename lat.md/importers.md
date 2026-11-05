@@ -200,6 +200,32 @@ A table is an edge type only when its primary key is exactly its two single-colu
 
 The rule is exact rather than fuzzy because the failure modes are asymmetric: a join table read as a node type is merely verbose, while a node type read as an edge deletes a type a query may name. A table with its own `id` key and two foreign keys is therefore a node type, however join-like it looks. The reading is reported as an inference, in the voice of [[importers#Un-flattening Inheritance]], and the edge runs from the reference whose column leads the primary key.
 
+## Reading TGS Notes
+
+Typed Graph Schema notes are read by [[packages/core/src/import/tgs.ts#importTgs]]. A folder is a schema folder: every Markdown note directly in it declares types (TGS §3), and together they are one ontology, whether given as the folder or as one note.
+
+A folder of notes is told from a LadybugDB database by holding Markdown notes, since a database directory never does — see [[packages/cli/src/cli.ts#schemaFolderNotes]]. A single `.md` is recognised by a frontmatter declaring `tgs`, `schema`, `schemas` or `edgeTypes`, because `.md` alone says nothing. Notes are read in code-point order of path, so the first of a duplicated declaration wins as TGS §3.1 says, and a note of another TGS major version is reported and skipped rather than failing the folder.
+
+Kinds become scalars: `text` and `link` a string, `number` a double because a YAML number is one, `list` a string list, `many` a list. A value list becomes an enum, shared by every property with the same values, named after the property — `Status` — or after its owner too — `DecisionStatus` — when the same property name carries different lists.
+
+### Endpoints
+
+An edge type here runs between one type and another, and TGS allows several or any. Sources are the edge type's `from` and every type whose `edges` names it; targets are each entry's targets, falling back to the edge type's `to`.
+
+Several types collapse to their nearest common ancestor, as in [[importers#Reading Edges]]. Without one, the first stands and the rest are reported (`import-tgs-endpoint-union`), the rule [[importers#Reading LadybugDB DDL]] already follows. An edge with an unrestricted end has no endpoint to declare, and is reported (`import-tgs-open-endpoint`) rather than given an invented one. A type named as an endpoint but declared by no note — `CodeSymbol` in the code ontology — becomes an empty node type.
+
+### Keys
+
+Every concrete node type needs a key ([[metamodel#Identity]]) and TGS declares none. The key is the one the `lpg` key records, else the property of the type's first `id` rule, else a synthesized required `title`.
+
+The title is a note's identity in a vault, so it is the key TGS implies rather than one invented for the occasion, and it is reported (`import-tgs-title-key`). Templates, defaults, the other id rules, visualization and IRIs outside the namespace have nowhere to go in a model and are counted in one `import-tgs-not-carried`.
+
+### Round trip
+
+Notes carrying the `lpg` key the [[emitters#TGS Target]] writes import back as the same model: hierarchy, mixins, keys, exact types, enums, cardinality and element ids. Flattened properties are factored back onto the ancestor or mixin that declares them.
+
+The TGS keys stay authoritative, so a note edited by hand still imports: an `lpg` entry for a type no TGS key declares any more is reported (`import-tgs-stale-lpg`) and ignored. The test exports every single-namespace fixture in both layouts, imports it, and compares the resolved IR; when `tg` is installed, `tg validate --schema-only` must also accept every exported vault, which is decision 13 applied to a target whose engine is the reference reader.
+
 ## Combining Sources
 
 RDF and DDL are complementary, so an import given both uses each for what only it has. RDF is the base, because it alone carries the hierarchy.

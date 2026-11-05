@@ -34,7 +34,7 @@ describe('lpg cli', () => {
     expect(r.status).toBe(0)
     expect(r.stdout.trim().split('\n').sort()).toEqual(
       ['context', 'docs', 'falkordb', 'gql', 'ladybug', 'linkml', 'memgraph', 'neo4j',
-        'owl', 'pgschema', 'shacl', 'sqlpgq', 'typescript'])
+        'owl', 'pgschema', 'shacl', 'sqlpgq', 'tgs', 'typescript'])
   })
 
   it('checks a valid model and exits zero', () => {
@@ -1035,5 +1035,70 @@ describe('lpg lint-queries', () => {
     expect(run(['lint-queries', model, '/nope.cypher']).status).toBe(1)
     expect(run(['lint-queries', join(FIXTURES, 'broken.lpg.yaml'), write('q.cypher', 'RETURN 1')]).status).toBe(1)
     expect(run(['lint-queries', model]).status).toBe(2)
+  })
+})
+
+// @lat: [[importers#Reading TGS Notes]]
+describe('lpg export --to tgs and lpg import of a schema folder', () => {
+  const social = join(FIXTURES, 'social.lpg.yaml')
+  let dir: string
+  beforeEach(() => { dir = mkdtempSync(join(tmpdir(), 'lpg-tgs-cli-')) })
+
+  it('writes a folder of notes, one per node type', () => {
+    const r = run(['export', social, '--to', 'tgs', '--layout', 'folder', '--out', join(dir, 'Types')])
+    expect(r.status).toBe(0)
+    for (const t of ['Car', 'Company', 'Party', 'Person']) expect(existsSync(join(dir, 'Types', `${t}.md`))).toBe(true)
+  })
+
+  it('writes the joint ontology as one note', () => {
+    const r = run(['export', social, '--to', 'tgs', '--layout', 'single', '--out', join(dir, 'Types')])
+    expect(r.status).toBe(0)
+    expect(readFileSync(join(dir, 'Types', 'social.md'), 'utf8')).toContain('edgeTypes:')
+  })
+
+  it('uses the folder layout and says so when there is no terminal to ask on', () => {
+    const r = run(['export', social, '--to', 'tgs'], CLI, dir)
+    expect(r.status).toBe(0)
+    expect(r.stderr).toContain('no --layout given')
+    expect(existsSync(join(dir, 'Types', 'Person.md'))).toBe(true)
+  })
+
+  it('rejects an unknown layout', () => {
+    expect(run(['export', social, '--to', 'tgs', '--layout', 'zigzag']).status).toBe(2)
+  })
+
+  it('keeps the other keys and the body of an existing note', () => {
+    run(['export', social, '--to', 'tgs', '--layout', 'single', '--out', join(dir, 'Types')])
+    const note = join(dir, 'Types', 'social.md')
+    writeFileSync(note, readFileSync(note, 'utf8').replace('---\n', '---\ncssclasses: [wide]\n').replace(/# social[\s\S]*$/, 'Our own words.\n'))
+    const r = run(['export', social, '--to', 'tgs', '--layout', 'single', '--out', join(dir, 'Types')])
+    expect(r.stdout).toContain('(merged)')
+    const after = readFileSync(note, 'utf8')
+    expect(after).toContain('cssclasses: [wide]')
+    expect(after).toContain('Our own words.')
+  })
+
+  it('imports the folder back into a model that checks clean', () => {
+    run(['export', social, '--to', 'tgs', '--layout', 'folder', '--out', join(dir, 'Types')])
+    const out = join(dir, 'back.lpg.yaml')
+    const r = run(['import', join(dir, 'Types'), '--out', out])
+    expect(r.status).toBe(0)
+    const text = readFileSync(out, 'utf8')
+    expect(text).toContain('extends: Party')
+    expect(run(['check', out]).status).toBe(0)
+  })
+
+  it('imports a single note', () => {
+    run(['export', social, '--to', 'tgs', '--layout', 'single', '--out', join(dir, 'Types')])
+    const r = run(['import', join(dir, 'Types', 'social.md')])
+    expect(r.status).toBe(0)
+    expect(r.stdout).toContain('abstract: true')
+  })
+
+  it('reads a folder of foreign ontologies with no lpg key', () => {
+    const r = run(['import', join(FIXTURES, 'tgs', 'code', 'Types'), '--out', join(dir, 'code.lpg.yaml')])
+    expect(r.status).toBe(0)
+    expect(r.stderr).toContain('import-tgs-title-key')
+    expect(run(['check', join(dir, 'code.lpg.yaml')]).status).toBe(0)
   })
 })
