@@ -1,0 +1,329 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>One ontology, two homes. Typed Graph notes and an LPG schema, kept in step. — LPG Modeler</title>
+<meta name="description" content="Your team describes its domain twice: once in the notes people write, once in the schema the database enforces. LPG Modeler 0.19 reads and writes Typed Graph's Types/ folder, so the two descriptions become one — worked through one fleet model, with every output pasted from a real run.">
+<meta property="og:title" content="One ontology, two homes. Typed Graph notes and an LPG schema, kept in step.">
+<meta property="og:description" content="Your team describes its domain twice: once in the notes people write, once in the schema the database enforces. LPG Modeler 0.19 reads and writes Typed Graph's Types/ folder, so the two descriptions become one — worked through one fleet model, with every output pasted from a real run.">
+<meta property="og:type" content="article">
+<meta property="og:image" content="https://www.lpg-modeler.com/assets/diagrams/pipeline.png">
+<link rel="icon" href="../assets/icon.png">
+<link rel="stylesheet" href="../assets/fonts.css">
+<link rel="stylesheet" href="../assets/site.css">
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="../index.html"><img src="../assets/icon.png" alt=""> LPG Modeler</a>
+    <nav class="links">
+      <a href="../index.html">Overview</a>
+      <a href="../getting-started.html">Getting started</a>
+      <a href="../examples.html">Examples</a>
+      <a href="../model-format.html">Model format</a>
+      <a href="../targets.html">Targets</a>
+      <a href="../cli.html">CLI</a>
+      <a href="../migrations.html">Migrations</a>
+      <a href="../architecture.html">Architecture</a>
+      <a href="../blog/index.html" aria-current="page">Blog</a>
+      <a href="https://github.com/Volland/lpg-modeler">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+
+<div class="wrap post-head">
+  <a class="back" href="index.html">← Blog</a>
+  <h1>One ontology, two homes. Typed Graph notes and an LPG schema, kept in step.</h1>
+  <p class="lede">Your team describes its domain twice: once in the notes people write, once in the schema the database enforces. LPG Modeler 0.19 reads and writes Typed Graph's <code>Types/</code> folder, so the two descriptions become one — worked through one fleet model, with every output pasted from a real run.</p>
+  <p class="post-meta"><time datetime="2026-11-05">5 November 2026</time> · 14 min read</p>
+</div>
+
+<hr class="rule">
+
+<div class="wrap">
+  <article class="post">
+<p>Every team that builds on a graph ends up with <strong>two descriptions of the same domain</strong>.</p>
+<p>One lives in the notes. A vault of Markdown — decisions, requirements, the depot that closes in winter, the driver who only does night shifts — where people write in prose and link things with their names. <a href="https://github.com/Volland/typedgraph" rel="noopener">Typed Graph</a> gives those notes types: a <code>Types/</code> folder of schema notes says what a <code>Truck</code> note carries and which links it may have, and the Obsidian plugin, the <code>tg</code> CLI and the VS Code commands check every note against it.</p>
+<p>The other lives in the database. A model that says a <code>Truck</code> is a <code>Vehicle</code> is an <code>Asset</code>, that every asset has exactly one tag, that a VIN is unique — and that compiles into the constraints LadybugDB, Neo4j, Memgraph or FalkorDB actually enforce.</p>
+<p>Both descriptions are correct, and both are about trucks. Nothing keeps them the same. The notes grow a property the schema never heard of; the schema renames one the notes still use. Each side is right about itself and wrong about the other, and nobody finds out until someone asks a question that crosses the line.</p>
+<p><strong>This article is about crossing it.</strong> Release 0.19 adds two commands:</p>
+<ul>
+<li><strong><code>lpg export --to tgs</code></strong> writes a model as TGS schema notes into a <code>Types/</code> folder — a folder of notes, one per type, or a single note holding the whole ontology;</li>
+<li><strong><code>lpg import Types/</code></strong> reads a schema folder — any number of ontology notes — back into a model.</li>
+</ul>
+<p><em>(Everything below was run with LPG Modeler 0.19.0, <code>tg</code> 0.22.0 and LadybugDB 0.19.1. Every output block is pasted from those runs, with the absolute path trimmed from the front of file names.)</em></p>
+<hr>
+<h2 id="two-languages-for-one-domain">Two languages for one domain<a class="anchor" href="#two-languages-for-one-domain" aria-label="Link to this section">#</a></h2>
+<p>Typed Graph Schema and an LPG model are not two spellings of one thing. They were built for different readers, and each says something the other cannot.</p>
+<div class="table-scroll">
+<table>
+<thead>
+<tr>
+<th></th>
+<th>TGS (notes)</th>
+<th>LPG model (database)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Who it serves</td>
+<td>people writing notes</td>
+<td>code and engines</td>
+</tr>
+<tr>
+<td>Properties</td>
+<td>open: a note may carry anything</td>
+<td>closed by default</td>
+</tr>
+<tr>
+<td>Validation</td>
+<td>advisory, never removes a note</td>
+<td>enforced on write, per engine</td>
+</tr>
+<tr>
+<td>Identity</td>
+<td>the note's title</td>
+<td>a declared key</td>
+</tr>
+<tr>
+<td>Hierarchy</td>
+<td>none — a note may carry several types</td>
+<td>abstract types, single inheritance, mixins</td>
+</tr>
+<tr>
+<td>Edges</td>
+<td>typed links in prose, with properties</td>
+<td>typed, directed, with endpoint multiplicity</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>That table is the whole design problem. A naive export would either drop everything in the right-hand column, or invent TGS syntax that no TGS reader understands. Neither keeps the two in step.</p>
+<hr>
+<h2 id="the-model">The model<a class="anchor" href="#the-model" aria-label="Link to this section">#</a></h2>
+<p>The model is <a href="../examples/fleet.lpg.yaml.txt" download="fleet.lpg.yaml"><code>fleet.lpg.yaml</code></a>, one of the site's examples: seven node types under a three-level hierarchy, three mixins, one enum and three edge types.</p>
+<pre><code>nodes:
+  Asset:   { abstract: true, key: [assetTag] }                  # every asset has a tag
+  Vehicle: { abstract: true, extends: Asset }                   # vin (unique), fuel (enum Fuel)
+  Truck:   { extends: Vehicle, mixins: [Timestamped, Located] } # axles 2..6, maxLoadKg
+  Van:     { extends: Vehicle, mixins: [Timestamped] }
+  Trailer: { extends: Asset, mixins: [Timestamped, Auditable] }
+  Depot:   { key: [code], mixins: [Located] }
+  Driver:  { key: [licence], mixins: [Timestamped, Auditable] }
+
+edges:
+  STATIONED_AT: { from: Asset,  to: Depot, cardinality: { to: &quot;0..1&quot; } }
+  DRIVES:       { from: Driver, to: Vehicle }                   # since: date
+  TOWS:         { from: Truck,  to: Trailer, cardinality: { to: &quot;0..1&quot; } }</code></pre>
+<p><em>(Condensed; the file has the ids, the property types and the comments.)</em></p>
+<hr>
+<h2 id="export-a-folder-of-notes-or-one">Export: a folder of notes, or one<a class="anchor" href="#export-a-folder-of-notes-or-one" aria-label="Link to this section">#</a></h2>
+<pre><code>lpg export fleet.lpg.yaml --to tgs --out Types</code></pre>
+<p>Without <code>--layout</code>, the command asks:</p>
+<pre><code>Write the ontology as
+  1) a folder of notes, one per node type
+  2) a single note holding the joint ontology
+Layout [1]:</code></pre>
+<p>Both are valid TGS, and both import back identically. <strong><code>folder</code></strong> suits a vault, where each type is a note you can open, link to and write about. <strong><code>single</code></strong> suits a project with several ontologies side by side — Typed Graph's own convention, <code>Types/code-types.md</code> beside <code>Types/spec-types.md</code>. In VS Code the same choice is a pick in <strong>LPG: Export Typed Graph Schema…</strong>.</p>
+<p>The folder layout writes seven notes:</p>
+<pre><code>Types/Asset.md
+Types/Depot.md
+Types/Driver.md
+Types/Trailer.md
+Types/Truck.md
+Types/Van.md
+Types/Vehicle.md</code></pre>
+<p>And this is <code>Types/Truck.md</code>, whole:</p>
+<pre><code>---
+tgs: &quot;0.1&quot;
+prefixes:
+  fleet: &quot;https://example.org/vocab/fleet#&quot;
+schema:
+  uri: fleet:Truck
+  properties:
+    axles: number
+    maxLoadKg: number
+    createdAt: {kind: datetime, required: true}
+    updatedAt: datetime
+    latitude: number
+    longitude: number
+    vin: {required: true}
+    fuel: {values: [diesel, electric, hydrogen]}
+    assetTag: {required: true}
+  edges:
+    STATIONED_AT: {target: Depot, many: false}
+    TOWS: {target: Trailer, many: false}
+edgeTypes:
+  TOWS:
+    uri: fleet:TOWS
+    from: Truck
+    to: Trailer
+lpg:
+  format: &quot;1.0&quot;
+  namespace: {prefix: fleet, iri: &quot;https://example.org/vocab/fleet#&quot;}
+  nodes:
+    Truck: {id: n_truck, extends: Vehicle, mixins: [Timestamped, Located], props: {axles: {id: p_axl, type: INT64, min: 2, max: 6}, maxLoadKg: {id: p_load, type: INT64, min: 0}}}
+  edges:
+    TOWS: {id: e_tows, from: Truck, to: Trailer, cardinality: {from: &quot;*&quot;, to: &quot;0..1&quot;}}
+  mixins:
+    Timestamped: {id: m_ts, props: {createdAt: {id: p_cts, type: ZONED_DATETIME}, updatedAt: {id: p_uts, type: ZONED_DATETIME}}}
+    Located: {id: m_loc, props: {latitude: {id: p_lat, min: -90, max: 90}, longitude: {id: p_lon, min: -180, max: 180}}}
+  enums:
+    Fuel: {id: x_fuel, values: [diesel, electric, hydrogen]}
+---</code></pre>
+<p>Read it top to bottom and three decisions show.</p>
+<p><strong>Everything a truck has is on the truck.</strong> <code>vin</code> and <code>fuel</code> come from <code>Vehicle</code>, <code>assetTag</code> from <code>Asset</code>, the timestamps and coordinates from two mixins. TGS has no inheritance, so a note typed <code>Truck</code> must find all nine properties in <code>Truck</code>'s declaration — exactly as LadybugDB gets one table per concrete type with the inherited columns copied down.</p>
+<p><strong>Edges are closed.</strong> <code>Truck</code> declares <code>edges</code> even though TGS would let it leave them out, because TGS reads a missing <code>edges</code> as &quot;any link at all&quot;. In the model, a truck has the edges the model gives it and no others; leaving the key out would not lose that rule, it would invert it. The bound <code>to: &quot;0..1&quot;</code> becomes <code>many: false</code> — the one part of a cardinality TGS can say.</p>
+<p><strong>What TGS cannot say goes in <code>lpg</code>.</strong> The hierarchy, the key, the exact integer type, the value bounds, the element ids. TGS §3 says every key in a schema note other than its own &quot;belongs to the note itself and readers MUST ignore them&quot; — so the note above stays valid TGS, and the <code>lpg</code> key rides along for the trip home.</p>
+<p>The export also says out loud what TGS readers will <em>not</em> enforce:</p>
+<pre><code>fleet.lpg.yaml:37:3 warning [tgs] downgrade-abstract: Node type 'Asset' is abstract, which TGS cannot say: notes of it can be created. It is recorded in the note's lpg key.
+fleet.lpg.yaml:37:3 warning [tgs] downgrade-key: Node type 'Asset' is keyed by (assetTag), which TGS has no identity for: a note is identified by its title. The key is recorded in the note's lpg key.
+fleet.lpg.yaml:57:3 warning [tgs] downgrade-inheritance: Node type 'Truck' extends 'Vehicle', which TGS has no hierarchy for. Its inherited properties are written on it, and its edges' endpoints list concrete types.
+fleet.lpg.yaml:51:7 warning [tgs] downgrade-unique: Property 'Vehicle.vin' is unique, which a TGS validator does not check. It is recorded in the note's lpg key.
+info [tgs] downgrade-open: TGS frontmatter is always open, so the 5 closed node type(s) will accept properties they do not declare.</code></pre>
+<p><em>(Five of the eleven lines; the other six repeat three of those codes for the other types. The eight value bounds are reported at info, as every target without bounds reports them.)</em></p>
+<p>That is the rule this tool has kept since its first target: <strong>a constraint that quietly vanishes is a bug.</strong> Writing <code>unique</code> into the <code>lpg</code> key is how it survives the trip; the warning is how you know Obsidian will not stop two trucks sharing a VIN.</p>
+<hr>
+<h2 id="the-reference-reader-agrees">The reference reader agrees<a class="anchor" href="#the-reference-reader-agrees" aria-label="Link to this section">#</a></h2>
+<p>A format is only as real as the reader that accepts it, so the exported folder goes to <code>tg</code>, Typed Graph's own validator:</p>
+<pre><code>$ tg validate --schema-only
+No findings in 13 notes.</code></pre>
+<p><em>(Thirteen, because the vault also holds the six data notes of the next section.)</em></p>
+<p>The test suite does the same for every fixture in both layouts whenever <code>tg</code> is installed — and first feeds it a broken schema note, to prove the check reports something when there is something to report.</p>
+<hr>
+<h2 id="notes-typed-by-the-schema">Notes typed by the schema<a class="anchor" href="#notes-typed-by-the-schema" aria-label="Link to this section">#</a></h2>
+<p>Now the notes. Six of them, written as anyone would write them in Obsidian: two depots, a trailer, a driver, and two trucks.</p>
+<pre><code>---
+type: Truck
+assetTag: T-104
+vin: WDB9634031L123456
+fuel: diesel
+createdAt: 2024-01-15T09:30:00+01:00
+---
+STATIONED_AT:: [[Depot North]]
+TOWS:: [[Trailer 7]]</code></pre>
+<p>The second truck, <code>T-105</code>, has four mistakes in it: no VIN, a fuel the enum does not list, two depots, and a depot where a trailer should be.</p>
+<pre><code>---
+type: Truck
+assetTag: T-105
+fuel: petrol
+createdAt: 2024-05-02T10:00:00+01:00
+---
+STATIONED_AT:: [[Depot North]]
+STATIONED_AT:: [[Depot South]]
+TOWS:: [[Depot South]]</code></pre>
+<pre><code>$ tg validate
+Fleet/T-105.md: warning missing-property: Missing required property 'vin' for type Truck
+Fleet/T-105.md: warning value-not-allowed: Property 'fuel' value 'petrol' is not one of: diesel, electric, hydrogen
+Fleet/T-105.md:8: warning too-many-edges: Edge type 'STATIONED_AT' allows one edge for Truck, found 2
+Fleet/T-105.md:9: warning wrong-target-type: Edge 'TOWS' expects target type Trailer, found Depot
+
+0 errors and 4 warnings in 13 notes.</code></pre>
+<p>All four found, and every one of them is a rule that came from the model: <code>required</code> on <code>vin</code>, the <code>Fuel</code> enum, the <code>0..1</code> on <code>STATIONED_AT</code>, the endpoint of <code>TOWS</code>. <strong>The rules the database enforces are now the rules the notes are checked against</strong> — and nobody wrote them twice.</p>
+<p>They are warnings, not errors, and that is right. TGS validation is advisory by design: it never removes a note, because a note half-written is still worth keeping. The database is where <code>petrol</code> gets refused.</p>
+<hr>
+<h2 id="coming-back-an-edit-in-the-notes-a-diff-in-the-model">Coming back: an edit in the notes, a diff in the model<a class="anchor" href="#coming-back-an-edit-in-the-notes-a-diff-in-the-model" aria-label="Link to this section">#</a></h2>
+<p>Ownership does not have to sit on one side. Say the fleet manager, working in the notes, decides trucks need an insurance date and adds one line to <code>Types/Truck.md</code>:</p>
+<pre><code>    insuranceExpires: date</code></pre>
+<p>The model had been locked at its deployed state with <code>lpg lock</code>. Import the folder over it, and ask what changed:</p>
+<pre><code>$ lpg import Types --out fleet.lpg.yaml
+fleet.lpg.yaml
+$ lpg diff fleet.lpg.yaml
+additive    property Truck.insuranceExpires: added as date
+1 additive since revision 1</code></pre>
+<p>One line, and the right one. The hierarchy, the key, the mixins and every element id came back from the <code>lpg</code> key, so the diff compares the model <strong>by id</strong>, as <code>lpg diff</code> always does — not by guessing from names. From here <code>lpg migrate</code> writes the <code>ALTER TABLE</code> for whichever engines you deploy to.</p>
+<p>Renames are where the ids earn their keep, and where this round trip asks one thing of you. Rename <code>maxLoadKg</code> to <code>maxPayloadKg</code> in the TGS properties only:</p>
+<pre><code>destructive property Truck.maxLoadKg: removed
+additive    property Truck.insuranceExpires: added as date
+additive    property Truck.maxPayloadKg: added as float
+1 destructive, 2 additive since revision 1</code></pre>
+<p>A drop and an add — and <code>float</code>, because the exact <code>INT64</code> was recorded under the old name. Rename it in the <code>lpg</code> key as well, and the id follows the property:</p>
+<pre><code>additive    property Truck.insuranceExpires: added as date
+breaking    property Truck.maxPayloadKg: renamed from 'maxLoadKg'
+1 breaking, 1 additive since revision 1</code></pre>
+<p>That is the same rule the model file has always followed — <a href="renames-are-not-deletes.html">renames are not deletes</a> because the id says so, never because two names look alike. The <code>destructive</code> label in the first run is the gate doing its job: <code>lpg migrate</code> will not generate that drop until you pass <code>--allow-destructive</code>.</p>
+<hr>
+<h2 id="the-other-direction-an-ontology-that-started-as-notes">The other direction: an ontology that started as notes<a class="anchor" href="#the-other-direction-an-ontology-that-started-as-notes" aria-label="Link to this section">#</a></h2>
+<p>Not every ontology starts as a schema. Typed Graph's own projects keep theirs in <code>Types/code-types.md</code> and <code>Types/spec-types.md</code>: decisions, requirements, constraints and the edges between them — <code>implements</code>, <code>contradicts</code>, <code>motivated_by</code>. Those two notes were never near this tool, and carry no <code>lpg</code> key.</p>
+<pre><code>$ lpg import Types --out work.lpg.yaml
+work.lpg.yaml
+info import-tgs-undeclared-type: CodeFile, CodeSymbol are named as an endpoint or a target but declared by no note, so they are read as empty node types.
+warning import-tgs-open-endpoint: defines allows any type at one end, and an edge type here runs between two named types, so it is not imported.
+warning import-tgs-endpoint-union: An edge type here has one type at each end. With no common ancestor to stand for the several TGS names, the first is kept: implements from CodeSymbol (dropped CodeFile); implements to Requirement (dropped Decision); …
+info import-tgs-title-key: Decision, Requirement, Scenario, Constraint, Concept, Change, Capability, ADR, … name no identity, and every concrete node type needs a key, so each is keyed by a required 'title': a note is identified by its title.
+info import-tgs-not-carried: The model has nowhere to keep templates of Decision, Requirement, Scenario, Constraint, Concept, Change; defaults of Decision.status, …</code></pre>
+<p><em>(The union line names twelve narrowed endpoints; three are shown.)</em></p>
+<p>Every one of those lines is a real difference between the two languages, said rather than smoothed over:</p>
+<ul>
+<li><strong>Identity.</strong> A type with no key cannot become a table, and TGS declares none — but a note <em>has</em> an identity: its title. So that is the key, and the import says so. A type with an <code>id</code> rule (<code>id: uuid7</code>) is keyed by that property instead.</li>
+<li><strong>Value lists become enums</strong>, shared where the values are the same: <code>Requirement</code>, <code>Scenario</code>, <code>Concept</code> and <code>Capability</code> all get <code>RequirementStatus</code>.</li>
+<li><strong>Polymorphic edges narrow.</strong> <code>contradicts</code> in TGS may run from four types to three. An edge type here runs between one type and one type, and with no common parent to stand for all of them, the first is kept and the rest are named. This is the honest cost of the direction. TGS has no way to say that <code>CodeSymbol</code> and <code>CodeFile</code> are both artifacts; the model does — an abstract <code>Artifact</code> above them, with <code>implements</code> running from it — and once it is said there, an export writes it back to the notes as <code>from: [CodeFile, CodeSymbol]</code>, with the hierarchy kept in the <code>lpg</code> key.</li>
+</ul>
+<p>What comes out validates, and generates. The LadybugDB script for it:</p>
+<pre><code>CREATE NODE TABLE IF NOT EXISTS Decision (
+  title STRING,
+<span class="c-warn">  // UNENFORCED: 'status' is limited to enum 'DecisionStatus' in the model.</span>
+  status STRING,</code></pre>
+<pre><code>CREATE REL TABLE IF NOT EXISTS implements (
+  FROM CodeSymbol TO Requirement,
+  since STRING,
+<span class="c-warn">  // UNENFORCED: 'confidence' is limited to enum 'Confidence' in the model.</span>
+  confidence STRING,
+  note STRING
+);</code></pre>
+<pre><code>$ lpg apply work.ladybug.cypher --target ladybug --database work.lbdb
+…
+[22/22] CREATE REL TABLE IF NOT EXISTS verifies (
+applied 22 statement(s) to work.lbdb</code></pre>
+<p>Ten node tables and twelve relationship tables, from two notes someone wrote for a different tool. The design notes of a project, queryable with Cypher.</p>
+<hr>
+<h2 id="which-side-owns-it">Which side owns it?<a class="anchor" href="#which-side-owns-it" aria-label="Link to this section">#</a></h2>
+<p>Either, and the commands are built so you do not have to decide forever.</p>
+<p><strong>Model first.</strong> The schema is designed in <code>.lpg.yaml</code>, on the canvas, with the database in mind. Export after each change; the notes follow. An export <strong>merges</strong> into notes that exist: it replaces only <code>tgs</code>, <code>schema</code>, <code>schemas</code>, <code>edgeTypes</code>, <code>prefixes</code> and <code>lpg</code>, and keeps every other frontmatter key and the body you wrote, byte for byte. It never deletes a note — a type you removed from the model leaves its note behind, reported as stale, because importing the folder would bring it back. And it refuses to rewrite a note that declares types the model does not have, unless you pass <code>--force</code>.</p>
+<p><strong>Notes first.</strong> The ontology grows where the people are, in the vault. Import when the database needs to catch up, and <code>lpg diff</code> tells you what that costs before <code>lpg migrate</code> does anything.</p>
+<p><strong>Both.</strong> The <code>lpg</code> key is what lets a model go out as notes and come back as the same model — same hierarchy, same keys, same ids. One thing does not come back: the comments in the <code>.lpg.yaml</code>, because an import writes a model rather than editing one. If the model file carries prose you care about, import beside it and diff, rather than over it.</p>
+<hr>
+<h2 id="try-it">Try it<a class="anchor" href="#try-it" aria-label="Link to this section">#</a></h2>
+<pre><code><span class="c-com"># the model as a schema folder; asks for the layout</span>
+npx lpg-modeler-cli export fleet.lpg.yaml --to tgs --out Types
+
+<span class="c-com"># check notes against it with Typed Graph</span>
+tg validate
+
+<span class="c-com"># a schema folder — or one note of it — back into a model</span>
+npx lpg-modeler-cli import Types --out fleet.lpg.yaml
+npx lpg-modeler-cli import Types/code-types.md</code></pre>
+<p>In VS Code: <strong>LPG: Export Typed Graph Schema…</strong> and <strong>LPG: Import Typed Graph Schema…</strong>, each asking whether you mean a folder of notes or a single one.</p>
+<p>Two descriptions of one domain will always drift. The fix is not to pick one and abandon the other — the notes are where people think, and the schema is where the data is kept honest. The fix is to make crossing between them one command, and to have that command say exactly what did not survive the crossing.</p>
+  </article>
+
+  <p class="post-source">
+    This post is <a href="https://github.com/Volland/lpg-modeler/blob/main/article/typed-graph-and-lpg.md" rel="noopener"><code>article/typed-graph-and-lpg.md</code></a>
+    in the repository, so a correction to the tool and a correction to the post travel together.
+  </p>
+
+  <div class="next">
+    <a href="index.html"><div class="k">All posts</div><div class="v">Everything written about the tool, longest first.</div></a>
+    <a href="../getting-started.html"><div class="k">Getting started</div><div class="v">Install, write your first model, open the canvas, generate.</div></a>
+  </div>
+</div>
+
+</main>
+
+<footer class="site">
+  <div class="wrap">
+    <span>LPG Modeler — MIT licensed</span>
+    <span class="spacer"><a href="../impressum.html">Impressum</a></span>
+    <span><a href="../datenschutz.html">Datenschutz</a></span>
+    <span><a href="../agb.html">AGB</a></span>
+    <span><a href="https://github.com/Volland/lpg-modeler">Source</a></span>
+    <span><a href="https://github.com/Volland/lpg-modeler/issues">Issues</a></span>
+  </div>
+</footer>
+
+</body>
+</html>

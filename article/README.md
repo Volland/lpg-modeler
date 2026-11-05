@@ -21,6 +21,8 @@ published post and the tool it describes move together.
 | [`linkedin-semantic-layer.md`](linkedin-semantic-layer.md) | Feed-sized companion to `semantic-layer.md` — the post body to paste, its first comment, hashtags, and which image to attach. |
 | [`semantic-layer.lpg.yaml`](semantic-layer.lpg.yaml) | The metrics ontology `semantic-layer.md` presents as a model: `MAPS_TO` as an edge with properties, `Metric` as a node that other metrics point at. |
 | [`model-after-deploy.md`](model-after-deploy.md) | Hands-on long-read on release 0.18: one fleet model typed into TypeScript, served to agents over MCP, audited for the rows an engine could not refuse, checked for drift, and used to lint query files — plus SQL import, the DuckDB SQL/PGQ target, and plugins. Built on the published `fleet` example. |
+| [`typed-graph-and-lpg.md`](typed-graph-and-lpg.md) | Hands-on long-read on release 0.19: one model exported as Typed Graph Schema notes in both layouts, data notes checked by `tg validate` against rules that came from the model, an edit in the notes brought back through `lpg diff` by element id, and Typed Graph's own decision ontology imported and applied to LadybugDB. Built on the published `fleet` example. |
+| [`linkedin-typed-graph-and-lpg.md`](linkedin-typed-graph-and-lpg.md) | Feed-sized companion to `typed-graph-and-lpg.md` — the post body to paste, its first comment, hashtags, and which image to attach. |
 | [`posts.json`](posts.json) | Publication manifest for the site's blog: which files are published, under which slug, and on which date. A file reaches the site only by being named here. |
 
 A short-form companion compresses the long read rather than restating it loosely: every claim in it
