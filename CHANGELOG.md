@@ -6,7 +6,39 @@ All notable changes to LPG Modeler are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.19.0] — 2026-11-05
+
+### Added
+
+- **Typed Graph Schema (TGS) import and export.** `lpg export model.lpg.yaml --to tgs` writes
+  the model as TGS schema notes into a `Types/` folder, in the layout you choose: `folder`, one
+  note per node type, or `single`, one note holding the joint ontology. Without `--layout` the
+  command asks on a terminal. `lpg import Types/` reads every note directly in a schema folder
+  as one ontology, and `lpg import Types/code-types.md` reads one note. In VS Code: **LPG: Export
+  Typed Graph Schema…** and **LPG: Import Typed Graph Schema…**, each asking for the mode.
+  - What TGS cannot say — abstract types, inheritance, mixins, keys, uniqueness, exact types,
+    cardinality, element ids — travels in a note-level `lpg` key that TGS readers ignore, so a
+    model exported and imported again is the same model, in either layout. Each is also
+    reported as a downgrade, because a TGS validator will not enforce it.
+  - An export merges into existing notes, replacing only the TGS keys and keeping every other
+    key and the body; it never deletes a note, and refuses one that declares types the model
+    lacks unless `--force`.
+  - A foreign ontology imports too: a type with no identity is keyed by its note `title`, a
+    value list becomes a shared enum, and an edge with several endpoint types or an
+    unrestricted end is reported rather than guessed.
+  - `tgs` is also an `emit` target (the single layout). Exported notes are checked by
+    `tg validate --schema-only` whenever `tg` is installed.
+  - A model's format version (`lpg: "1.0"`) travels in the `lpg` key too, so a round trip
+    through the notes does not show up in `lpg diff` as a format change.
+- **A blog post on Typed Graph and LPG Modeler together**, "One ontology, two homes", worked
+  through the published `fleet` example: export in both layouts, data notes checked by
+  `tg validate`, an edit in the notes brought back through `lpg diff`, and Typed Graph's own
+  decision ontology applied to LadybugDB — every output pasted from a real run.
+
 ### Fixed
+
+- **A namespace IRI ending in a colon is written quoted.** `urn:tgs:` was serialized bare,
+  which YAML reads as a mapping, so the written model did not parse.
 
 - **Model downloads work.** The site's CDN answers any request for a `.yaml` file with a 403,
   so every example and article model download failed. They are now served as `.txt` copies

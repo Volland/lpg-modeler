@@ -4,6 +4,20 @@ All notable changes to LPG Modeler are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.19.0] — 2026-11-05
+
+### Added
+
+- **Typed Graph Schema import and export.** Two new commands exchange the model with a
+  Typed Graph `Types/` folder, the schema notes the Obsidian plugin and the `tg` CLI read.
+  **LPG: Export Typed Graph Schema…** asks for the layout — a folder of notes, one per node
+  type, or a single note holding the joint ontology — and the folder (default `Types/` in the
+  workspace), merges into notes that already exist, and opens what it wrote. **LPG: Import
+  Typed Graph Schema…** asks whether to read a folder of notes or a single note, then saves
+  and draws the model like **LPG: Import Model…**. What TGS cannot say travels in an `lpg`
+  key TGS readers ignore, so a model exported and imported again is the same model, ids
+  included. `tgs` is also offered by **LPG: Generate Schema**.
+
 ## [0.18.1] — 2026-10-03
 
 ### Fixed
